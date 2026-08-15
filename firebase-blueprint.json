@@ -1,0 +1,540 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents an auth or team user in the VioCRM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Sales", "Marketing", "Support", "Referral Team"] },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "team": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["id", "name", "role", "email"]
+    },
+    "RolePermissions": {
+      "title": "RolePermissions",
+      "description": "Granular roles and permission settings.",
+      "type": "object",
+      "properties": {
+        "Admin": { "type": "array" },
+        "Sales": { "type": "array" },
+        "Marketing": { "type": "array" },
+        "Support": { "type": "array" },
+        "Referral Team": { "type": "array" }
+      }
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "SFA trackable sales lead source detail.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "countrymobilecode": { "type": "string", "default": "+91" },
+        "mobilenumberwithcountrycode": { "type": "string" },
+        "status": { "type": "string", "enum": ["New", "Contacted", "Qualified", "Proposal", "Nurturing", "Unqualified"] },
+        "score": { "type": "integer" },
+        "source": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "value": { "type": "number" },
+        "referralmobileno": { "type": "string" }
+      },
+      "required": ["id", "name", "company", "status", "score", "value"]
+    },
+    "Deal": {
+      "title": "Deal",
+      "description": "High value business opportunity mapping.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "leadId": { "type": "string" },
+        "company": { "type": "string" },
+        "value": { "type": "number" },
+        "stage": { "type": "string", "enum": ["Discovery", "Proposal", "Negotiation", "Contract", "Closed Won", "Closed Lost"] },
+        "probability": { "type": "number" },
+        "expectedCloseDate": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "leadId", "company", "value", "stage", "probability"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Actionable team tasks and responsibilities inside CRM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "status": { "type": "string", "enum": ["Pending", "Completed"] },
+        "assignedTo": { "type": "string" },
+        "category": { "type": "string", "enum": ["Call", "Email", "Meeting", "Demo", "Task"] },
+        "linkedTo": { "type": "object" }
+      },
+      "required": ["id", "title", "priority", "status", "assignedTo"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Shared and personal calendar events.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "start": { "type": "string" },
+        "end": { "type": "string" },
+        "type": { "type": "string", "enum": ["Meeting", "Demo", "FollowUp", "CampaignRun"] },
+        "color": { "type": "string" },
+        "linkedTo": { "type": "string" }
+      },
+      "required": ["id", "title", "start", "end", "type", "color"]
+    },
+    "ProductPerformance": {
+      "title": "ProductPerformance",
+      "description": "Naturescience physical or digital inventory product details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "packingSize": { "type": "string" },
+        "unit": { "type": "string" },
+        "onlinePrice": { "type": "number" },
+        "shopPrice: ": { "type": "number" },
+        "notes": { "type": "string" },
+        "picture": { "type": "string" },
+        "unitsSold": { "type": "integer" },
+        "revenue": { "type": "number" },
+        "growthRate": { "type": "number" },
+        "stock": { "type": "integer" },
+        "amazonSales": { "type": "integer" },
+        "flipkartSales": { "type": "integer" },
+        "meeshoSales": { "type": "integer" },
+        "vamjoSales": { "type": "integer" },
+        "whatsappSales": { "type": "integer" },
+        "countersaleSales": { "type": "integer" },
+        "gstPercentage": { "type": "number" },
+        "stockIn": { "type": "integer" },
+        "stockOut": { "type": "integer" },
+        "images": { "type": "array" },
+        "description": { "type": "string" },
+        "ingredients": { "type": "string" },
+        "specifications": { "type": "string" },
+        "variants": { "type": "string" },
+        "stockAvailability": { "type": "string" },
+        "offerPrice": { "type": "number" },
+        "mrp": { "type": "number" },
+        "discount": { "type": "number" },
+        "rating": { "type": "number" },
+        "reviewsCount": { "type": "integer" },
+        "videos": { "type": "array" }
+      },
+      "required": ["id", "name", "sku", "onlinePrice"]
+    },
+    "CustomerPerformance": {
+      "title": "CustomerPerformance",
+      "description": "Directory containing active customers, transactions and assignable partner names.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authUid": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "email": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "countrymobilecode": { "type": "string", "default": "+91" },
+        "mobilenumberwithcountrycode": { "type": "string" },
+        "address": { "type": "string" },
+        "state": { "type": "string" },
+        "district": { "type": "string" },
+        "totalSpent": { "type": "number" },
+        "dealsClosed": { "type": "integer" },
+        "satisfactionScore": { "type": "number" },
+        "lastOrderDate": { "type": "string" },
+        "tier": { "type": "string", "enum": ["Platinum", "Gold", "Silver", "Bronze"] },
+        "partnerName": { "type": "string" },
+        "leadslinkid": { "type": "string" },
+        "referralcode": { "type": "string" },
+        "referralpartner": { "type": "string" }
+      },
+      "required": ["id", "name", "mobileNumber", "tier"]
+    },
+    "MarketingCampaign": {
+      "title": "MarketingCampaign",
+      "description": "Omnichannel marketing campaign budget and lead metrics.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "channel": { "type": "string", "enum": ["Google Ads", "Facebook", "LinkedIn", "WhatsApp Blast", "Email Newsletter"] },
+        "status": { "type": "string", "enum": ["Active", "Paused", "Completed", "Planned"] },
+        "budget": { "type": "number" },
+        "spend": { "type": "number" },
+        "leadsGenerated": { "type": "integer" },
+        "conversions": { "type": "integer" },
+        "revenueGenerated": { "type": "number" },
+        "roi": { "type": "number" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" }
+      },
+      "required": ["id", "name", "channel", "status", "budget", "spend"]
+    },
+    "WhatsAppTemplate": {
+      "title": "WhatsAppTemplate",
+      "description": "Saved messaging templates for outbound campaign outreach.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["Welcome", "FollowUp", "Promotion", "Alert"] },
+        "body": { "type": "string" },
+        "variables": { "type": "array" }
+      },
+      "required": ["id", "name", "category", "body", "variables"]
+    },
+    "WhatsAppSequenceStep": {
+      "title": "WhatsAppSequenceStep",
+      "description": "Step delay timing structure inside campaign sequences.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "delayHours": { "type": "integer" },
+        "templateId": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "delayHours", "templateId", "isActive"]
+    },
+    "WhatsAppMessage": {
+      "title": "WhatsAppMessage",
+      "description": "Historic trace logging of customer communication threads.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "phone": { "type": "string" },
+        "direction": { "type": "string", "enum": ["Incoming", "Outgoing"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "status": { "type": "string", "enum": ["sent", "delivered", "read", "failed"] },
+        "leadId": { "type": "string" },
+        "templateName": { "type": "string" }
+      },
+      "required": ["id", "phone", "direction", "content", "timestamp", "status"]
+    },
+    "SystemAuditLog": {
+      "title": "SystemAuditLog",
+      "description": "Operational event log for security profiling.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "user": { "type": "string" },
+        "role": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "status": { "type": "string", "enum": ["success", "warning", "denied"] }
+      },
+      "required": ["id", "timestamp", "user", "action", "status"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "Affiliated partner configuration records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "referralId": { "type": "string" },
+        "name": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" },
+        "bankAccountName": { "type": "string" },
+        "bankAccountNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "branch": { "type": "string" },
+        "ifscCode": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Pending Approval", "Suspended"] },
+        "securityRoleProfile": { "type": "string" },
+        "photo": { "type": "string" },
+        "password": { "type": "string" },
+        "commissions": { "type": "array" }
+      },
+      "required": ["id", "referralId", "name", "mobileNumber", "email", "address", "createdAt", "status"]
+    },
+    "SalesOrder": {
+      "title": "SalesOrder",
+      "description": "Representing closed sales deals with product arrays, quantities, discounts and invoice details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerCompany": { "type": "string" },
+        "products": { "type": "array" },
+        "totalValue": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["Paid", "Pending", "Overdue", "Refunded"] },
+        "deliveryStatus": { "type": "string", "enum": ["Pending", "Shipped", "Delivered", "Cancelled"] },
+        "assignedTo": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["Cash", "Bank Transfer", "Stripe", "UPI", "Credit Card"] },
+        "orderType": { "type": "string", "enum": ["Online", "Shop"] }
+      },
+      "required": ["id", "orderNumber", "customerId", "customerName", "totalValue", "paymentStatus", "createdAt"]
+    },
+    "ShoppingCartItem": {
+      "title": "ShoppingCartItem",
+      "description": "Represents an item in a user's active shopping cart",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "savedForLater": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "productId", "quantity"]
+    },
+    "WishlistItem": {
+      "title": "WishlistItem",
+      "description": "Represents a user's wishlisted product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "productId", "createdAt"]
+    },
+    "ProductReview": {
+      "title": "ProductReview",
+      "description": "Represents customer ratings and feedback for a product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "rating": { "type": "integer" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "photos": { "type": "array" },
+        "videos": { "type": "array" }
+      },
+      "required": ["id", "productId", "userId", "rating", "comment", "createdAt"]
+    },
+    "CustomerDeliveryAddress": {
+      "title": "CustomerDeliveryAddress",
+      "description": "Customer delivery address book entries linked via mobileNumber",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "name": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "addressLine": { "type": "string" },
+        "city": { "type": "string" },
+        "district": { "type": "string" },
+        "state": { "type": "string" },
+        "pincode": { "type": "string" },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["id", "name", "mobileNumber", "addressLine", "city", "state", "pincode"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Promotional coupon codes for e-commerce discounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "type": { "type": "string", "enum": ["percentage", "fixed", "free_shipping"] },
+        "value": { "type": "number" },
+        "minOrderValue": { "type": "number" },
+        "maxDiscount": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "expiryDate": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "code", "type", "value", "isActive", "expiryDate"]
+    },
+    "OrderDeliveryTracking": {
+      "title": "OrderDeliveryTracking",
+      "description": "Real-time shipping and delivery milestones for sales orders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Order Confirmed", "Packed", "Shipped", "Out For Delivery", "Delivered", "Cancelled"] },
+        "updatedAt": { "type": "string" },
+        "courierName": { "type": "string" },
+        "trackingNumber": { "type": "string" },
+        "estimatedDelivery": { "type": "string" },
+        "history": { "type": "array" }
+      },
+      "required": ["id", "orderId", "status", "updatedAt", "history"]
+    },
+    "OrderReturnRequest": {
+      "title": "OrderReturnRequest",
+      "description": "Log of returns or replacements requested by customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "type": { "type": "string", "enum": ["Return", "Replacement"] },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected", "Completed"] },
+        "createdAt": { "type": "string" },
+        "processedBy": { "type": "string" },
+        "processedAt": { "type": "string" }
+      },
+      "required": ["id", "orderId", "type", "reason", "status", "createdAt"]
+    },
+    "OrderRefund": {
+      "title": "OrderRefund",
+      "description": "Financial refund ledger entries for cancelled or returned orders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "paymentId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "Completed", "Failed"] },
+        "referenceNumber": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "orderId", "paymentId", "amount", "status", "createdAt"]
+    },
+    "PaymentGatewaySetting": {
+      "title": "PaymentGatewaySetting",
+      "description": "Payment gateway configuration settings for PayU integration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gateway_name": { "type": "string" },
+        "merchant_key": { "type": "string" },
+        "merchant_salt": { "type": "string" },
+        "environment": { "type": "string", "enum": ["Test", "Production"] },
+        "success_url": { "type": "string" },
+        "failure_url": { "type": "string" },
+        "webhook_url": { "type": "string" },
+        "currency": { "type": "string" },
+        "status": { "type": "string", "enum": ["Enabled", "Disabled"] },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" }
+      },
+      "required": ["id", "gateway_name", "merchant_key", "merchant_salt", "environment", "success_url", "failure_url", "currency", "status"]
+    }
+  },
+  "firestore": {
+    "/users": {
+      "schema": "#/entities/User",
+      "description": "All registered user accounts including CRM personnel and Referral Partners"
+    },
+    "/permissions": {
+      "schema": "#/entities/RolePermissions",
+      "description": "Granular roles and permission configurations per user type"
+    },
+    "/leads": {
+      "schema": "#/entities/Lead",
+      "description": "Inbound potential business opportunities"
+    },
+    "/deals": {
+      "schema": "#/entities/Deal",
+      "description": "Assigned revenue deals map"
+    },
+    "/tasks": {
+      "schema": "#/entities/Task",
+      "description": "Individual checklist tasks assigned to agents"
+    },
+    "/calendar_events": {
+      "schema": "#/entities/CalendarEvent",
+      "description": "Active calendar schedule items"
+    },
+    "/products": {
+      "schema": "#/entities/ProductPerformance",
+      "description": "Catalogue list of inventory items with prices and sales statistics"
+    },
+    "/customers": {
+      "schema": "#/entities/CustomerPerformance",
+      "description": "Acquired customer and contact accounts with transaction notes"
+    },
+    "/campaigns": {
+      "schema": "#/entities/MarketingCampaign",
+      "description": "Active marketing campaign metrics"
+    },
+    "/whatsapp_templates": {
+      "schema": "#/entities/WhatsAppTemplate",
+      "description": "Editable SMS and WhatsApp campaign copywriting layouts"
+    },
+    "/whatsapp_sequences": {
+      "schema": "#/entities/WhatsAppSequenceStep",
+      "description": "Delay steps for auto-promotional queues"
+    },
+    "/whatsapp_messages": {
+      "schema": "#/entities/WhatsAppMessage",
+      "description": "Outbound/Inbound message trail records"
+    },
+    "/referrals": {
+      "schema": "#/entities/Referral",
+      "description": "Lead-sharing partners with commission agreements"
+    },
+    "/audit_logs": {
+      "schema": "#/entities/SystemAuditLog",
+      "description": "Dynamic trace audit path configurations"
+    },
+    "/sales_orders": {
+      "schema": "#/entities/SalesOrder",
+      "description": "Invoices and transaction accounts tracking product-level sales and balances"
+    },
+    "/shopping_carts": {
+      "schema": "#/entities/ShoppingCartItem",
+      "description": "Active shopping carts for customers"
+    },
+    "/wishlists": {
+      "schema": "#/entities/WishlistItem",
+      "description": "Wishlisted products for customers"
+    },
+    "/product_reviews": {
+      "schema": "#/entities/ProductReview",
+      "description": "Ratings and written reviews for store products"
+    },
+    "/customer_delivery_addresses": {
+      "schema": "#/entities/CustomerDeliveryAddress",
+      "description": "Customer delivery address book entries"
+    },
+    "/coupons": {
+      "schema": "#/entities/Coupon",
+      "description": "Discount codes and coupon configurations"
+    },
+    "/order_delivery_tracking": {
+      "schema": "#/entities/OrderDeliveryTracking",
+      "description": "Shipping milestones and courier updates"
+    },
+    "/order_return_requests": {
+      "schema": "#/entities/OrderReturnRequest",
+      "description": "Customer-initiated returns and replacements"
+    },
+    "/order_refunds": {
+      "schema": "#/entities/OrderRefund",
+      "description": "Refund accounts and transactions"
+    },
+    "/payment_gateway_settings": {
+      "schema": "#/entities/PaymentGatewaySetting",
+      "description": "Secure server-side configurations for PayU payment gateway"
+    }
+  }
+}

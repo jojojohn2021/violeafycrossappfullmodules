@@ -1,0 +1,46 @@
+{
+    "project_info": {
+        "project_number": "347630935812",
+        "project_id": "violeafybasket",
+        "storage_bucket": "violeafybasket.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:347630935812:android:debe09fb5de0aed29b3a51",
+                "android_client_info": {
+                    "package_name": "com.violeafy.crossapp"
+                }
+            },
+            "oauth_client": [
+                {
+                    "client_id": "347630935812-9nl3alqfhfvp2p378fpsre767td031e0.apps.googleusercontent.com",
+                    "client_type": 3
+                }
+            ],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyCCLH5QqLLlw415y94GPl-TJjtMsapkwYs"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": [
+                        {
+                            "client_id": "347630935812-9nl3alqfhfvp2p378fpsre767td031e0.apps.googleusercontent.com",
+                            "client_type": 3
+                        },
+                        {
+                            "client_id": "347630935812-qmon0p29695a98g2l974it49d5vqdruo.apps.googleusercontent.com",
+                            "client_type": 2,
+                            "ios_info": {
+                                "bundle_id": "com.leafy.webapp.leafyWebapp"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}

@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Access Rule for Violeafy App & Database API
+    match /{document=**} {
+      allow read, write: if true;
+    }
+
+    // Common Security Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Permissions Collection
+    match /permissions/{roleId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Leads Collection
+    match /leads/{leadId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Deals Collection
+    match /deals/{dealId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Tasks Collection
+    match /tasks/{taskId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Calendar Events Collection
+    match /calendar_events/{eventId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Categories Collection (Public Read)
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Products Collection (Public Read)
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isSignedIn(); // We can let authenticated staff edit
+    }
+
+    // Customers Collection
+    match /customers/{customerId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Campaigns Collection (Public Read)
+    match /campaigns/{campaignId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // WhatsApp Templates
+    match /whatsapp_templates/{templateId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // WhatsApp Sequences
+    match /whatsapp_sequences/{sequenceId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // WhatsApp Messages
+    match /whatsapp_messages/{messageId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Referrals
+    match /referrals/{referralId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Sales Orders
+    match /sales_orders/{orderId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Influencers
+    match /influencers/{influencerId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Influencer Campaigns
+    match /influencer_campaigns/{campaignId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Influencer Collaborations
+    match /influencer_collaborations/{collaborationId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Influencer Dispatches
+    match /influencer_dispatches/{dispatchId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Influencer Payments
+    match /influencer_payments/{paymentId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Influencer Contents
+    match /influencer_contents/{contentId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Shopping Cart Collection
+    match /shopping_cart/{itemId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Wishlist Collection
+    match /wishlist/{itemId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Product Reviews Collection (Public Read)
+    match /product_reviews/{reviewId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Customer Delivery Addresses Collection
+    match /customer_delivery_addresses/{addressId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Coupons Collection
+    match /coupons/{couponId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Order Delivery Tracking Collection
+    match /order_delivery_tracking/{trackingId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Order Return Requests Collection
+    match /order_return_requests/{requestId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Order Refunds Collection
+    match /order_refunds/{refundId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Payment Gateway Settings Collection
+    match /payment_gateway_settings/{configId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // App Settings Collection (e.g. PayU Payment Flow mode) - readable by anyone (no
+    // secrets stored), but only authorized administrators may modify it. Missing/absent
+    // documents remain valid; the app defaults to Web Redirect Flow when unset.
+    // NOTE: the top-level `match /{document=**}` rule above currently grants unrestricted
+    // access to every collection in this project; this rule is defense-in-depth for when
+    // that wildcard is tightened. Server-side admin authorization is always enforced
+    // regardless (see POST /api/app-settings in server.ts).
+    match /app_settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Audit Logs
+    match /audit_logs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Audit logs should be append-only & immutable
+    }
+  }
+}
