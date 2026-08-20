@@ -228,6 +228,42 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             ),
+            // PayU Environment Toggle Badge
+            Builder(builder: (context) {
+              final payuEnv = ref.watch(payuEnvironmentProvider);
+              final isTest = payuEnv == 'Test';
+              return Tooltip(
+                message: isTest ? 'PayU Test Mode Active' : 'PayU Production Mode Active',
+                child: InkWell(
+                  onTap: () => ref.read(payuEnvironmentProvider.notifier).toggleEnvironment(),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isTest ? Colors.amber.shade800 : AppColors.primaryGreen,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      isTest ? 'TEST' : 'PROD',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+            IconButton(
+              icon: const Icon(Icons.auto_graph_rounded, color: AppColors.textPrimary, size: 22),
+              onPressed: () => context.push('/referrals'),
+              tooltip: 'Lead Pipeline',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            ),
             Stack(
               clipBehavior: Clip.none,
               children: [

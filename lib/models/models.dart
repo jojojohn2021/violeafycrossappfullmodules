@@ -1375,12 +1375,18 @@ class CommissionSummary {
     required this.paid,
   });
 
+  static double _numToDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
   factory CommissionSummary.fromJson(Map<String, dynamic> json) {
-    final earned = (json['commissionEarned'] ?? json['earned'] ?? json['confirmed'] ?? 0).toDouble();
-    final pay = (json['commissionPayable'] ?? json['payable'] ?? 0).toDouble();
-    final p = (json['commissionPaid'] ?? json['paid'] ?? 0).toDouble();
-    final pend = (json['pending'] ?? 0).toDouble();
-    final conf = (json['confirmed'] ?? 0).toDouble();
+    final earned = _numToDouble(json['commissionEarned'] ?? json['earned'] ?? json['confirmed']);
+    final pay = _numToDouble(json['commissionPayable'] ?? json['payable']);
+    final p = _numToDouble(json['commissionPaid'] ?? json['paid']);
+    final pend = _numToDouble(json['pending']);
+    final conf = _numToDouble(json['confirmed']);
 
     return CommissionSummary(
       pending: pend,
@@ -1421,15 +1427,27 @@ class CommissionHistoryItem {
     required this.createdAt,
   });
 
+  static double _numToDouble(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0.0;
+  }
+
+  static int _numToInt(dynamic val, [int fallback = 1]) {
+    if (val == null) return fallback;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString()) ?? fallback;
+  }
+
   factory CommissionHistoryItem.fromJson(Map<String, dynamic> json) => CommissionHistoryItem(
     id: (json['id'] ?? json['_id'] ?? json['transactionId'] ?? '').toString(),
     orderId: (json['orderId'] ?? '').toString(),
     orderNumber: (json['orderNumber'] ?? json['orderId'] ?? '').toString(),
-    level: (json['level'] ?? json['referralLevel'] ?? 1).toInt(),
-    commissionBaseAmount: (json['commissionBaseAmount'] ?? json['commissionBase'] ?? json['baseAmount'] ?? 0).toDouble(),
-    commissionRate: (json['commissionRate'] ?? json['rate'] ?? 0).toDouble(),
-    commissionAmount: (json['commissionAmount'] ?? json['amount'] ?? 0).toDouble(),
-    status: (json['status'] ?? 'PENDING').toString(),
+    level: _numToInt(json['level'] ?? json['referralLevel'], 1),
+    commissionBaseAmount: _numToDouble(json['commissionBaseAmount'] ?? json['commissionBase'] ?? json['baseAmount']),
+    commissionRate: _numToDouble(json['commissionRate'] ?? json['rate']),
+    commissionAmount: _numToDouble(json['commissionAmount'] ?? json['amount']),
+    status: (json['status'] ?? 'PENDING').toString().toUpperCase(),
     createdAt: (json['createdAt'] ?? json['date'] ?? json['transactionDate'] ?? '').toString(),
   );
 

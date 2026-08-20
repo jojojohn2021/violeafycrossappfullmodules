@@ -42,6 +42,7 @@ dependencies:
   url_launcher: ^6.2.6
   intl: ^0.20.3
   payu_checkoutpro_flutter: ^1.4.5
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:

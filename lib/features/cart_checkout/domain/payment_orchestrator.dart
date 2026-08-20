@@ -1,15 +1,17 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/config/env_config.dart';
 import '../../../core/network/api_client.dart';
+import '../presentation/payu_webview_screen.dart';
 import 'payment_types.dart';
 
 export 'payment_types.dart';
 
 /// Centralized payment orchestration abstraction.
 ///
-/// Creates a transaction against the server-configured PayU gateway and opens
-/// its hosted checkout page.
+/// Creates a transaction against the server-configured PayU gateway (Test or Production)
+/// and launches PayU Hosted Checkout using in-app WebView on mobile or web redirect on Flutter Web.
 class PaymentOrchestrator {
   final ApiClient _apiClient;
 
@@ -17,17 +19,31 @@ class PaymentOrchestrator {
 
   Future<PaymentResult> pay({
     required Map<String, dynamic> orderData,
+    String environment = 'Test',
+    BuildContext? context,
   }) async {
-    debugPrint('[PaymentOrchestrator] Starting payment with server-configured PayU gateway.');
-    final txn = await _initiate(orderData);
-    return WebRedirectPaymentStrategy.launch(txn['txnid'].toString());
+    debugPrint('[PaymentOrchestrator] Starting payment with server-configured PayU gateway ($environment).');
+    final txn = await _initiate(orderData, environment);
+    final txnid = txn['txnid'].toString();
+
+    if (kIsWeb) {
+      return WebRedirectPaymentStrategy.launch(txnid);
+    }
+
+    if (context != null && context.mounted) {
+      final res = await PayUWebViewScreen.start(context, txnid);
+      return res ?? PaymentResult(outcome: PaymentOutcome.cancelled, transactionId: txnid);
+    }
+
+    return WebRedirectPaymentStrategy.launch(txnid);
   }
 
-  Future<Map<String, dynamic>> _initiate(Map<String, dynamic> orderData) async {
+  Future<Map<String, dynamic>> _initiate(Map<String, dynamic> orderData, String environment) async {
     final response = await _apiClient.post('/api/payment/initiate', {
       'orderData': orderData,
-      'paymentMethod': 'PayU',
+      'paymentMethod': 'UPI',
       'gateway': 'PayU',
+      'environment': environment,
     });
     if (response is! Map) {
       throw Exception('Payment transaction was not created.');
@@ -56,3 +72,4 @@ class WebRedirectPaymentStrategy {
     return PaymentResult(outcome: PaymentOutcome.launchedExternally, transactionId: transactionId);
   }
 }
+

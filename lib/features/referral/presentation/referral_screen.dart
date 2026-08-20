@@ -380,13 +380,13 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.border)),
-      child: const Padding(
-        padding: EdgeInsets.all(14),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            Icon(Icons.info_outline, color: AppColors.textMuted, size: 20),
-            SizedBox(width: 12),
-            Expanded(
+            const Icon(Icons.info_outline, color: AppColors.textMuted, size: 20),
+            const SizedBox(width: 12),
+            const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -395,8 +395,54 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
                 ],
               ),
             ),
+            TextButton.icon(
+              onPressed: _showApplyReferralDialog,
+              icon: const Icon(Icons.add_link, size: 16, color: AppColors.primaryGreen),
+              label: const Text('Apply Code', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryGreen)),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showApplyReferralDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enter Sponsor Referral Code', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'e.g. REF1234',
+            labelText: 'Referral Code',
+          ),
+          textCapitalization: TextCapitalization.characters,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen, foregroundColor: Colors.white),
+            onPressed: () async {
+              final code = controller.text.trim();
+              if (code.isEmpty) return;
+              Navigator.of(ctx).pop();
+              final success = await ref.read(shoppingRepositoryProvider).submitReferralCode(code);
+              if (!mounted) return;
+              if (success) {
+                _message('Referral code applied successfully!');
+                _refreshAll();
+              } else {
+                _message('Invalid referral code or referral already assigned.');
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
       ),
     );
   }

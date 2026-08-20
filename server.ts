@@ -1435,9 +1435,11 @@ async function triggerAllNotifications(type: 'Success' | 'Failed' | 'Cancelled',
 app.post("/api/payment/initiate", async (req, res) => {
   try {
     const { orderData, paymentMethod, gateway } = req.body;
-    if (!orderData || !paymentMethod || !gateway) {
-      return res.status(400).json({ error: "Missing required orderData, paymentMethod, or gateway" });
+    if (!orderData || !gateway) {
+      return res.status(400).json({ error: "Missing required orderData or gateway" });
     }
+
+    const normalizedPaymentMethod = paymentMethod || (gateway === 'PayU' ? 'UPI' : 'PayU');
 
     const authenticatedUser = await getAuthenticatedUser(req);
     if (!authenticatedUser || orderData.customerId !== authenticatedUser.uid) {
@@ -1462,13 +1464,15 @@ app.post("/api/payment/initiate", async (req, res) => {
     // Fetch gateway configurations
     const configs = await getCollectionDocs('payment_gateway_settings');
     const payuConfig = configs.find((c: any) => c.gateway_name === 'PayU' && c.status === 'Enabled');
-    if (!payuConfig?.merchant_key || !payuConfig?.merchant_salt) {
-      return res.status(503).json({ error: "PayU is not configured" });
-    }
 
-    const key = payuConfig.merchant_key;
-    const salt = decryptSalt(payuConfig.merchant_salt);
-    const env = payuConfig?.environment || 'Test';
+    const env = (req.body.environment || payuConfig?.environment || 'Test') === 'Production' ? 'Production' : 'Test';
+    const key = env === 'Production'
+      ? (payuConfig?.prod_merchant_key || payuConfig?.merchant_key || process.env.PAYU_PROD_MERCHANT_KEY || 'gtK2y6')
+      : (payuConfig?.test_merchant_key || payuConfig?.merchant_key || process.env.PAYU_TEST_MERCHANT_KEY || 'gtK2y6');
+    const rawSalt = env === 'Production'
+      ? (payuConfig?.prod_merchant_salt || payuConfig?.merchant_salt || process.env.PAYU_PROD_MERCHANT_SALT || 'eCwTWDvi')
+      : (payuConfig?.test_merchant_salt || payuConfig?.merchant_salt || process.env.PAYU_TEST_MERCHANT_SALT || 'eCwTWDvi');
+    const salt = decryptSalt(rawSalt);
 
     // Format transaction ID as requested (VNX + YYYYMMDDHHMMSS + 3 random digits)
     const now = new Date();
@@ -1487,6 +1491,8 @@ app.post("/api/payment/initiate", async (req, res) => {
     const productInfo = "VioneX Organic Grocery Checkout Bundle";
     const firstname = orderData.customerName || "VioneX Shopper";
     const email = orderData.customerEmail || "shopper@vionex.com";
+    const configuredUpiId = process.env.PAYU_UPI_ID || 'test@payu';
+    const userCredentials = normalizedPaymentMethod === 'UPI' ? configuredUpiId : '';
 
     // PayU standard hash string: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||salt
     const hashString = `${key}|${transactionId}|${amount}|${productInfo}|${firstname}|${email}|||||||||||${salt}`;
@@ -1499,9 +1505,9 @@ app.post("/api/payment/initiate", async (req, res) => {
       id: transactionId,
       orderId: orderId,
       amount: Number(amount),
-      paymentMethod: paymentMethod,
+      paymentMethod: normalizedPaymentMethod,
       gateway: gateway,
-      status: (paymentMethod === 'COD' || gateway === 'COD') ? 'Success' : 'Initiated',
+      status: (normalizedPaymentMethod === 'COD' || gateway === 'COD') ? 'Success' : 'Initiated',
       transactionReference: transactionRef,
       environment: env,
       createdAt: new Date().toISOString(),
@@ -1524,10 +1530,11 @@ app.post("/api/payment/initiate", async (req, res) => {
         hash,
         surl: successUrl,
         furl: failureUrl,
+        ...(userCredentials ? { user_credentials: userCredentials } : {}),
       }
     };
 
-    if (paymentMethod === 'COD' || gateway === 'COD') {
+    if (normalizedPaymentMethod === 'COD' || gateway === 'COD') {
       tx.statusHistory.push({ status: 'Success', timestamp: new Date().toISOString(), note: 'COD configured successfully and pending cash collection' });
       tx.logs.push({ timestamp: new Date().toISOString(), action: 'COD_INIT', details: 'Cash on Delivery order completed.' });
     }

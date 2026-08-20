@@ -12,6 +12,36 @@ class ShoppingRepository {
 
   ShoppingRepository({this.firestore});
 
+  static List<Lead> filterLeadsForCurrentUser(List<Lead> leads, CustomerPerformance? currentUser) {
+    if (currentUser == null) return const [];
+
+    final userReferralCodes = <String>{
+      currentUser.referralCode ?? '',
+      currentUser.id,
+      currentUser.mobileNumber,
+      currentUser.mobilenumberwithcountrycode,
+      currentUser.name,
+    }.where((value) => value.trim().isNotEmpty).toSet();
+
+    if (userReferralCodes.isEmpty) return leads;
+
+    return leads.where((lead) {
+      final leadReferralCode = (lead.referralCode ?? '').trim();
+      final leadReferralPartner = (lead.referralPartner ?? '').trim();
+      final leadReferralMobile = (lead.referralmobileno ?? '').trim();
+      final customerPhone = (currentUser.mobileNumber).trim();
+      final customerMobileWithCode = (currentUser.mobilenumberwithcountrycode).trim();
+
+      final matchesReferralCode = leadReferralCode.isNotEmpty && userReferralCodes.contains(leadReferralCode);
+      final matchesCustomerId = leadReferralCode.isNotEmpty && leadReferralCode == currentUser.id;
+      final matchesPartnerName = leadReferralPartner.isNotEmpty && leadReferralPartner == currentUser.name;
+      final matchesPartnerPhone = leadReferralMobile.isNotEmpty &&
+          (leadReferralMobile == customerPhone || leadReferralMobile == customerMobileWithCode);
+
+      return matchesReferralCode || matchesCustomerId || matchesPartnerName || matchesPartnerPhone;
+    }).toList();
+  }
+
   // Local sync cache for Cart & Wishlist
   final List<SalesProduct> _cartItems = [];
   final List<String> _wishlistProductIds = [];
@@ -255,19 +285,24 @@ class ShoppingRepository {
   }
 
   Future<List<Lead>> getLeads() async {
+    List<Lead> leads = [];
     try {
       if (firestore != null) {
         final snapshot = await firestore!.collection('leads').get().timeout(const Duration(seconds: 5));
         if (snapshot.docs.isNotEmpty) {
-          return snapshot.docs.map((doc) => Lead.fromJson({...doc.data(), 'id': doc.id})).toList();
+          leads = snapshot.docs.map((doc) => Lead.fromJson({...doc.data(), 'id': doc.id})).toList();
         }
       }
-      final response = await _apiClient.get('/api/data/leads');
-      if (response is List) return response.map((item) => Lead.fromJson(item)).toList();
+      if (leads.isEmpty) {
+        final response = await _apiClient.get('/api/data/leads');
+        if (response is List) leads = response.map((item) => Lead.fromJson(item)).toList();
+      }
     } catch (e) {
       debugPrint('[ShoppingRepository] Error fetching leads: $e');
     }
-    return [];
+
+    final currentUser = await getCurrentCustomer();
+    return filterLeadsForCurrentUser(leads, currentUser);
   }
 
   Future<bool> saveLead(Lead lead) async {

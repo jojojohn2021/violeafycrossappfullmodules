@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import '../../../../core/theme/app_colors.dart';
 import '../../../../models/models.dart';
 import '../../../../core/network/api_client.dart';
@@ -214,6 +217,7 @@ class _AddressDialogState extends State<_AddressDialog> {
   final _district = TextEditingController();
   final _state = TextEditingController();
   final _pincode = TextEditingController();
+  final _pincodeFocusNode = FocusNode();
   bool _isSaving = false;
 
   @override
@@ -221,7 +225,62 @@ class _AddressDialogState extends State<_AddressDialog> {
     for (final controller in [_name, _mobile, _address, _city, _district, _state, _pincode]) {
       controller.dispose();
     }
+    _pincodeFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _lookupPincode(String code) async {
+    final cleaned = code.trim();
+    if (cleaned.length != 6) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid 6-digit PIN code.')),
+        );
+      }
+      _pincodeFocusNode.requestFocus();
+      return;
+    }
+
+    try {
+      final response = await http.get(Uri.parse('https://api.postalpincode.in/pincode/$cleaned')).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List && data.isNotEmpty && data[0]['Status'] == 'Success') {
+          final postOffices = data[0]['PostOffice'] as List? ?? const [];
+          if (postOffices.isNotEmpty) {
+            final office = postOffices[0] as Map<String, dynamic>;
+            final district = (office['District'] ?? office['Name'] ?? '').toString();
+            final state = (office['State'] ?? '').toString();
+            if (district.isNotEmpty && state.isNotEmpty) {
+              setState(() {
+                _district.text = district;
+                _state.text = state;
+              });
+              return;
+            }
+          }
+        }
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid pincode. Please enter a valid 6-digit PIN code.')),
+        );
+      }
+      _pincode.clear();
+      _district.clear();
+      _state.clear();
+      _pincodeFocusNode.requestFocus();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to verify pincode. Please try again.')),
+        );
+      }
+      _pincode.clear();
+      _district.clear();
+      _state.clear();
+      _pincodeFocusNode.requestFocus();
+    }
   }
 
   String? _required(String? value) => value == null || value.trim().isEmpty ? 'Required' : null;
@@ -242,9 +301,40 @@ class _AddressDialogState extends State<_AddressDialog> {
                 _field(_mobile, 'Mobile number', keyboardType: TextInputType.phone),
                 _field(_address, 'Address line'),
                 _field(_city, 'City'),
-                _field(_district, 'District'),
-                _field(_state, 'State'),
-                _field(_pincode, 'PIN code', keyboardType: TextInputType.number),
+                TextFormField(
+                  controller: _pincode,
+                  focusNode: _pincodeFocusNode,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  onEditingComplete: () => _lookupPincode(_pincode.text),
+                  onChanged: (value) {
+                    if (value.trim().length == 6) {
+                      _lookupPincode(value);
+                    }
+                  },
+                  validator: (value) {
+                    if (value == null || value.trim().length != 6) {
+                      return 'Enter valid 6-digit PIN code';
+                    }
+                    return null;
+                  },
+                  decoration: const InputDecoration(labelText: 'PIN code', isDense: true),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _district,
+                  enabled: false,
+                  decoration: const InputDecoration(labelText: 'District', isDense: true, filled: true),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _state,
+                  enabled: false,
+                  decoration: const InputDecoration(labelText: 'State', isDense: true, filled: true),
+                ),
               ],
             ),
           ),
@@ -332,12 +422,18 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       'deliveryStatus': 'Pending Payment',
       'assignedTo': 'Logistics',
       'createdAt': DateTime.now().toIso8601String(),
-      'paymentMethod': 'PayU',
+      'paymentMethod': 'UPI',
       'shippingAddress': widget.data.address.toJson(),
     };
 
+    final payuEnv = ref.read(payuEnvironmentProvider);
+
     try {
-      final result = await _orchestrator.pay(orderData: orderData);
+      final result = await _orchestrator.pay(
+        orderData: orderData,
+        environment: payuEnv,
+        context: context,
+      );
 
       if (!mounted) return;
       switch (result.outcome) {

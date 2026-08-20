@@ -285,11 +285,23 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                     ),
                     const SizedBox(height: 12),
 
-                    // 5. Pincode (6 digits, positioned BEFORE City/District)
+                    // 5. City
+                    TextFormField(
+                      controller: cityController,
+                      decoration: const InputDecoration(
+                        labelText: 'City *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.location_city_outlined),
+                      ),
+                      validator: (val) => val == null || val.trim().isEmpty ? 'City is required' : null,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 6. Pincode (6 digits, positioned AFTER City)
                     Focus(
                       onFocusChange: (hasFocus) {
-                        if (!hasFocus && pincodeController.text.isNotEmpty) {
-                          performPincodeLookup(pincodeController.text);
+                        if (!hasFocus && pincodeController.text.trim().isNotEmpty) {
+                          performPincodeLookup(pincodeController.text.trim());
                         }
                       },
                       child: TextFormField(
@@ -315,9 +327,12 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                                 )
                               : null,
                         ),
+                        onFieldSubmitted: (_) => performPincodeLookup(pincodeController.text.trim()),
                         onChanged: (val) {
                           if (val.trim().length == 6) {
                             performPincodeLookup(val);
+                          } else if (pincodeErrorText != null) {
+                            setModalState(() => pincodeErrorText = null);
                           }
                         },
                         validator: (val) {
@@ -333,21 +348,21 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                     ),
                     const SizedBox(height: 12),
 
-                    // 6. City / District (Read-only / Non-editable)
+                    // 7. District (Read-only / Non-editable)
                     TextFormField(
                       controller: cityController,
                       enabled: false,
                       decoration: const InputDecoration(
-                        labelText: 'City / District (Auto-filled)',
+                        labelText: 'District (Auto-filled)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.location_city_outlined),
                         filled: true,
                       ),
-                      validator: (val) => val == null || val.trim().isEmpty ? 'Enter a valid pincode to fill City' : null,
+                      validator: (val) => val == null || val.trim().isEmpty ? 'Enter a valid pincode to fill District' : null,
                     ),
                     const SizedBox(height: 12),
 
-                    // 7. State (Read-only / Non-editable)
+                    // 8. State (Read-only / Non-editable)
                     TextFormField(
                       controller: stateController,
                       enabled: false,
@@ -390,6 +405,7 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                           if (formKey.currentState!.validate()) {
                             final rawDigits = contactMobileController.text.trim();
                             final fullMobile = rawDigits.startsWith('+91') ? rawDigits : '+91 $rawDigits';
+                                    final district = cityController.text.trim();
                             final addr = CustomerDeliveryAddress(
                               id: 'addr_${DateTime.now().millisecondsSinceEpoch}',
                               userId: userKey,
@@ -398,7 +414,7 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                               mobileNumber: fullMobile,
                               addressLine: addressLineController.text.trim(),
                               city: cityController.text.trim(),
-                              district: cityController.text.trim(),
+                              district: district,
                               state: stateController.text.trim(),
                               pincode: pincodeController.text.trim(),
                               isDefault: setAsDefault,
