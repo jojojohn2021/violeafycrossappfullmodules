@@ -87,6 +87,12 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: AppColors.textPrimary),
+          tooltip: 'Cancel',
+          // Guests can back out of Login without losing their cart or being forced to sign in.
+          onPressed: () => context.go('/'),
+        ),
         actions: [
           if (otpState.isLoading)
             TextButton(

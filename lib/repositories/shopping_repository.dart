@@ -103,28 +103,214 @@ class ShoppingRepository {
     }
   }
 
-  // Fetch dynamic categories
-  Future<List<String>> getCategories() async {
+  // Authoritative Category Data Retrieval from Server-Side API
+  Future<List<ProductCategory>> getCategoryModels() async {
+    try {
+      final response = await _apiClient.get('/api/categories');
+      if (response != null && response is List && response.isNotEmpty) {
+        final list = response.map((item) {
+          if (item is Map<String, dynamic>) {
+            return ProductCategory.fromJson(item);
+          } else if (item is Map) {
+            return ProductCategory.fromJson(Map<String, dynamic>.from(item));
+          } else {
+            return ProductCategory(id: item.toString(), name: item.toString());
+          }
+        }).where((cat) => cat.name.trim().isNotEmpty).toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching categories from API: $e');
+    }
+
+    // Fallback 1: Firestore collections ('product_categories' or 'categories')
     try {
       if (firestore != null) {
         final snapshot = await firestore!
-            .collection('categories')
+            .collection('product_categories')
             .get()
             .timeout(const Duration(seconds: 5));
         if (snapshot.docs.isNotEmpty) {
-          return snapshot.docs.map((doc) => doc.id).toList();
+          return snapshot.docs.map((doc) => ProductCategory.fromJson({...doc.data(), 'id': doc.id})).toList();
+        }
+
+        final legacySnapshot = await firestore!
+            .collection('categories')
+            .get()
+            .timeout(const Duration(seconds: 5));
+        if (legacySnapshot.docs.isNotEmpty) {
+          return legacySnapshot.docs.map((doc) => ProductCategory(id: doc.id, name: doc.id)).toList();
         }
       }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching categories from Firestore fallback: $e');
+    }
 
-      final response = await _apiClient.get('/api/categories');
-      if (response != null && response is List) {
-        return response.cast<String>();
+    // Fallback 2: Derive categories from products database catalog
+    try {
+      final products = await getProducts();
+      final categorySet = <String>{};
+      for (final p in products) {
+        if (p.category != null && p.category!.trim().isNotEmpty) {
+          categorySet.add(p.category!.trim());
+        }
+      }
+      if (categorySet.isNotEmpty) {
+        return categorySet.map((cat) => ProductCategory(id: cat, name: cat, description: '$cat products')).toList();
       }
     } catch (e) {
-      debugPrint('[ShoppingRepository] Error fetching categories: $e');
+      debugPrint('[ShoppingRepository] Error deriving categories from products fallback: $e');
     }
-    return [];
+
+    // Fallback 3: Standard default master categories
+    return [
+      ProductCategory(id: 'cat_fruits', name: 'Fruits', description: 'Fresh Farm Fruits'),
+      ProductCategory(id: 'cat_vegetables', name: 'Vegetables', description: 'Organic Vegetables'),
+      ProductCategory(id: 'cat_dairy', name: 'Dairy', description: 'Farm Fresh Milk & Dairy'),
+      ProductCategory(id: 'cat_grains', name: 'Grains', description: 'Quality Grains & Rice'),
+      ProductCategory(id: 'cat_beverages', name: 'Beverages', description: 'Refreshing Drinks'),
+      ProductCategory(id: 'cat_snacks', name: 'Snacks', description: 'Tasty Treats & Sweets'),
+    ];
   }
+
+  // Legacy/Helper String list for categories UI
+  Future<List<String>> getCategories() async {
+    final models = await getCategoryModels();
+    if (models.isNotEmpty) {
+      return models.map((m) => m.name).where((name) => name.isNotEmpty).toList();
+    }
+    return ['All', 'Fruits', 'Vegetables', 'Dairy', 'Grains', 'Beverages', 'Snacks'];
+  }
+
+  // Authoritative Brand Data Retrieval from Server-Side API
+  Future<List<ProductBrand>> getBrandModels() async {
+    try {
+      final response = await _apiClient.get('/api/brands');
+      if (response != null && response is List && response.isNotEmpty) {
+        final list = response.map((item) {
+          if (item is Map<String, dynamic>) {
+            return ProductBrand.fromJson(item);
+          } else if (item is Map) {
+            return ProductBrand.fromJson(Map<String, dynamic>.from(item));
+          } else {
+            return ProductBrand(id: item.toString(), name: item.toString());
+          }
+        }).where((b) => b.name.trim().isNotEmpty).toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching brands from API: $e');
+    }
+
+    try {
+      if (firestore != null) {
+        final snapshot = await firestore!
+            .collection('product_brands')
+            .get()
+            .timeout(const Duration(seconds: 5));
+        if (snapshot.docs.isNotEmpty) {
+          return snapshot.docs.map((doc) => ProductBrand.fromJson({...doc.data(), 'id': doc.id})).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching brands from Firestore fallback: $e');
+    }
+
+    try {
+      final products = await getProducts();
+      final brandSet = <String>{};
+      for (final p in products) {
+        if (p.brand != null && p.brand!.trim().isNotEmpty) {
+          brandSet.add(p.brand!.trim());
+        }
+      }
+      if (brandSet.isNotEmpty) {
+        return brandSet.map((b) => ProductBrand(id: b, name: b)).toList();
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error deriving brands from products fallback: $e');
+    }
+
+    return [
+      ProductBrand(id: 'brand_leafy', name: 'Leafy Organic'),
+      ProductBrand(id: 'brand_vamjo', name: 'Vamjo Farm'),
+    ];
+  }
+
+  // Authoritative Brand Owner Data Retrieval from Server-Side API
+  Future<List<ProductBrandOwner>> getBrandOwnerModels() async {
+    try {
+      final response = await _apiClient.get('/api/brand-owners');
+      if (response != null && response is List && response.isNotEmpty) {
+        final list = response.map((item) {
+          if (item is Map<String, dynamic>) {
+            return ProductBrandOwner.fromJson(item);
+          } else if (item is Map) {
+            return ProductBrandOwner.fromJson(Map<String, dynamic>.from(item));
+          } else {
+            return ProductBrandOwner(id: item.toString(), name: item.toString());
+          }
+        }).where((o) => o.name.trim().isNotEmpty).toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching brand owners from API: $e');
+    }
+
+    try {
+      if (firestore != null) {
+        final snapshot = await firestore!
+            .collection('product_brand_owners')
+            .get()
+            .timeout(const Duration(seconds: 5));
+        if (snapshot.docs.isNotEmpty) {
+          return snapshot.docs.map((doc) => ProductBrandOwner.fromJson({...doc.data(), 'id': doc.id})).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching brand owners from Firestore fallback: $e');
+    }
+
+    try {
+      final products = await getProducts();
+      final ownerSet = <String>{};
+      for (final p in products) {
+        if (p.brandOwner != null && p.brandOwner!.trim().isNotEmpty) {
+          ownerSet.add(p.brandOwner!.trim());
+        }
+      }
+      if (ownerSet.isNotEmpty) {
+        return ownerSet.map((o) => ProductBrandOwner(id: o, name: o, company: o)).toList();
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error deriving brand owners from products fallback: $e');
+    }
+
+    return [
+      ProductBrandOwner(id: 'owner_violeafy', name: 'Violeafy Group', company: 'Violeafy Pvt Ltd'),
+    ];
+  }
+
+  // Picture / Image Retrieval from Firebase Firestore
+  Future<String?> getFirestoreImageUrl(String collection, String docIdOrRef) async {
+    if (firestore == null || docIdOrRef.trim().isEmpty) return null;
+    try {
+      final doc = await firestore!
+          .collection(collection)
+          .doc(docIdOrRef.trim())
+          .get()
+          .timeout(const Duration(seconds: 5));
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        final url = data['imageUrl'] ?? data['image'] ?? data['picture'] ?? data['photoUrl'] ?? data['url'];
+        if (url != null) return EnvConfig.normalizeUrl(url.toString());
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching image from Firestore collection ($collection/$docIdOrRef): $e');
+    }
+    return null;
+  }
+
 
   // Fetch dynamic home banners
   Future<List<Map<String, String>>> getBanners() async {
@@ -165,6 +351,33 @@ class ShoppingRepository {
     return [];
   }
 
+  // Fetch active, currently redeemable coupons (used to gate the cart's "Apply Coupon" section)
+  Future<List<Coupon>> getCoupons() async {
+    try {
+      if (firestore != null) {
+        final snapshot = await firestore!
+            .collection('coupons')
+            .get()
+            .timeout(const Duration(seconds: 5));
+        if (snapshot.docs.isNotEmpty) {
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return Coupon.fromJson(data);
+          }).where((coupon) => coupon.isActive).toList();
+        }
+      }
+
+      final response = await _apiClient.get('/api/data/coupons');
+      if (response != null && response is List) {
+        return response.map((item) => Coupon.fromJson(item)).where((coupon) => coupon.isActive).toList();
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching coupons: $e');
+    }
+    return [];
+  }
+
   // Cart Management
   List<SalesProduct> getCartItems() => List.unmodifiable(_cartItems);
 
@@ -193,6 +406,37 @@ class ShoppingRepository {
         category: product.category,
         brand: product.brand,
       ));
+    }
+    _syncCartToBackend();
+  }
+
+  void addInvoiceItemsToCart(List<Map<String, dynamic>> items) {
+    for (final item in items) {
+      final productId = item['productId']?.toString() ?? '';
+      if (productId.isEmpty) continue;
+      final quantity = (item['quantity'] as num?)?.toInt() ?? 1;
+      final index = _cartItems.indexWhere((cartItem) => cartItem.productId == productId);
+      final product = SalesProduct(
+        productId: productId,
+        productName: item['itemDetails']?.toString() ?? '',
+        imageUrl: item['imageUrl']?.toString(),
+        quantity: quantity,
+        price: (item['rate'] as num?)?.toDouble() ?? 0,
+        gstPercentage: (item['gstRate'] as num?)?.toDouble(),
+      );
+      if (index >= 0) {
+        final existing = _cartItems[index];
+        _cartItems[index] = SalesProduct(
+          productId: existing.productId,
+          productName: existing.productName,
+          imageUrl: existing.imageUrl,
+          quantity: existing.quantity + quantity,
+          price: existing.price,
+          gstPercentage: existing.gstPercentage,
+        );
+      } else {
+        _cartItems.add(product);
+      }
     }
     _syncCartToBackend();
   }
@@ -282,6 +526,14 @@ class ShoppingRepository {
       debugPrint('[ShoppingRepository] Error fetching sales orders: $e');
     }
     return [];
+  }
+
+  Future<Map<String, dynamic>> getInvoice(String invoiceOrOrderId) async {
+    final response = await _apiClient.get('/api/invoices/${Uri.encodeComponent(invoiceOrOrderId)}');
+    if (response is! Map || response['invoice'] is! Map) {
+      throw Exception('Invalid invoice response');
+    }
+    return Map<String, dynamic>.from(response['invoice'] as Map);
   }
 
   Future<List<Lead>> getLeads() async {
@@ -630,34 +882,82 @@ class ShoppingRepository {
 
   Future<List<CustomerDeliveryAddress>> getCustomerAddresses(String userId) async {
     try {
-      if (firestore != null) {
-        debugPrint('[ShoppingRepository] Fetching delivery addresses from Firestore for user/mobile: $userId');
-        var snapshot = await firestore!
-            .collection('customer_delivery_addresses')
-            .where('mobileNumber', isEqualTo: userId)
-            .get()
-            .timeout(const Duration(seconds: 5));
+      final Set<String> candidateKeys = {userId.trim()};
+      final user = firebase_auth.FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        if (user.uid.isNotEmpty) candidateKeys.add(user.uid.trim());
+        if (user.phoneNumber != null && user.phoneNumber!.trim().isNotEmpty) {
+          final phone = user.phoneNumber!.trim();
+          candidateKeys.add(phone);
+          final cleanDigits = phone.replaceAll(RegExp(r'\D'), '');
+          if (cleanDigits.isNotEmpty) candidateKeys.add(cleanDigits);
+          if (cleanDigits.length > 10) candidateKeys.add(cleanDigits.substring(cleanDigits.length - 10));
+        }
+        if (user.email != null && user.email!.trim().isNotEmpty) {
+          candidateKeys.add(user.email!.trim());
+        }
+      }
+      candidateKeys.removeWhere((k) => k.isEmpty);
 
-        if (snapshot.docs.isEmpty) {
-          snapshot = await firestore!
+      if (firestore != null) {
+        debugPrint('[ShoppingRepository] Fetching delivery addresses from Firestore for candidate keys: $candidateKeys');
+        final Map<String, CustomerDeliveryAddress> addressMap = {};
+
+        for (final key in candidateKeys) {
+          final byUserId = await firestore!
               .collection('customer_delivery_addresses')
-              .where('userId', isEqualTo: userId)
+              .where('userId', isEqualTo: key)
               .get()
               .timeout(const Duration(seconds: 5));
+          for (final doc in byUserId.docs) {
+            addressMap[doc.id] = CustomerDeliveryAddress.fromJson({...doc.data(), 'id': doc.id});
+          }
+
+          final byCustomerId = await firestore!
+              .collection('customer_delivery_addresses')
+              .where('customerId', isEqualTo: key)
+              .get()
+              .timeout(const Duration(seconds: 5));
+          for (final doc in byCustomerId.docs) {
+            addressMap[doc.id] = CustomerDeliveryAddress.fromJson({...doc.data(), 'id': doc.id});
+          }
+
+          final byMobile = await firestore!
+              .collection('customer_delivery_addresses')
+              .where('mobileNumber', isEqualTo: key)
+              .get()
+              .timeout(const Duration(seconds: 5));
+          for (final doc in byMobile.docs) {
+            addressMap[doc.id] = CustomerDeliveryAddress.fromJson({...doc.data(), 'id': doc.id});
+          }
         }
 
-        if (snapshot.docs.isNotEmpty) {
-          return snapshot.docs.map((doc) => CustomerDeliveryAddress.fromJson(doc.data())).toList();
+        if (addressMap.isNotEmpty) {
+          final result = addressMap.values.toList();
+          result.sort((a, b) => (b.isDefault ? 1 : 0).compareTo(a.isDefault ? 1 : 0));
+          return result;
         }
       }
 
       debugPrint('[ShoppingRepository] Falling back to API for delivery addresses...');
       final response = await _apiClient.get('/api/data/customer_delivery_addresses');
       if (response is List) {
-        return response
-            .map((item) => CustomerDeliveryAddress.fromJson(item))
-            .where((address) => address.mobileNumber == userId || address.userId == userId || address.customerId == userId)
-            .toList();
+        final List<CustomerDeliveryAddress> matched = [];
+        final Set<String> seenIds = {};
+        for (final item in response) {
+          if (item is Map<String, dynamic>) {
+            final addr = CustomerDeliveryAddress.fromJson(item);
+            if (candidateKeys.contains(addr.userId) ||
+                candidateKeys.contains(addr.customerId) ||
+                candidateKeys.contains(addr.mobileNumber)) {
+              if (seenIds.add(addr.id)) {
+                matched.add(addr);
+              }
+            }
+          }
+        }
+        matched.sort((a, b) => (b.isDefault ? 1 : 0).compareTo(a.isDefault ? 1 : 0));
+        return matched;
       }
     } catch (e) {
       debugPrint('[ShoppingRepository] Error fetching customer delivery addresses: $e');
@@ -676,14 +976,33 @@ class ShoppingRepository {
             .set(address.toJson())
             .timeout(const Duration(seconds: 5));
         debugPrint('[ShoppingRepository] Delivery address saved to Firestore.');
-        return address;
+      } else {
+        await _apiClient.post('/api/data/customer_delivery_addresses', address.toJson());
       }
 
-      final response = await _apiClient.post('/api/data/customer_delivery_addresses', address.toJson());
-      debugPrint('[ShoppingRepository] Save delivery address response from API: $response');
-      if (response != null && response is Map<String, dynamic>) {
-        return CustomerDeliveryAddress.fromJson(response);
+      // Check customer table email sync
+      final trimmedEmail = address.email.trim();
+      final isEmailValid = trimmedEmail.contains('@') && trimmedEmail.contains('.');
+      if (isEmailValid) {
+        try {
+          final customer = await getCurrentCustomer();
+          if (customer != null && customer.email.trim().isEmpty) {
+            debugPrint('[ShoppingRepository] Customer email is empty. Updating customer record ${customer.id} with email $trimmedEmail');
+            if (firestore != null) {
+              await firestore!
+                  .collection('customers')
+                  .doc(customer.id)
+                  .update({'email': trimmedEmail})
+                  .timeout(const Duration(seconds: 5));
+            } else {
+              await _apiClient.post('/api/data/customers/${customer.id}', {'email': trimmedEmail});
+            }
+          }
+        } catch (err) {
+          debugPrint('[ShoppingRepository] Error syncing customer email: $err');
+        }
       }
+
       return address;
     } catch (e) {
       debugPrint('[ShoppingRepository] Error saving customer delivery address: $e');
@@ -723,6 +1042,7 @@ class ShoppingRepository {
             customerId: addr.customerId,
             name: addr.name,
             mobileNumber: addr.mobileNumber,
+            email: addr.email,
             addressLine: addr.addressLine,
             city: addr.city,
             district: addr.district,

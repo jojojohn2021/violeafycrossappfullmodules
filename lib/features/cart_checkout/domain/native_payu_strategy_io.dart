@@ -49,15 +49,27 @@ class NativePayUPaymentStrategy {
         'productinfo': txn['productInfo'] ?? payuRequest['productinfo'],
         'firstname': txn['firstname'] ?? payuRequest['firstname'],
         'email': txn['email'] ?? payuRequest['email'],
-        'phone': '',
+        'phone': (txn['phone'] ?? payuRequest['phone'] ?? (txnData['orderPayload'] is Map ? txnData['orderPayload']['customerMobile'] : '') ?? '').toString().replaceAll(RegExp(r'\D'), ''),
+        'address1': (payuRequest['address1'] ?? '').toString(),
         'surl': payuRequest['surl'],
         'furl': payuRequest['furl'],
-        'udf1': '',
-        'udf2': '',
-        'udf3': '',
-        'udf4': '',
-        'udf5': '',
       };
+
+      if (payuRequest['udf1']?.toString().trim().isNotEmpty == true) {
+        payUPaymentParams['udf1'] = payuRequest['udf1'];
+      }
+      if (payuRequest['udf2']?.toString().trim().isNotEmpty == true) {
+        payUPaymentParams['udf2'] = payuRequest['udf2'];
+      }
+      if (payuRequest['udf3']?.toString().trim().isNotEmpty == true) {
+        payUPaymentParams['udf3'] = payuRequest['udf3'];
+      }
+      if (payuRequest['udf4']?.toString().trim().isNotEmpty == true) {
+        payUPaymentParams['udf4'] = payuRequest['udf4'];
+      }
+      if (payuRequest['udf5']?.toString().trim().isNotEmpty == true) {
+        payUPaymentParams['udf5'] = payuRequest['udf5'];
+      }
 
       final payUCheckoutProConfig = <String, dynamic>{
         'isTestMode': environment != 'Production',
@@ -112,11 +124,14 @@ class _PayUDelegate implements PayUCheckoutProProtocol {
 
   @override
   generateHash(Map response) {
-    // Every requested hash name reduces to the same server-computed formula for a
-    // plain checkout (no VAS/EMI add-ons) - the salt itself never leaves the backend.
     final hashResult = <String, String>{};
     for (final key in response.keys) {
-      hashResult[key.toString()] = precomputedHash;
+      final keyName = key.toString();
+      if (keyName == 'paymentHash') {
+        hashResult[keyName] = precomputedHash;
+      } else {
+        hashResult[keyName] = '';
+      }
     }
     checkoutPro?.hashGenerated(hash: hashResult);
   }

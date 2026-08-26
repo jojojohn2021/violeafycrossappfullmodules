@@ -1,4 +1,3 @@
-import '../../../core/network/api_client.dart';
 import 'payment_types.dart';
 
 /// Web-safe fallback used whenever `dart:io` is unavailable (Flutter Web).
@@ -8,7 +7,7 @@ import 'payment_types.dart';
 class NativePayUPaymentStrategy {
   static Future<PaymentResult> pay({
     required Map<String, dynamic> txn,
-    required ApiClient apiClient,
+    Object? apiClient,
   }) async {
     return const PaymentResult(
       outcome: PaymentOutcome.initFailed,

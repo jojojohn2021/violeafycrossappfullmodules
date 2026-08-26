@@ -1,1 +1,47 @@
-{"firestore":[{"database":"violeafydb","rules":"firestore.rules"},{"database":"(default)","rules":"firestore.rules"}],"flutter":{"platforms":{"android":{"default":{"projectId":"violeafybasket","appId":"1:347630935812:android:debe09fb5de0aed29b3a51","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"violeafybasket","configurations":{"android":"1:347630935812:android:debe09fb5de0aed29b3a51","ios":"1:347630935812:ios:ef88c0ec60bf97b39b3a51","web":"1:347630935812:web:0a0e7689a0e7e9d59b3a51"}}}}}}
+{
+  "firestore": [
+    {
+      "database": "violeafydb",
+      "rules": "firestore.rules"
+    },
+    {
+      "database": "(default)",
+      "rules": "firestore.rules"
+    }
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "violeafybasket",
+          "appId": "1:347630935812:android:debe09fb5de0aed29b3a51",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "violeafybasket",
+          "configurations": {
+            "android": "1:347630935812:android:debe09fb5de0aed29b3a51",
+            "ios": "1:347630935812:ios:ef88c0ec60bf97b39b3a51",
+            "web": "1:347630935812:web:0a0e7689a0e7e9d59b3a51"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

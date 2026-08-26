@@ -1,5 +1,5 @@
 {
-  "name": "Leafy-FruitsnFlowers .Connect.Refer.Earn",
+  "name": "Leafy Connect.Refer.Earn",
   "description": "Leafy General Shopping Platform & Unified CRM: Connect, Refer, Earn. Complete e-commerce shopping integration with referral partner ecosystem, commission engine, KPI intelligence, wallet, and admin console.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

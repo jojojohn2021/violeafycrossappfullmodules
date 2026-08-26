@@ -10,7 +10,7 @@ class LeafyTopAppBar extends ConsumerStatefulWidget implements PreferredSizeWidg
   const LeafyTopAppBar({super.key});
 
   @override
-  Size get preferredSize => const Size.fromHeight(66);
+  Size get preferredSize => const Size.fromHeight(110);
 
   @override
   ConsumerState<LeafyTopAppBar> createState() => _LeafyTopAppBarState();
@@ -132,167 +132,315 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
     final cartItems = ref.watch(cartProvider);
     final totalItems = cartItems.fold(0, (sum, i) => sum + i.quantity);
 
+    final user = ref.watch(authStateProvider).asData?.value;
+    final customer = ref.watch(currentUserCustomerProvider).asData?.value;
+
+    String userMobileNumber = 'Guest';
+    if (user != null) {
+      if (user.phoneNumber != null && user.phoneNumber!.trim().isNotEmpty) {
+        userMobileNumber = user.phoneNumber!.trim();
+      } else if (customer != null && customer.mobileNumber.trim().isNotEmpty) {
+        userMobileNumber = customer.mobileNumber.trim();
+      } else if (user.email != null && user.email!.trim().isNotEmpty) {
+        userMobileNumber = user.email!.trim();
+      }
+    }
+
     return Container(
       color: AppColors.background,
-      padding: const EdgeInsets.only(top: 8, left: 12, right: 12, bottom: 6),
+      padding: const EdgeInsets.only(top: 6, left: 12, right: 12, bottom: 8),
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Left: Logo & Brand
-            GestureDetector(
-              onTap: () => context.go('/'),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      'assets/Logo.png',
-                      height: 36,
-                      width: 36,
-                      errorBuilder: (_, __, ___) => Container(
-                        height: 36,
-                        width: 36,
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryGreen,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.eco, color: Colors.white, size: 22),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Leafy',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryGreen,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-
-            // Center: Search Bar (Height 48, Pill Rounded)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => context.go('/search'),
-                child: Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.secondaryBackground,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: AppColors.border, width: 1),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+            // Top Row: Logo & Greeting on Left, Badges & Actions on Right
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Left: Logo & Brand + User Greeting
+                GestureDetector(
+                  onTap: () => context.go('/'),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          ref.watch(searchQueryProvider).isEmpty
-                              ? 'Search Fruits, Vegetables, Spices...'
-                              : ref.watch(searchQueryProvider),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: ref.watch(searchQueryProvider).isEmpty
-                                ? AppColors.textMuted
-                                : AppColors.textPrimary,
-                            fontSize: 13,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          'assets/Logo.png',
+                          height: 34,
+                          width: 34,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 34,
+                            width: 34,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryGreen,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.eco, color: Colors.white, size: 20),
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 140),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: 'Leafy ',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primaryGreen,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: 'Hello,',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w300,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              userMobileNumber,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textPrimary,
+                                height: 1.1,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
 
-            // Right Action Buttons: Voice, Image, Cart, Notifications
-            IconButton(
-              icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: _isListening ? AppColors.primaryGreen : AppColors.textPrimary, size: 22),
-              onPressed: _listenVoiceSearch,
-              tooltip: 'Voice Search',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            ),
-            IconButton(
-              icon: const Icon(Icons.camera_alt_outlined, color: AppColors.textPrimary, size: 22),
-              onPressed: _pickImageSearch,
-              tooltip: 'Photo Search',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            ),
-            // PayU Environment Toggle Badge
-            Builder(builder: (context) {
-              final payuEnv = ref.watch(payuEnvironmentProvider);
-              final isTest = payuEnv == 'Test';
-              return Tooltip(
-                message: isTest ? 'PayU Test Mode Active' : 'PayU Production Mode Active',
-                child: InkWell(
-                  onTap: () => ref.read(payuEnvironmentProvider.notifier).toggleEnvironment(),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isTest ? Colors.amber.shade800 : AppColors.primaryGreen,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      isTest ? 'TEST' : 'PROD',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
+                // Right Action Buttons: PayU Toggles, Wishlist, Cart
+                Flexible(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // PayU Environment Toggle Badge
+                        Builder(builder: (context) {
+                          final payuEnv = ref.watch(payuEnvironmentProvider);
+                          final isTest = payuEnv == 'Test';
+                          return Tooltip(
+                            message: isTest ? 'PayU Test Mode Active' : 'PayU Production Mode Active',
+                            child: InkWell(
+                              onTap: () => ref.read(payuEnvironmentProvider.notifier).toggleEnvironment(),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isTest ? Colors.amber.shade800 : AppColors.primaryGreen,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  isTest ? 'TEST' : 'PROD',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        // PayU Debug Diagnostics Toggle
+                        Consumer(builder: (context, ref, _) {
+                          final debugOn = ref.watch(payuDebugProvider);
+                          return Tooltip(
+                            message: 'PayU Debug Diagnostics',
+                            child: InkWell(
+                              onTap: () => ref.read(payuDebugProvider.notifier).toggle(),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: debugOn ? Colors.redAccent : AppColors.textMuted,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  debugOn ? 'PayU Debug: ON' : 'PayU Debug: OFF',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        Consumer(builder: (context, ref, _) {
+                          final payuEnv = ref.watch(payuEnvironmentProvider);
+                          if (payuEnv != 'Test') return const SizedBox.shrink();
+                          final payuEnabled = ref.watch(payuEnabledProvider);
+                          return Tooltip(
+                            message: payuEnabled ? 'Payment is enabled' : 'Payment is disabled - testing mode',
+                            child: InkWell(
+                              onTap: () async {
+                                await ref.read(payuEnabledProvider.notifier).toggle();
+                                final enabledNow = ref.read(payuEnabledProvider);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(enabledNow ? 'Payment is enabled' : 'Payment is disabled - testing mode'),
+                                    duration: const Duration(seconds: 2),
+                                  ));
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: payuEnabled ? AppColors.primaryGreen : Colors.grey.shade600,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  payuEnabled ? 'Pay Payment: ON' : 'Pay Payment: OFF',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        IconButton(
+                          icon: const Icon(Icons.favorite_border_outlined, color: AppColors.textPrimary, size: 22),
+                          onPressed: () => context.push('/wishlist'),
+                          tooltip: 'Wishlist',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.receipt_long_outlined, color: AppColors.textPrimary, size: 22),
+                          onPressed: () => context.push('/orders'),
+                          tooltip: 'My Orders',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        ),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.textPrimary, size: 22),
+                              onPressed: () => context.push('/cart'),
+                              tooltip: 'Cart',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            ),
+                            if (totalItems > 0)
+                              Positioned(
+                                right: 4,
+                                top: 2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.primaryGreen,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                  child: Text(
+                                    '$totalItems',
+                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              );
-            }),
-            IconButton(
-              icon: const Icon(Icons.auto_graph_rounded, color: AppColors.textPrimary, size: 22),
-              onPressed: () => context.push('/referrals'),
-              tooltip: 'Lead Pipeline',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            ),
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.textPrimary, size: 22),
-                  onPressed: () => context.push('/cart'),
-                  tooltip: 'Cart',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                ),
-                if (totalItems > 0)
-                  Positioned(
-                    right: 4,
-                    top: 2,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: AppColors.primaryGreen,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        '$totalItems',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
               ],
+            ),
+            const SizedBox(height: 6),
+
+            // Next Line: Search Bar with Voice and Picture Options
+            GestureDetector(
+              onTap: () => context.go('/search'),
+              child: Container(
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryBackground,
+                  borderRadius: BorderRadius.circular(21),
+                  border: Border.all(color: AppColors.border, width: 1),
+                ),
+                padding: const EdgeInsets.only(left: 12, right: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        ref.watch(searchQueryProvider).isEmpty
+                            ? 'Search Fruits, Vegetables, Spices...'
+                            : ref.watch(searchQueryProvider),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: ref.watch(searchQueryProvider).isEmpty
+                              ? AppColors.textMuted
+                              : AppColors.textPrimary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _isListening ? Icons.mic : Icons.mic_none,
+                        color: _isListening ? AppColors.primaryGreen : AppColors.textPrimary,
+                        size: 20,
+                      ),
+                      onPressed: _listenVoiceSearch,
+                      tooltip: 'Voice Search',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.camera_alt_outlined,
+                        color: AppColors.textPrimary,
+                        size: 20,
+                      ),
+                      onPressed: _pickImageSearch,
+                      tooltip: 'Photo Search',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),

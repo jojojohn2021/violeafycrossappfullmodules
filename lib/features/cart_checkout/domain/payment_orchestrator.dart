@@ -21,7 +21,13 @@ class PaymentOrchestrator {
     required Map<String, dynamic> orderData,
     String environment = 'Test',
     BuildContext? context,
+    bool payuEnabled = true,
   }) async {
+    if (!payuEnabled) {
+      debugPrint('[PaymentOrchestrator] PayU testing toggle is OFF - bypassing PayU ($environment).');
+      return _bypassCheckout(orderData, environment);
+    }
+
     debugPrint('[PaymentOrchestrator] Starting payment with server-configured PayU gateway ($environment).');
     final txn = await _initiate(orderData, environment);
     final txnid = txn['txnid'].toString();
@@ -36,6 +42,25 @@ class PaymentOrchestrator {
     }
 
     return WebRedirectPaymentStrategy.launch(txnid);
+  }
+
+  /// Testing-only path: never contacts PayU. The backend re-validates that PAYU_ENABLED is
+  /// false and the environment is not Production before running the same successful-payment
+  /// processing used after a genuine PayU success.
+  Future<PaymentResult> _bypassCheckout(Map<String, dynamic> orderData, String environment) async {
+    final response = await _apiClient.post('/api/payment/bypass-checkout', {
+      'orderData': orderData,
+      'environment': environment,
+    });
+    if (response is! Map || response['success'] != true) {
+      throw Exception('Payment testing bypass is unavailable.');
+    }
+    final result = Map<String, dynamic>.from(response);
+    final txnid = result['txnid']?.toString();
+    if (txnid == null || txnid.isEmpty) {
+      throw Exception('Payment testing bypass did not return a transaction id.');
+    }
+    return PaymentResult(outcome: PaymentOutcome.success, transactionId: txnid);
   }
 
   Future<Map<String, dynamic>> _initiate(Map<String, dynamic> orderData, String environment) async {

@@ -8,7 +8,7 @@ class LeafyMainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Leafy - Fresh Fruits, Veggies & Spices',
+      title: 'Leafy - Connect,Refer,Earn',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       themeMode: ThemeMode.light,

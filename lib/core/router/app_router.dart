@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:go_router/go_router.dart';
 import '../../shared/widgets/bottom_navigation_shell.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -12,19 +14,81 @@ import '../../features/cart_checkout/presentation/checkout_screen.dart';
 import '../../features/wallet/presentation/wallet_screen.dart';
 import '../../features/referral/presentation/referral_screen.dart';
 import '../../features/orders/presentation/orders_screen.dart';
+import '../../features/orders/presentation/invoice_screen.dart';
 import '../../features/profile/presentation/delivery_addresses_screen.dart';
 import '../../features/auth/presentation/otp_login_screen.dart';
+import '../../models/models.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
+/// Turns the Firebase auth state stream into a Listenable so GoRouter can
+/// re-evaluate `redirect` whenever the user signs in or out.
+class GoRouterRefreshStream extends ChangeNotifier {
+  late final StreamSubscription<dynamic> _subscription;
+
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    _subscription = stream.listen((_) => notifyListeners());
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
+// Single source of truth for which routes require an authenticated session.
+// Everything else (Home, Shop/Categories, Search, Product details, Cart, Wishlist)
+// stays publicly accessible for guests.
+const _protectedPathPrefixes = ['/checkout', '/profile', '/referrals', '/wallet', '/addresses', '/orders'];
+
+bool _isProtectedPath(String path) {
+  return _protectedPathPrefixes.any((prefix) => path == prefix || path.startsWith('$prefix/'));
+}
+
+// Defensive helpers: Firebase may not be initialized yet (e.g. widget tests),
+// in which case we simply treat the session as "not logged in" instead of throwing.
+bool _isLoggedIn() {
+  try {
+    return firebase_auth.FirebaseAuth.instance.currentUser != null;
+  } catch (_) {
+    return false;
+  }
+}
+
+Stream<dynamic> _authStateChanges() {
+  try {
+    return firebase_auth.FirebaseAuth.instance.authStateChanges();
+  } catch (_) {
+    return const Stream.empty();
+  }
+}
+
 final appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
-  initialLocation: '/login',
+  initialLocation: '/',
+  refreshListenable: GoRouterRefreshStream(_authStateChanges()),
+  redirect: (context, state) {
+    final loggedIn = _isLoggedIn();
+    final path = state.matchedLocation;
+
+    if (!loggedIn && _isProtectedPath(path)) {
+      final target = Uri.encodeComponent(state.uri.toString());
+      return '/login?redirect=$target';
+    }
+
+    if (loggedIn && path == '/login') {
+      final redirect = state.uri.queryParameters['redirect'];
+      return (redirect == null || redirect.isEmpty) ? '/' : redirect;
+    }
+
+    return null;
+  },
   onException: (context, state, router) {
     debugPrint('[Router] Ignored unhandled route exception for URI: ${state.uri}');
   },
   routes: [
-    // Shell Route for 5 Bottom Nav Tabs with persistent Top App Bar
+    // Shell Route for 4 Bottom Nav Tabs with persistent Top App Bar
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         return BottomNavigationShell(navigationShell: navigationShell);
@@ -48,25 +112,16 @@ final appRouter = GoRouter(
             ),
           ],
         ),
-        // Tab 3: Search
+        // Tab 3: Lead Pipeline
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/search',
-              builder: (context, state) => const SearchScreen(),
+              path: '/referrals',
+              builder: (context, state) => const ReferralScreen(),
             ),
           ],
         ),
-        // Tab 4: Wishlist
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/wishlist',
-              builder: (context, state) => const WishlistScreen(),
-            ),
-          ],
-        ),
-        // Tab 5: Profile
+        // Tab 4: Profile
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -119,14 +174,24 @@ final appRouter = GoRouter(
       builder: (context, state) => const WalletScreen(),
     ),
     GoRoute(
-      path: '/referrals',
+      path: '/wishlist',
       parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => const ReferralScreen(),
+      builder: (context, state) => const WishlistScreen(),
     ),
     GoRoute(
       path: '/orders',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const OrdersScreen(),
+    ),
+    GoRoute(
+      path: '/search',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const SearchScreen(),
+    ),
+    GoRoute(
+      path: '/orders/invoice',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => InvoiceScreen(order: state.extra as SalesOrder),
     ),
     GoRoute(
       path: '/addresses',

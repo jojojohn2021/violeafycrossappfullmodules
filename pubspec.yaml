@@ -44,12 +44,33 @@ dependencies:
   payu_checkoutpro_flutter: ^1.4.5
   webview_flutter: ^4.10.0
 
+  # Invoice generation & sharing
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  path_provider: ^2.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/logo.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/logo.png"
+  web:
+    generate: true
+    image_path: "assets/web/icon-512.png"
+    background_color: "#FFFFFF"
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/Logo.png
+    - assets/logo.png
+    - assets/web/icon-512.png
+

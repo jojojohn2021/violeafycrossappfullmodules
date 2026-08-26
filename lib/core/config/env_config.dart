@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class EnvConfig {
   static const String _defaultDevBaseUrl = 'http://localhost:3000';
   static const String _defaultAndroidEmulatorBaseUrl = 'http://10.0.2.2:3000';
-  static const String _defaultProductionBaseUrl = 'https://leafyvio.ai.studio'; // Fallback
+  static const String _defaultProductionBaseUrl = 'https://www.vamjo.com'; // Fallback
   
   static String _currentBaseUrl = '';
 

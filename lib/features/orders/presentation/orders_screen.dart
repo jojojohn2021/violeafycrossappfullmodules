@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/app_providers.dart';
 
@@ -81,7 +82,7 @@ class OrdersScreen extends ConsumerWidget {
                         children: [
                           Text('Total: ₹${order.totalValue.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primaryGreen)),
                           OutlinedButton(
-                            onPressed: () {},
+                            onPressed: () => context.push('/orders/invoice', extra: order),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                             ),

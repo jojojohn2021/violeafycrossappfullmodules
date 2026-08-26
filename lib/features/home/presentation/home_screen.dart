@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../models/models.dart';
 import '../../../providers/app_providers.dart';
+import '../../../shared/widgets/firestore_image_widget.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/shimmer_loaders.dart';
 
@@ -34,10 +36,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(color: AppColors.secondaryBackground);
   }
 
+  Color _getColorForCategory(String category) {
+    final normalized = category.toLowerCase();
+
+    if (normalized.contains('fruit')) return const Color(0xFFFFF3E0);
+    if (normalized.contains('vegetable') || normalized.contains('veg')) return const Color(0xFFE8F5E9);
+    if (normalized.contains('dairy') || normalized.contains('milk')) return const Color(0xFFE3F2FD);
+    if (normalized.contains('grain') || normalized.contains('rice') || normalized.contains('cereal')) return const Color(0xFFF3E5F5);
+    if (normalized.contains('beverage') || normalized.contains('drink')) return const Color(0xFFE0F7FA);
+    if (normalized.contains('snack') || normalized.contains('biscuit') || normalized.contains('sweet')) return const Color(0xFFFFE0B2);
+
+    return const Color(0xFFE8F5E9);
+  }
+
+  IconData _getIconForCategory(String category) {
+    final normalized = category.toLowerCase();
+
+    if (normalized.contains('fruit')) return Icons.apple;
+    if (normalized.contains('vegetable') || normalized.contains('veg')) return Icons.eco;
+    if (normalized.contains('dairy') || normalized.contains('milk')) return Icons.local_drink;
+    if (normalized.contains('grain') || normalized.contains('rice') || normalized.contains('cereal')) return Icons.grain;
+    if (normalized.contains('beverage') || normalized.contains('drink')) return Icons.local_cafe;
+    if (normalized.contains('snack') || normalized.contains('biscuit') || normalized.contains('sweet')) return Icons.cookie;
+
+    return Icons.category;
+  }
+
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
-    final categoriesAsync = ref.watch(categoriesProvider);
+    final categoryModelsAsync = ref.watch(categoryModelsProvider);
     final bannersAsync = ref.watch(bannersProvider);
     final selectedCategory = ref.watch(selectedCategoryProvider);
 
@@ -48,6 +76,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onRefresh: () async {
           ref.invalidate(productsProvider);
           ref.invalidate(categoriesProvider);
+          ref.invalidate(categoryModelsProvider);
+          ref.invalidate(brandModelsProvider);
+          ref.invalidate(brandOwnerModelsProvider);
           ref.invalidate(bannersProvider);
         },
         child: SingleChildScrollView(
@@ -174,7 +205,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 error: (_, __) => const SizedBox(),
               ),
 
-              // 2. Dynamic Categories Quick Selector Bar from MongoDB
+              // 2. Compact Meesho-style Category Carousel (Positioned directly below Banners / Search Bar)
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -196,37 +227,141 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              categoriesAsync.when(
-                data: (categories) => SizedBox(
-                  height: 40,
+              categoryModelsAsync.when(
+                data: (categoryModels) {
+                  final allCategoryNames = categoryModels.map((m) => m.name).where((n) => n.isNotEmpty).toList();
+                  final listNames = allCategoryNames.contains('All')
+                      ? allCategoryNames
+                      : ['All', ...allCategoryNames];
+
+                  return SizedBox(
+                    height: 92,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      itemCount: listNames.length,
+                      itemBuilder: (context, index) {
+                        final catName = listNames[index];
+                        final isSelected = selectedCategory == catName;
+                        final matchingModel = categoryModels.firstWhere(
+                          (m) => m.name.toLowerCase() == catName.toLowerCase(),
+                          orElse: () => ProductCategory(id: catName, name: catName),
+                        );
+
+                        return GestureDetector(
+                          onTap: () {
+                            ref.read(selectedCategoryProvider.notifier).state = catName;
+                          },
+                          child: Container(
+                            width: 76,
+                            margin: const EdgeInsets.only(right: 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: 54,
+                                  height: 54,
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isSelected
+                                        ? AppColors.primaryGreen.withValues(alpha: 0.15)
+                                        : AppColors.secondaryBackground,
+                                    border: Border.all(
+                                      color: isSelected ? AppColors.primaryGreen : AppColors.border.withValues(alpha: 0.6),
+                                      width: isSelected ? 2.5 : 1,
+                                    ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: AppColors.primaryGreen.withValues(alpha: 0.2),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 2),
+                                            )
+                                          ]
+                                        : null,
+                                  ),
+                                  child: ClipOval(
+                                    child: catName == 'All'
+                                        ? Container(
+                                            color: isSelected ? AppColors.primaryGreen : AppColors.secondaryBackground,
+                                            child: Icon(
+                                              Icons.grid_view_rounded,
+                                              color: isSelected ? Colors.white : AppColors.primaryGreen,
+                                              size: 24,
+                                            ),
+                                          )
+                                        : FirestoreImageWidget(
+                                            collection: 'product_categories',
+                                            docIdOrRef: matchingModel.imageId ?? matchingModel.id,
+                                            directImageUrl: matchingModel.imageUrl,
+                                            fit: BoxFit.cover,
+                                            fallbackWidget: Container(
+                                              color: _getColorForCategory(catName),
+                                              child: Icon(
+                                                _getIconForCategory(catName),
+                                                color: AppColors.primaryGreen,
+                                                size: 24,
+                                              ),
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  catName,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected ? AppColors.primaryGreen : AppColors.textPrimary,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+                loading: () => SizedBox(
+                  height: 92,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: categories.length,
-                    itemBuilder: (context, index) {
-                      final cat = categories[index];
-                      final isSelected = selectedCategory == cat;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
-                          selected: isSelected,
-                          label: Text(cat),
-                          selectedColor: AppColors.primaryGreen,
-                          backgroundColor: AppColors.secondaryBackground,
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : AppColors.textPrimary,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 12,
+                    itemCount: 6,
+                    itemBuilder: (context, index) => Container(
+                      width: 76,
+                      margin: const EdgeInsets.only(right: 8),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.secondaryBackground,
+                            ),
                           ),
-                          onSelected: (_) {
-                            ref.read(selectedCategoryProvider.notifier).state = cat;
-                          },
-                        ),
-                      );
-                    },
+                          const SizedBox(height: 6),
+                          Container(
+                            width: 48,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: AppColors.secondaryBackground,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                loading: () => const SizedBox(height: 40),
                 error: (_, __) => const SizedBox(),
               ),
 

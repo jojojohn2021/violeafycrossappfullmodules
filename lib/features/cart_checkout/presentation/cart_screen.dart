@@ -4,7 +4,28 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../models/models.dart';
 import '../../../../providers/app_providers.dart';
+
+// Default GST rate applied when a product has no explicit gstPercentage (matches server.ts invoice logic).
+const double _defaultGstRate = 18.0;
+
+/// Item price is treated as GST-inclusive; this extracts the tax portion for one line item.
+double _lineGstAmount(SalesProduct item) {
+  final rate = item.gstPercentage ?? _defaultGstRate;
+  final lineTotal = item.price * item.quantity;
+  return (lineTotal * rate) / (100 + rate);
+}
+
+/// Groups the cart's GST amounts by rate, e.g. {5.0: 12.50, 18.0: 40.00}, for the Bill Details summary.
+Map<double, double> _gstSummary(List<SalesProduct> cart) {
+  final summary = <double, double>{};
+  for (final item in cart) {
+    final rate = item.gstPercentage ?? _defaultGstRate;
+    summary[rate] = (summary[rate] ?? 0) + _lineGstAmount(item);
+  }
+  return summary;
+}
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -17,22 +38,54 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   final TextEditingController _couponController = TextEditingController();
   bool _couponApplied = false;
   double _couponDiscount = 0.0;
+  String? _appliedCouponCode;
 
-  void _applyCoupon() {
+  void _applyCoupon(List<Coupon> availableCoupons, double subtotal) {
     final code = _couponController.text.trim().toUpperCase();
-    if (code == 'MANGO25' || code == 'LEAFY50') {
-      setState(() {
-        _couponApplied = true;
-        _couponDiscount = 50.0;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Coupon "$code" applied successfully! Saved ₹50')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid promo code')),
-      );
+    Coupon? match;
+    for (final coupon in availableCoupons) {
+      if (coupon.code.trim().toUpperCase() == code) {
+        match = coupon;
+        break;
+      }
     }
+
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid or unavailable promo code')),
+      );
+      return;
+    }
+    if (match.minOrderValue != null && subtotal < match.minOrderValue!) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Add items worth ₹${match.minOrderValue!.toStringAsFixed(0)} or more to use this code')),
+      );
+      return;
+    }
+
+    double discount;
+    switch (match.type) {
+      case 'percentage':
+        discount = subtotal * (match.value / 100);
+        if (match.maxDiscount != null && discount > match.maxDiscount!) {
+          discount = match.maxDiscount!;
+        }
+        break;
+      case 'free_shipping':
+        discount = 30.0; // matches the flat deliveryFee below
+        break;
+      default:
+        discount = match.value;
+    }
+
+    setState(() {
+      _couponApplied = true;
+      _appliedCouponCode = match!.code;
+      _couponDiscount = discount;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Coupon "${match.code}" applied successfully! Saved ₹${discount.toStringAsFixed(0)}')),
+    );
   }
 
   bool _isNavigating = false;
@@ -41,10 +94,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
+    final couponsAsync = ref.watch(couponsProvider);
+    final availableCoupons = couponsAsync.value ?? const <Coupon>[];
 
     final subtotal = cartNotifier.totalPrice;
     const deliveryFee = 30.0;
     final totalPayable = (subtotal + deliveryFee - _couponDiscount).clamp(0.0, double.infinity);
+    final gstSummary = _gstSummary(cart);
+    final totalGst = gstSummary.values.fold<double>(0, (sum, value) => sum + value);
 
     return Scaffold(
       backgroundColor: AppColors.secondaryBackground,
@@ -136,6 +193,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                           '₹${item.price.toStringAsFixed(0)} each',
                                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                                         ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'GST ${(item.gstPercentage ?? _defaultGstRate).toStringAsFixed(item.gstPercentage != null && item.gstPercentage! % 1 != 0 ? 1 : 0)}% (₹${_lineGstAmount(item).toStringAsFixed(2)})',
+                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -173,38 +235,43 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
                         const SizedBox(height: 12),
 
-                        // Coupon Applicator
-                        Container(
-                          color: AppColors.card,
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Apply Coupon / Promo Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _couponController,
-                                      decoration: const InputDecoration(
-                                        hintText: 'Enter code',
-                                        isDense: true,
+                        // Coupon Applicator - hidden entirely when no active coupons exist
+                        if (availableCoupons.isNotEmpty) ...[
+                          Container(
+                            color: AppColors.card,
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Apply Coupon / Promo Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _couponController,
+                                        decoration: const InputDecoration(
+                                          hintText: 'Enter code',
+                                          isDense: true,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  ElevatedButton(
-                                    onPressed: _applyCoupon,
-                                    child: Text(_couponApplied ? 'APPLIED' : 'APPLY'),
-                                  ),
+                                    const SizedBox(width: 10),
+                                    ElevatedButton(
+                                      onPressed: () => _applyCoupon(availableCoupons, subtotal),
+                                      child: Text(_couponApplied ? 'APPLIED' : 'APPLY'),
+                                    ),
+                                  ],
+                                ),
+                                if (_couponApplied && _appliedCouponCode != null) ...[
+                                  const SizedBox(height: 8),
+                                  Text('Code "$_appliedCouponCode" applied', style: const TextStyle(color: AppColors.primaryGreen, fontSize: 12, fontWeight: FontWeight.w600)),
                                 ],
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 12),
+                        ],
 
                         // Payment Summary Breakdown
                         Container(
@@ -237,6 +304,29 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   children: [
                                     const Text('Coupon Discount', style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w600)),
                                     Text('-₹${_couponDiscount.toStringAsFixed(0)}', style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ],
+                              if (gstSummary.isNotEmpty) ...[
+                                const Divider(height: 24),
+                                const Text('GST Summary (included in item price)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                const SizedBox(height: 8),
+                                for (final rate in (gstSummary.keys.toList()..sort()))
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('GST @ ${rate.toStringAsFixed(rate % 1 != 0 ? 1 : 0)}%', style: const TextStyle(color: AppColors.textSecondary)),
+                                        Text('₹${gstSummary[rate]!.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      ],
+                                    ),
+                                  ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Total GST', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                                    Text('₹${totalGst.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                                   ],
                                 ),
                               ],

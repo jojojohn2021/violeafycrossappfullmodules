@@ -786,7 +786,7 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
     } else if (action == 'delete') {
       if (await ref.read(shoppingRepositoryProvider).deleteLead(lead.id)) { ref.invalidate(leadsProvider); _message('Lead deleted.'); }
     } else {
-      final text = 'Hello ${lead.name}, Natasha here from VioneX! I have customized a secure sales dashboard for you. Are you tomorrow at 10 AM free for a brief 10 min setup sync?';
+      final text = 'Hello ${lead.name}, Natasha here from Leafy ! I have customized a secure sales dashboard for you. Are you tomorrow at 10 AM free for a brief 10 min setup sync?';
       final phone = lead.phone.replaceAll(RegExp(r'\D'), '');
       await ref.read(shoppingRepositoryProvider).saveWhatsAppMessage(phone: lead.phone, text: text, leadId: lead.id);
       await launchUrl(Uri.parse('https://wa.me/91${phone.length > 10 ? phone.substring(phone.length - 10) : phone}?text=${Uri.encodeComponent(text)}'), mode: LaunchMode.externalApplication);

@@ -194,24 +194,25 @@ class _AddressTile extends StatelessWidget {
           color: selected ? AppColors.primaryGreen : AppColors.textMuted,
         ),
         title: Text(address.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('${address.addressLine}\n${address.city}, ${address.district}, ${address.state} - ${address.pincode}\n${address.mobileNumber}'),
+        subtitle: Text('${address.addressLine}\n${address.city}, ${address.district}, ${address.state} - ${address.pincode}\n${address.mobileNumber}${address.email.isNotEmpty ? ' | ${address.email}' : ''}'),
         isThreeLine: true,
       ),
     );
   }
 }
 
-class _AddressDialog extends StatefulWidget {
+class _AddressDialog extends ConsumerStatefulWidget {
   const _AddressDialog();
 
   @override
-  State<_AddressDialog> createState() => _AddressDialogState();
+  ConsumerState<_AddressDialog> createState() => _AddressDialogState();
 }
 
-class _AddressDialogState extends State<_AddressDialog> {
+class _AddressDialogState extends ConsumerState<_AddressDialog> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _mobile = TextEditingController();
+  final _email = TextEditingController();
   final _address = TextEditingController();
   final _city = TextEditingController();
   final _district = TextEditingController();
@@ -219,10 +220,34 @@ class _AddressDialogState extends State<_AddressDialog> {
   final _pincode = TextEditingController();
   final _pincodeFocusNode = FocusNode();
   bool _isSaving = false;
+  bool _isEmailDisabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initCustomerEmail();
+  }
+
+  Future<void> _initCustomerEmail() async {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    final customer = await ref.read(shoppingRepositoryProvider).getCurrentCustomer();
+    final existingEmail = customer?.email.trim() ?? '';
+    if (mounted) {
+      setState(() {
+        if (existingEmail.isNotEmpty) {
+          _email.text = existingEmail;
+          _isEmailDisabled = true;
+        } else if (user?.email != null && user!.email!.isNotEmpty) {
+          _email.text = user.email!;
+          _isEmailDisabled = false;
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
-    for (final controller in [_name, _mobile, _address, _city, _district, _state, _pincode]) {
+    for (final controller in [_name, _mobile, _email, _address, _city, _district, _state, _pincode]) {
       controller.dispose();
     }
     _pincodeFocusNode.dispose();
@@ -299,6 +324,26 @@ class _AddressDialogState extends State<_AddressDialog> {
               children: [
                 _field(_name, 'Customer name'),
                 _field(_mobile, 'Mobile number', keyboardType: TextInputType.phone),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TextFormField(
+                    controller: _email,
+                    enabled: !_isEmailDisabled,
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (val) {
+                      final text = val?.trim() ?? '';
+                      if (text.isEmpty) return 'Email address is required';
+                      final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+                      if (!emailRegex.hasMatch(text)) return 'Enter valid email address';
+                      return null;
+                    },
+                    decoration: InputDecoration(
+                      labelText: _isEmailDisabled ? 'Email address (Registered)' : 'Email address *',
+                      isDense: true,
+                      filled: _isEmailDisabled,
+                    ),
+                  ),
+                ),
                 _field(_address, 'Address line'),
                 _field(_city, 'City'),
                 TextFormField(
@@ -348,15 +393,15 @@ class _AddressDialogState extends State<_AddressDialog> {
               : () async {
                   if (!_formKey.currentState!.validate() || user == null) return;
                   setState(() => _isSaving = true);
-                  // Artificial delay or validation can happen here if needed,
-                  // but we mainly want to prevent multiple pops/clicks.
                   Navigator.pop(
                     context,
                     CustomerAddress(
                       id: 'addr-${DateTime.now().millisecondsSinceEpoch}',
                       userId: user.uid,
+                      customerId: user.uid,
                       name: _name.text.trim(),
                       mobileNumber: _mobile.text.trim(),
+                      email: _email.text.trim(),
                       addressLine: _address.text.trim(),
                       city: _city.text.trim(),
                       district: _district.text.trim(),
@@ -407,13 +452,24 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       return;
     }
 
+    String customerEmail = widget.data.address.email.trim();
+    if (customerEmail.isEmpty && user.email != null && user.email!.trim().isNotEmpty) {
+      customerEmail = user.email!.trim();
+    }
+    if (customerEmail.isEmpty) {
+      final customer = await ref.read(shoppingRepositoryProvider).getCurrentCustomer();
+      if (customer != null && customer.email.trim().isNotEmpty) {
+        customerEmail = customer.email.trim();
+      }
+    }
+
     final orderId = 'ORD-${DateTime.now().millisecondsSinceEpoch}';
     final orderData = {
       'id': orderId,
       'orderNumber': orderId,
       'customerId': user.uid,
       'customerName': widget.data.address.name,
-      'customerEmail': user.email ?? '${user.uid}@customer.invalid',
+      'customerEmail': customerEmail,
       'customerMobile': widget.data.address.mobileNumber,
       'customerCompany': '',
       'products': widget.data.cart.map((item) => item.toJson()).toList(),
@@ -427,12 +483,15 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
     };
 
     final payuEnv = ref.read(payuEnvironmentProvider);
+    final payuEnabled = ref.read(payuEnabledProvider);
 
+    if (!mounted) return;
     try {
       final result = await _orchestrator.pay(
         orderData: orderData,
         environment: payuEnv,
         context: context,
+        payuEnabled: payuEnabled,
       );
 
       if (!mounted) return;
@@ -488,7 +547,7 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
           const Divider(height: 28),
           const Text('Deliver To', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          Text('${data.address.name}\n${data.address.addressLine}\n${data.address.city}, ${data.address.district}, ${data.address.state} - ${data.address.pincode}'),
+          Text('${data.address.name}\n${data.address.addressLine}\n${data.address.city}, ${data.address.district}, ${data.address.state} - ${data.address.pincode}\n${data.address.mobileNumber}${data.address.email.isNotEmpty ? ' | ${data.address.email}' : ''}'),
           const SizedBox(height: 20),
           _summaryRow('Subtotal', data.subtotal),
           _summaryRow('Delivery Fee', data.deliveryFee),
@@ -547,6 +606,10 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
       if (_verifiedStatus == 'Success' && !_cartCleared) {
         ref.read(cartProvider.notifier).clearCart();
         setState(() => _cartCleared = true);
+        // Brief confirmation, then land on the same My Orders screen a successful checkout leads to.
+        Future.delayed(const Duration(milliseconds: 1200), () {
+          if (mounted) context.go('/orders');
+        });
       }
     } catch (_) {
       if (mounted) setState(() => _verifiedStatus = 'Failed');

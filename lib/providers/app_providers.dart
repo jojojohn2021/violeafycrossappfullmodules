@@ -32,10 +32,34 @@ final productsProvider = FutureProvider<List<ProductPerformance>>((ref) async {
   return repo.getProducts();
 });
 
-// Categories FutureProvider (Live API / MongoDB)
+// Category Models FutureProvider (Authoritative Server API)
+final categoryModelsProvider = FutureProvider<List<ProductCategory>>((ref) async {
+  final repo = ref.watch(shoppingRepositoryProvider);
+  return repo.getCategoryModels();
+});
+
+// Categories String FutureProvider (Authoritative Server API)
 final categoriesProvider = FutureProvider<List<String>>((ref) async {
   final repo = ref.watch(shoppingRepositoryProvider);
   return repo.getCategories();
+});
+
+// Brand Models FutureProvider (Authoritative Server API)
+final brandModelsProvider = FutureProvider<List<ProductBrand>>((ref) async {
+  final repo = ref.watch(shoppingRepositoryProvider);
+  return repo.getBrandModels();
+});
+
+// Brand Owner Models FutureProvider (Authoritative Server API)
+final brandOwnerModelsProvider = FutureProvider<List<ProductBrandOwner>>((ref) async {
+  final repo = ref.watch(shoppingRepositoryProvider);
+  return repo.getBrandOwnerModels();
+});
+
+// Firestore Image Retriever Family FutureProvider
+final firestoreImageProvider = FutureProvider.family<String?, ({String collection, String docIdOrRef})>((ref, arg) async {
+  final repo = ref.watch(shoppingRepositoryProvider);
+  return repo.getFirestoreImageUrl(arg.collection, arg.docIdOrRef);
 });
 
 // Banners FutureProvider (Live API / MongoDB)
@@ -44,14 +68,29 @@ final bannersProvider = FutureProvider<List<Map<String, String>>>((ref) async {
   return repo.getBanners();
 });
 
-// Sales Orders FutureProvider (Live API / MongoDB)
+// Active Coupons FutureProvider (used to show/hide the cart's Apply Coupon section)
+final couponsProvider = FutureProvider<List<Coupon>>((ref) async {
+  final repo = ref.watch(shoppingRepositoryProvider);
+  return repo.getCoupons();
+});
+
+// Authentication State Provider
+final authStateProvider = StreamProvider<firebase_auth.User?>((ref) {
+  return firebase_auth.FirebaseAuth.instance.authStateChanges();
+});
+
+// Sales Orders FutureProvider (Live API / MongoDB) - Bounded to Auth User State
 final salesOrdersProvider = FutureProvider<List<SalesOrder>>((ref) async {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return [];
   final repo = ref.watch(shoppingRepositoryProvider);
   return repo.getSalesOrders();
 });
 
-// Wallet FutureProvider (Live API / MongoDB)
+// Wallet FutureProvider (Live API / MongoDB) - Bounded to Auth User State
 final walletProvider = FutureProvider<Wallet?>((ref) async {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return null;
   final repo = ref.watch(shoppingRepositoryProvider);
   return repo.getWallet();
 });
@@ -62,18 +101,24 @@ final leadsProvider = FutureProvider<List<Lead>>((ref) async {
 });
 
 final currentUserCustomerProvider = FutureProvider<CustomerPerformance?>((ref) async {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return null;
   final repo = ref.watch(shoppingRepositoryProvider);
   return repo.getCurrentCustomer();
 });
 
 // Referral Info FutureProvider (Read-only partner level, referral code/link, sponsor, commission summary)
 final referralInfoProvider = FutureProvider<ReferralInfo?>((ref) async {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return null;
   final repo = ref.watch(shoppingRepositoryProvider);
   return repo.getReferralInfo();
 });
 
 // 5-Level Commission History FutureProvider (Read-only transaction list)
 final commissionHistoryProvider = FutureProvider<List<CommissionHistoryItem>>((ref) async {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return [];
   final repo = ref.watch(shoppingRepositoryProvider);
   return repo.getCommissionHistory();
 });
@@ -374,5 +419,95 @@ class PayUEnvironmentNotifier extends StateNotifier<String> {
 
 final payuEnvironmentProvider = StateNotifierProvider<PayUEnvironmentNotifier, String>((ref) {
   return PayUEnvironmentNotifier();
+});
+
+// Reuses the existing users/{uid}.role Firestore field already relied upon by firestore.rules' isAdmin().
+final isAdminUserProvider = FutureProvider<bool>((ref) async {
+  final user = firebase_auth.FirebaseAuth.instance.currentUser;
+  if (user == null) return false;
+  try {
+    final firestore = ref.watch(firestoreProvider);
+    final doc = await firestore.collection('users').doc(user.uid).get();
+    return doc.exists && doc.data()?['role'] == 'Admin';
+  } catch (e) {
+    debugPrint('[isAdminUserProvider] role lookup failed: $e');
+    return false;
+  }
+});
+
+// PayU Debug Diagnostics toggle - persisted server-side via payment_gateway_settings (payu_debug_enabled).
+// Observation-only: never affects PayU credentials, hash, or payment logic. Defaults ON.
+class PayUDebugNotifier extends StateNotifier<bool> {
+  final ApiClient _apiClient;
+
+  PayUDebugNotifier({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient(), super(true) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final response = await _apiClient.get('/api/payment/debug-settings');
+      if (response is Map) {
+        state = response['payu_debug_enabled'] != false;
+      }
+    } catch (e) {
+      debugPrint('[PayUDebugNotifier] Failed to load debug setting: $e');
+    }
+  }
+
+  Future<void> toggle() async {
+    final next = !state;
+    try {
+      final response = await _apiClient.post('/api/payment/debug-settings', {'enabled': next});
+      if (response is Map && response['success'] == true) {
+        state = response['payu_debug_enabled'] == true;
+      }
+    } catch (e) {
+      debugPrint('[PayUDebugNotifier] Failed to update debug setting: $e');
+    }
+  }
+}
+
+final payuDebugProvider = StateNotifierProvider<PayUDebugNotifier, bool>((ref) {
+  return PayUDebugNotifier();
+});
+
+// PayU Payment testing toggle (Home Page top bar) - visible to ALL logged-in users, no admin/role
+// restriction. ON (true, default) runs the normal PayU flow unchanged; OFF bypasses PayU and asks the
+// backend to process the transaction via the same successful-payment path used by a real PayU success.
+// The backend is authoritative and only honors the bypass outside the Production environment.
+class PayUEnabledNotifier extends StateNotifier<bool> {
+  final ApiClient _apiClient;
+
+  PayUEnabledNotifier({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient(), super(false) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final response = await _apiClient.get('/api/payment/payu-toggle');
+      if (response is Map) {
+        state = response['payu_enabled'] != false;
+      }
+    } catch (e) {
+      debugPrint('[PayUEnabledNotifier] Failed to load PayU toggle setting: $e');
+    }
+  }
+
+  Future<void> toggle() async {
+    final next = !state;
+    try {
+      final response = await _apiClient.post('/api/payment/payu-toggle', {'enabled': next});
+      if (response is Map && response['success'] == true) {
+        state = response['payu_enabled'] != false;
+      }
+    } catch (e) {
+      debugPrint('[PayUEnabledNotifier] Failed to update PayU toggle setting: $e');
+    }
+  }
+}
+
+final payuEnabledProvider = StateNotifierProvider<PayUEnabledNotifier, bool>((ref) {
+  return PayUEnabledNotifier();
 });
 

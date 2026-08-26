@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { adminApp, adminAuth, adminDb, adminStorage } from "./firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 dotenv.config();
 
@@ -79,10 +80,70 @@ try {
   }, null, 2));
 } catch (e) { }
 
+function normalizePaymentTransaction(tx: any) {
+  if (!tx || typeof tx !== 'object') return tx;
+
+  const orderPayload = tx.orderPayload || {};
+  const shippingAddress = orderPayload.shippingAddress || tx.shippingAddress || {};
+
+  const formattedAddress = typeof shippingAddress === 'string'
+    ? shippingAddress
+    : [shippingAddress.addressLine, shippingAddress.city, shippingAddress.district, shippingAddress.state, shippingAddress.pincode].filter(Boolean).join(', ');
+
+  const mobileVal = (
+    tx.customerMobile ||
+    tx.customerPhone ||
+    tx.phone ||
+    orderPayload.customerMobile ||
+    orderPayload.phone ||
+    orderPayload.mobileNumber ||
+    shippingAddress.mobileNumber ||
+    ""
+  ).toString().trim();
+
+  const addressVal = (
+    tx.customerAddress ||
+    tx.deliveryAddress ||
+    tx.address ||
+    orderPayload.customerAddress ||
+    orderPayload.deliveryAddress ||
+    formattedAddress ||
+    ""
+  ).toString().trim();
+
+  const gatewayVal = (
+    tx.paymentGateway ||
+    tx.gateway ||
+    tx.paymentAggregator ||
+    tx.aggregator ||
+    "PayU"
+  ).toString().trim();
+
+  return {
+    ...tx,
+    gateway: gatewayVal,
+    paymentGateway: gatewayVal,
+    paymentAggregator: gatewayVal,
+    aggregator: gatewayVal,
+    customerMobile: mobileVal,
+    customerPhone: mobileVal,
+    phone: mobileVal,
+    customerAddress: addressVal,
+    deliveryAddress: addressVal,
+    address: addressVal,
+    customerName: tx.customerName || orderPayload.customerName || "Leafy Shopper",
+    customerEmail: tx.customerEmail || orderPayload.customerEmail || ""
+  };
+}
+
 async function getCollectionDocs(col: string): Promise<any[]> {
   try {
     const snapshot = await adminDb.collection(col).get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (col === 'payments') {
+      return docs.map(tx => normalizePaymentTransaction(tx));
+    }
+    return docs;
   } catch (err: any) {
     console.error(`[VIO-FIRESTORE] getCollectionDocs error on collection '${col}':`, err);
     throw new Error(`Firestore read operation failed for collection '${col}': ${err.message || err}`);
@@ -107,6 +168,32 @@ async function getAuthenticatedUser(req: any): Promise<any> {
     return await adminAuth.verifyIdToken(authorization.substring(7));
   } catch (_) {
     return null;
+  }
+}
+
+// PayU debug diagnostics toggle - reuses the existing payment_gateway_settings collection/mechanism.
+// Default is ON until manually toggled/removed; missing setting is treated as enabled.
+const PAYU_DEBUG_SETTINGS_DOC_ID = 'payu_debug_settings';
+
+async function isPayUDebugEnabled(): Promise<boolean> {
+  try {
+    const doc = await adminDb.collection('payment_gateway_settings').doc(PAYU_DEBUG_SETTINGS_DOC_ID).get();
+    return !doc.exists || doc.data()?.payu_debug_enabled !== false;
+  } catch (_) {
+    return true;
+  }
+}
+
+// PayU Payment testing toggle - reuses the existing payment_gateway_settings collection/mechanism.
+// PAYU_ENABLED defaults to true (normal PayU flow); missing setting is treated as enabled.
+const PAYU_ENABLED_SETTINGS_DOC_ID = 'payu_enabled_settings';
+
+async function isPayUEnabled(): Promise<boolean> {
+  try {
+    const doc = await adminDb.collection('payment_gateway_settings').doc(PAYU_ENABLED_SETTINGS_DOC_ID).get();
+    return !doc.exists || doc.data()?.payu_enabled !== false;
+  } catch (_) {
+    return true;
   }
 }
 
@@ -142,7 +229,7 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
   }
 
   const leads = await adminDb.collection('leads').where('phone', '==', mobileNumber).limit(1).get();
-  const lead = leads.empty ? null : { id: leads.docs[0].id, ...leads.docs[0].data() };
+  const lead: any = leads.empty ? null : { id: leads.docs[0].id, ...leads.docs[0].data() };
   const indexRef = adminDb.collection('customer_mobile_index').doc(mobileNumber);
 
   return adminDb.runTransaction(async (transaction) => {
@@ -394,6 +481,7 @@ app.get("/api/data", async (req, res) => {
       'product_level_commissions', 'performance_levels', 'partner_performances',
       'influencers', 'influencer_campaigns', 'influencer_collaborations',
       'influencer_dispatches', 'influencer_payments', 'influencer_contents',
+      'product_categories', 'product_brands', 'product_brand_owners',
       'shopping_carts', 'wishlists', 'product_reviews', 'customer_delivery_addresses', 'coupons',
       'order_delivery_tracking', 'order_return_requests', 'order_refunds', 'payments',
       'payment_gateway_settings', 'delivery_charges', 'notification_settings', 'notification_logs'
@@ -434,13 +522,69 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
-app.get("/api/categories", async (req, res) => {
+// Authoritative Category API - Reads product_categories table/collection
+app.get(["/api/categories", "/api/product-categories"], async (req, res) => {
   try {
-    const docs = await getCollectionDocs("products");
-    const categories = Array.from(new Set(docs.map((p: any) => p.category).filter(Boolean)));
-    return res.json(categories);
+    let docs = await getCollectionDocs("product_categories");
+    if (!docs || docs.length === 0) {
+      // Fallback: derive categories from products database table
+      const products = await getCollectionDocs("products");
+      const categoryNames = Array.from(new Set(products.map((p: any) => p.category).filter(Boolean)));
+      docs = categoryNames.map((cat, idx) => ({
+        id: `cat_${idx + 1}`,
+        name: cat,
+        status: "Active",
+        description: `${cat} products`,
+        imageUrl: ""
+      }));
+    }
+    return res.json(docs);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to fetch categories" });
+  }
+});
+
+// Authoritative Brand API - Reads product_brands table/collection
+app.get(["/api/brands", "/api/product-brands"], async (req, res) => {
+  try {
+    let docs = await getCollectionDocs("product_brands");
+    if (!docs || docs.length === 0) {
+      // Fallback: derive brands from products database table
+      const products = await getCollectionDocs("products");
+      const brandNames = Array.from(new Set(products.map((p: any) => p.brand).filter(Boolean)));
+      docs = brandNames.map((brand, idx) => ({
+        id: `brand_${idx + 1}`,
+        name: brand,
+        status: "Active",
+        description: `${brand} brand`,
+        imageUrl: ""
+      }));
+    }
+    return res.json(docs);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to fetch brands" });
+  }
+});
+
+// Authoritative Brand Owner API - Reads product_brand_owners table/collection
+app.get(["/api/brand-owners", "/api/product-brand-owners"], async (req, res) => {
+  try {
+    let docs = await getCollectionDocs("product_brand_owners");
+    if (!docs || docs.length === 0) {
+      // Fallback: derive brand owners from products database table
+      const products = await getCollectionDocs("products");
+      const ownerNames = Array.from(new Set(products.map((p: any) => p.brandOwner).filter(Boolean)));
+      docs = ownerNames.map((owner, idx) => ({
+        id: `owner_${idx + 1}`,
+        name: owner,
+        company: owner,
+        status: "Active",
+        imageUrl: ""
+      }));
+    }
+    return res.json(docs);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to fetch brand owners" });
   }
 });
 
@@ -462,10 +606,182 @@ app.get("/api/wallets", async (req, res) => {
   }
 });
 
+function invoiceNumber(orderId: string): string {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const suffix = crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 8).toUpperCase();
+  return `INV-${date}-${suffix}`;
+}
+
+function numberValue(value: any): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function money(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+async function buildCustomerReferralSummary(customer: any): Promise<Record<string, number>> {
+  if (!customer) return { totalCommissionEarned: 0, totalPayout: 0, walletBalance: 0 };
+
+  try {
+    const partnerIds = Array.from(new Set([customer.id, customer.authUid, customer.mobileNumber].filter(Boolean)));
+    const commissionSnap = await adminDb.collection('commission_transactions').get();
+    const totalCommissionEarned = money(commissionSnap.docs.reduce((sum, doc) => {
+      const data: any = doc.data();
+      if (!partnerIds.includes(data.referrerCustomerId) && !partnerIds.includes(data.referrerAuthUid) && !partnerIds.includes(data.referrerMobileNumber)) return sum;
+      if (data.status === 'Cancelled' || data.status === 'Reversed') return sum;
+      return sum + Math.max(0, numberValue(data.commissionAmount) - numberValue(data.reversedAmount));
+    }, 0));
+
+    let totalPayout = 0;
+    if (partnerIds.length > 0) {
+      const payoutSnap = await adminDb.collection('payouts').get();
+      totalPayout = money(payoutSnap.docs.reduce((sum, doc) => {
+        const data: any = doc.data();
+        return partnerIds.includes(data.partnerId) && ['Paid', 'Settled', 'Completed'].includes(String(data.status))
+          ? sum + numberValue(data.amount)
+          : sum;
+      }, 0));
+    }
+
+    const walletDocs = await getCollectionDocs('wallets');
+    const wallet = walletDocs.find((item: any) => partnerIds.includes(item.partnerId || item.customerId || item.userId));
+    const walletBalance = numberValue(wallet?.availableBalance ?? wallet?.balance ?? wallet?.totalBalance);
+    return { totalCommissionEarned, totalPayout, walletBalance: money(walletBalance) };
+  } catch (err) {
+    console.error('[Invoice API] Error building referral summary:', err);
+    return { totalCommissionEarned: 0, totalPayout: 0, walletBalance: 0 };
+  }
+}
+
+app.get("/api/invoices/:invoiceId", async (req, res) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ error: "Authenticated customer required" });
+
+    const requestedId = String(req.params.invoiceId);
+    const orders = await getCollectionDocs('sales_orders');
+    let order = orders.find((item: any) => [item.id, item.orderNumber, item.invoiceId].includes(requestedId));
+    
+    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    const validCustomerIds = new Set([
+      authenticatedUser.uid,
+      customer?.id,
+      customer?.authUid,
+      authenticatedUser.email,
+      customer?.email
+    ].filter(Boolean));
+
+    if (!order || (!validCustomerIds.has(order.customerId) && !validCustomerIds.has(order.userId) && !validCustomerIds.has(order.customerEmail))) {
+      return res.status(404).json({ error: "Invoice not found" });
+    }
+
+    const invoiceDocs = await getCollectionDocs('invoices');
+    let savedInvoice = invoiceDocs.find((item: any) => item.orderId === order.id || item.id === order.invoiceId);
+    const invoiceId = order.invoiceId || savedInvoice?.invoiceId || savedInvoice?.id || invoiceNumber(order.id);
+    const invoiceDate = order.invoiceDate || savedInvoice?.invoiceDate || order.createdAt || new Date().toISOString();
+
+    if (!order.invoiceId) {
+      await saveCollectionDoc('sales_orders', { id: order.id, invoiceId, invoiceDate });
+      order = { ...order, invoiceId, invoiceDate };
+    }
+
+    if (!savedInvoice) {
+      savedInvoice = { id: invoiceId, invoiceId, orderId: order.id, invoiceDate, createdAt: new Date().toISOString() };
+      await saveCollectionDoc('invoices', savedInvoice);
+    }
+
+    const formatInvoiceDocs = await getCollectionDocs('formatinvoice');
+    const format = formatInvoiceDocs[0] || {};
+    const products = await getCollectionDocs('products');
+    const rawProducts = order.products || order.items || order.orderPayload?.products || [];
+    const items = rawProducts.map((item: any, index: number) => {
+      const product = products.find((candidate: any) => candidate.id === (item.productId || item.id)) || {};
+      const quantity = numberValue(item.quantity ?? item.qty ?? 1);
+      const rate = numberValue(item.rate ?? item.price ?? item.unitPrice);
+      const mrp = numberValue(item.mrp ?? product.mrp ?? product.onlinePrice ?? rate);
+      const discount = numberValue(item.discount ?? Math.max(0, (mrp - rate) * quantity));
+      const gstRate = numberValue(item.gstPercentage ?? item.gstRate ?? product.gstPercentage ?? product.gstRate);
+      const total = numberValue(item.total ?? item.lineTotal ?? rate * quantity);
+      const gstAmount = numberValue(item.gstAmount ?? (total * gstRate) / (100 + gstRate));
+      return {
+        productId: item.productId || item.id || product.id || '',
+        imageUrl: item.imageUrl || item.picture || product.imageUrl || product.image || '',
+        slNo: index + 1,
+        sku: item.sku || product.sku || '',
+        itemDetails: item.productName || item.name || product.name || '',
+        hsnCode: item.hsnCode || product.hsnCode || product.hsn || '',
+        unit: item.unit || product.unit || product.packingSize || '',
+        quantity,
+        mrp: money(mrp),
+        rate: money(rate),
+        gstRate: money(gstRate),
+        discount: money(discount),
+        total: money(total),
+        gstAmount: money(gstAmount)
+      };
+    });
+
+    const gstGroups: Record<string, any> = {};
+    for (const item of items) {
+      const key = `${item.hsnCode || '-'}|${item.gstRate}`;
+      gstGroups[key] ||= { hsnCode: item.hsnCode || '-', taxableAmount: 0, gstRate: item.gstRate, gstAmount: 0 };
+      gstGroups[key].taxableAmount += item.total - item.gstAmount;
+      gstGroups[key].gstAmount += item.gstAmount;
+    }
+    const gstByHsn = Object.values(gstGroups).map((group: any) => ({
+      ...group,
+      taxableAmount: money(group.taxableAmount),
+      gstAmount: money(group.gstAmount)
+    }));
+    const subtotal = money(items.reduce((sum: number, item: any) => sum + item.total, 0));
+    const itemTotal = money(numberValue(order.itemTotal ?? order.subtotal ?? subtotal));
+    const gstSubtotal = money(gstByHsn.reduce((sum: number, item: any) => sum + item.gstAmount, 0));
+    const grandTotalVal = numberValue(order.totalValue ?? order.grandTotal ?? order.totalAmount ?? order.total ?? order.amount ?? subtotal);
+    const grandTotal = money(grandTotalVal);
+    const totalSavedAmount = money(items.reduce((sum: number, item: any) => sum + item.discount, 0) + numberValue(order.invoiceDiscount));
+    const referralSummary = await buildCustomerReferralSummary(customer);
+
+    return res.json({ success: true, invoice: {
+      invoiceId, invoiceDate,
+      header: {
+        companyName: format.companyName || format.company_name || '',
+        addresses: format.addresses || format.address ? [format.addresses || format.address].flat() : [],
+        mobileNumbers: format.mobileNumbers || format.mobile_numbers || format.mobile ? [format.mobileNumbers || format.mobile].flat() : [],
+        customerCareMobile: format.customerCareMobile || format.customer_care_mobile || '',
+        customerCareEmail: format.customerCareEmail || format.customer_care_email || ''
+      },
+      customer: { name: order.customerName || '', email: order.customerEmail || '', mobile: order.customerMobile || '', address: order.shippingAddress || null },
+      items, summary: { subtotal, itemTotal, gstSubtotal, grandTotal, totalSavedAmount },
+      gstByHsn, referralSummary,
+      customerActions: { canBuyAgain: items.some((item: any) => Boolean(item.productId)), canUseReferral: Boolean(customer), canViewWallet: Boolean(customer) }
+    }});
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to read invoice" });
+  }
+});
+
 app.get("/api/sales-orders", async (req, res) => {
   try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) {
+      return res.status(401).json({ error: "Authenticated customer required" });
+    }
+    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    const validCustomerIds = new Set([
+      authenticatedUser.uid,
+      customer?.id,
+      customer?.authUid,
+      authenticatedUser.email,
+      customer?.email
+    ].filter(Boolean));
+
     const docs = await getCollectionDocs("sales_orders");
-    return res.json(docs);
+    const ownOrders = docs.filter((order: any) => 
+      validCustomerIds.has(order.customerId) || validCustomerIds.has(order.userId) || validCustomerIds.has(order.customerEmail)
+    );
+    return res.json(ownOrders);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to fetch sales-orders" });
   }
@@ -741,102 +1057,6 @@ app.post("/api/database/purge", async (req, res) => {
 app.post("/api/database/populate", async (req, res) => {
   try {
     /*
-    const dummyProducts = [
-      {
-        id: "prod-apple",
-        name: "Fresh Apple (Fuji)",
-        sku: "APP-FUJ-01",
-        packingSize: "1 kg",
-        unit: "kg",
-        onlinePrice: 180,
-        shopPrice: 200,
-        notes: "Crisp organic apples.",
-        picture: "https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&h=400&fit=crop&q=80",
-        unitsSold: 45,
-        revenue: 8100,
-        growthRate: 15.4,
-        stock: 120,
-        amazonSales: 2000,
-        flipkartSales: 1500,
-        meeshoSales: 500,
-        vamjoSales: 4100,
-        whatsappSales: 1000,
-        countersaleSales: 1200,
-        gstPercentage: 5,
-        stockIn: 150,
-        stockOut: 45,
-        category: "Fruits",
-        brand: "Leafy Organics",
-        brandOwner: "VioCRM",
-        images: ["https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&h=400&fit=crop&q=80"],
-        description: "Crisp and sweet organic Fuji apples harvested from Himachal farms.",
-        rating: 4.5,
-        reviewsCount: 12
-      },
-      {
-        id: "prod-banana",
-        name: "Organic Banana (Robusta)",
-        sku: "BAN-ROB-02",
-        packingSize: "1 Dozen",
-        unit: "Dozen",
-        onlinePrice: 60,
-        shopPrice: 70,
-        notes: "Rich in fiber.",
-        picture: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=400&fit=crop&q=80",
-        unitsSold: 90,
-        revenue: 5400,
-        growthRate: 8.2,
-        stock: 80,
-        amazonSales: 1000,
-        flipkartSales: 800,
-        meeshoSales: 300,
-        vamjoSales: 3300,
-        whatsappSales: 1200,
-        countersaleSales: 1500,
-        gstPercentage: 5,
-        stockIn: 100,
-        stockOut: 90,
-        category: "Fruits",
-        brand: "Leafy Organics",
-        brandOwner: "VioCRM",
-        images: ["https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=400&fit=crop&q=80"],
-        description: "Naturally ripened Robusta bananas rich in dietary fiber.",
-        rating: 4.8,
-        reviewsCount: 22
-      },
-      {
-        id: "prod-broccoli",
-        name: "Fresh Broccoli",
-        sku: "VEG-BRO-03",
-        packingSize: "500 g",
-        unit: "g",
-        onlinePrice: 90,
-        shopPrice: 100,
-        notes: "Floret greens.",
-        picture: "https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?w=400&h=400&fit=crop&q=80",
-        unitsSold: 30,
-        revenue: 2700,
-        growthRate: 12.0,
-        stock: 50,
-        amazonSales: 500,
-        flipkartSales: 400,
-        meeshoSales: 200,
-        vamjoSales: 1600,
-        whatsappSales: 800,
-        countersaleSales: 900,
-        gstPercentage: 5,
-        stockIn: 60,
-        stockOut: 30,
-        category: "Vegetables",
-        brand: "Farm Fresh",
-        brandOwner: "VioCRM",
-        images: ["https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?w=400&h=400&fit=crop&q=80"],
-        description: "Rich green organic broccoli florets packed with antioxidants.",
-        rating: 4.2,
-        reviewsCount: 8
-      }
-    ];
-
     const dummyCoupons = [
       {
         id: "coupon-festive",
@@ -918,9 +1138,6 @@ app.post("/api/database/populate", async (req, res) => {
       { id: "del-blr-2", pincode: "560034", charge: 0.0 }
     ];
 
-    for (const p of dummyProducts) {
-      await adminDb.collection('products').doc(p.id).set(p, { merge: true });
-    }
     for (const c of dummyCoupons) {
       await adminDb.collection('coupons').doc(c.id).set(c, { merge: true });
     }
@@ -1221,7 +1438,7 @@ async function sendEmailNotification(settings: any, type: 'Success' | 'Failed' |
         <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
           <strong>Leafy Organics Corporate Headquarters</strong><br/>
           ABC House, Kochi, Kerala, India - 682001<br/>
-          Email: support@leafy.com | Web: <a href="https://leafyvio.ai.studio" style="color: #0f766e; text-decoration: none;">https://leafyvio.ai.studio</a><br/>
+          Email: info@vamjo.com | Web: <a href="https://www.vamjo" style="color: #0f766e; text-decoration: none;">https://www.vamjo.com</a><br/>
           <span style="display: block; margin-top: 8px; color: #94a3b8;">This email has been dispatched automatically based on core payment ledger updates.</span>
         </div>
         
@@ -1330,7 +1547,7 @@ async function sendWhatsAppNotification(settings: any, type: 'Success' | 'Failed
   messageText += `\n`;
 
   messageText += `*Status:*\n${statusVal}\n\n`;
-  messageText += `Thank you for shopping with us! View full invoice details at https://leafyvio.ai.studio`;
+  messageText += `Thank you for shopping with us! View full invoice details at https://www.vamjo.com`;
 
   let sentStatus = 'Success';
   let errorMessage = '';
@@ -1391,6 +1608,289 @@ async function sendWhatsAppNotification(settings: any, type: 'Success' | 'Failed
   });
 }
 
+// ---------------------------------------------------------------------------
+// Authoritative 5-level referral commission engine (Node.js is the source of
+// truth; Flutter only ever reads the results below). Referral identity reuses
+// the existing customer record: `customers.authUid` is the customer's own
+// Firebase UID (their shareable "referral code"), and `customers.referralCode`
+// - already populated on lead-conversion/signup (see /api/auth/verify-login
+// and the lead->customer conversion flow) - stores the UID of whoever referred
+// them. No new database fields were required.
+// ---------------------------------------------------------------------------
+const COMMISSION_RULES_DOC_ID = 'default_levels';
+const MAX_COMMISSION_LEVELS = 5;
+
+async function findCustomerByAuthUid(identifier: string): Promise<any | null> {
+  if (!identifier) return null;
+  const cleanId = String(identifier).trim();
+  if (!cleanId || cleanId === 'organic') return null;
+
+  // 1. Match by authUid
+  const authSnap = await adminDb.collection('customers').where('authUid', '==', cleanId).limit(1).get();
+  if (!authSnap.empty) {
+    return { id: authSnap.docs[0].id, ...authSnap.docs[0].data() };
+  }
+
+  // 2. Match by Firestore document ID
+  const docSnap = await adminDb.collection('customers').doc(cleanId).get();
+  if (docSnap.exists) {
+    return { id: docSnap.id, ...docSnap.data() };
+  }
+
+  // 3. Match by 10-digit mobile number
+  const digits = cleanId.replace(/\D/g, '');
+  const mobile = digits.length >= 10 ? digits.slice(-10) : digits;
+  if (mobile) {
+    const mobileSnap = await adminDb.collection('customers').where('mobileNumber', '==', mobile).limit(1).get();
+    if (!mobileSnap.empty) {
+      return { id: mobileSnap.docs[0].id, ...mobileSnap.docs[0].data() };
+    }
+  }
+
+  // 4. Match by customerId field
+  const idSnap = await adminDb.collection('customers').where('customerId', '==', cleanId).limit(1).get();
+  if (!idSnap.empty) {
+    return { id: idSnap.docs[0].id, ...idSnap.docs[0].data() };
+  }
+
+  return null;
+}
+
+async function findCustomerById(customerId: string): Promise<any | null> {
+  return findCustomerByAuthUid(customerId);
+}
+
+// Walks the sponsor chain up to MAX_COMMISSION_LEVELS via customer.referralCode
+// (sponsor's authUid / customerId / mobile). Stops on "organic"/missing/unresolvable/cyclic sponsors.
+async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: number; customer: any }>> {
+  const chain: Array<{ level: number; customer: any }> = [];
+  const visited = new Set<string>([buyerCustomer.authUid, buyerCustomer.id, buyerCustomer.mobileNumber].filter(Boolean));
+  let sponsorIdentifier = buyerCustomer.referralCode || buyerCustomer.referralcode || buyerCustomer.sponsorAuthUid || buyerCustomer.sponsorId;
+
+  for (let level = 1; level <= MAX_COMMISSION_LEVELS; level++) {
+    if (!sponsorIdentifier || sponsorIdentifier === 'organic' || visited.has(sponsorIdentifier)) break;
+    const sponsor = await findCustomerByAuthUid(sponsorIdentifier);
+    if (!sponsor) break;
+    chain.push({ level, customer: sponsor });
+    visited.add(sponsorIdentifier);
+    if (sponsor.authUid) visited.add(sponsor.authUid);
+    if (sponsor.id) visited.add(sponsor.id);
+    if (sponsor.mobileNumber) visited.add(sponsor.mobileNumber);
+    sponsorIdentifier = sponsor.referralCode || sponsor.referralcode || sponsor.sponsorAuthUid || sponsor.sponsorId;
+  }
+  return chain;
+}
+
+async function ensureCommissionRules(): Promise<{ rates: Record<string, number> }> {
+  const doc = await adminDb.collection('commission_rules').doc(COMMISSION_RULES_DOC_ID).get();
+  if (doc.exists && doc.data()?.rates) {
+    return doc.data() as { rates: Record<string, number> };
+  }
+  const defaultRules = {
+    id: COMMISSION_RULES_DOC_ID,
+    rates: { '1': 5, '2': 3, '3': 2, '4': 1, '5': 0.5 },
+    updatedAt: new Date().toISOString()
+  };
+  await adminDb.collection('commission_rules').doc(COMMISSION_RULES_DOC_ID).set(defaultRules, { merge: true });
+  return defaultRules;
+}
+
+// Resolution precedence: per-product level override (product_level_commissions) ->
+// system default rate for that level (commission_rules).
+async function getEffectiveCommissionRate(level: number, productId?: string): Promise<number> {
+  if (productId) {
+    const overrideDoc = await adminDb.collection('product_level_commissions').doc(`${productId}_L${level}`).get();
+    if (overrideDoc.exists && typeof overrideDoc.data()?.rate === 'number') {
+      return overrideDoc.data()!.rate;
+    }
+  }
+  const rules = await ensureCommissionRules();
+  return Number(rules.rates?.[String(level)] ?? 0);
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+// Invoked once per qualifying successful transaction from finalizeSuccessfulPayment
+// (shared by real PayU success and the PayU-disabled testing bypass). Idempotent:
+// a transaction/orderId can only ever produce one set of commission_transactions.
+async function processOrderCommissionsAuthoritative(tx: any): Promise<void> {
+  try {
+    const existing = await adminDb.collection('commission_transactions').where('orderId', '==', tx.orderId).limit(1).get();
+    if (!existing.empty) {
+      await saveCollectionDoc('payments', { id: tx.id, commissionProcessed: true });
+      return;
+    }
+
+    const buyerIdentifier = tx.orderPayload?.customerId || tx.customerId || tx.userId || tx.customerMobile || tx.orderPayload?.customerMobile;
+    const buyerCustomer = buyerIdentifier ? await findCustomerByAuthUid(buyerIdentifier) : null;
+    if (!buyerCustomer) {
+      await saveCollectionDoc('payments', { id: tx.id, commissionProcessed: true });
+      return;
+    }
+
+    const chain = await resolveSponsorChain(buyerCustomer);
+    const base = Number(tx.amount || tx.orderPayload?.totalValue || 0) || 0;
+    const nowIso = new Date().toISOString();
+
+    for (const { level, customer: sponsor } of chain) {
+      const rate = await getEffectiveCommissionRate(level);
+      const commissionAmount = roundCurrency((base * rate) / 100);
+      if (commissionAmount <= 0) continue;
+
+      const commissionTx = {
+        id: `ct-${tx.id}-L${level}`,
+        orderId: tx.orderId,
+        transactionId: tx.id,
+        customerId: buyerCustomer.id,
+        customerName: buyerCustomer.name || tx.customerName || '',
+        referrerCustomerId: sponsor.id,
+        referrerAuthUid: sponsor.authUid,
+        referrerMobileNumber: sponsor.mobileNumber,
+        level,
+        commissionType: 'Referral Commission',
+        commissionBaseAmount: base,
+        commissionRate: rate,
+        commissionAmount,
+        reversedAmount: 0,
+        status: 'Pending',
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+      await saveCollectionDoc('commission_transactions', commissionTx);
+
+      await adminDb.collection('customers').doc(sponsor.id).set({
+        commissionPending: FieldValue.increment(commissionAmount)
+      }, { merge: true });
+    }
+
+  } catch (err) {
+    console.error(`[Commission Engine] Failed to process commissions for order ${tx.orderId}:`, err);
+  }
+}
+
+// Invoked from /api/payment/refund once a transaction is confirmed refunded. Proportionally
+// reverses each level's commission_transactions row for the order (ratio = refundAmount/tx.amount),
+// clamped so a row is never reversed by more than its own remaining commission (no negative balance).
+async function refundOrderCommissionsAuthoritative(tx: any, refundAmount: number): Promise<void> {
+  try {
+    const orderCommissions = await adminDb.collection('commission_transactions').where('orderId', '==', tx.orderId).get();
+    if (orderCommissions.empty) return;
+
+    const txAmount = Number(tx.amount) || 0;
+    const ratio = txAmount > 0 ? Math.min(1, Math.max(0, Number(refundAmount) / txAmount)) : 0;
+    if (ratio <= 0) return;
+
+    for (const doc of orderCommissions.docs) {
+      const commission = doc.data();
+      const alreadyReversed = Number(commission.reversedAmount) || 0;
+      const targetReversed = roundCurrency(Number(commission.commissionAmount) * ratio);
+      const reversalAmount = roundCurrency(Math.min(targetReversed, Number(commission.commissionAmount)) - alreadyReversed);
+      if (reversalAmount <= 0) continue;
+
+      const newReversedTotal = roundCurrency(alreadyReversed + reversalAmount);
+      const isFullyReversed = newReversedTotal >= Number(commission.commissionAmount) - 0.01;
+
+      await doc.ref.set({
+        reversedAmount: newReversedTotal,
+        status: isFullyReversed ? 'Reversed' : commission.status,
+        reversedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Clamp inside a transaction so the sponsor's balance can never go negative.
+      const customerRef = adminDb.collection('customers').doc(commission.referrerCustomerId);
+      await adminDb.runTransaction(async (transaction) => {
+        const customerDoc = await transaction.get(customerRef);
+        const currentPending = Number(customerDoc.data()?.commissionPending) || 0;
+        transaction.set(customerRef, { commissionPending: Math.max(0, roundCurrency(currentPending - reversalAmount)) }, { merge: true });
+      });
+    }
+  } catch (err) {
+    console.error(`[Commission Engine] Failed to reverse commissions for order ${tx.orderId}:`, err);
+  }
+}
+
+async function getCustomerEarningsPayload(customer: any): Promise<Record<string, any>> {
+  const pending = Number(customer?.commissionPending) || 0;
+  const paid = Number(customer?.commissionPaid) || 0;
+  return {
+    commissionEarned: pending,
+    pending,
+    confirmed: 0,
+    commissionPayable: pending,
+    commissionPaid: paid
+  };
+}
+
+async function authorizeCustomerAccess(req: any, customerId: string): Promise<{ authenticatedUser: any; customer: any } | { error: string; status: number }> {
+  const authenticatedUser = await getAuthenticatedUser(req);
+  if (!authenticatedUser) return { error: 'Authenticated customer required', status: 401 };
+  const customer = await findCustomerById(customerId);
+  if (!customer) return { error: 'Customer not found', status: 404 };
+  if (customer.authUid !== authenticatedUser.uid) return { error: 'Customer does not belong to the authenticated user', status: 403 };
+  return { authenticatedUser, customer };
+}
+
+// Attaches a sponsor to a customer that does not already have one (referralCode is
+// still missing/'organic'). Prevents overwriting an existing sponsor to protect the
+// commission chain from being manipulated after the fact.
+async function applyReferralSponsor(customer: any, sponsorAuthUid: string): Promise<{ success: boolean; error?: string; status?: number }> {
+  if (!sponsorAuthUid) return { success: false, error: 'Missing referralCode', status: 400 };
+  if (sponsorAuthUid === customer.authUid) return { success: false, error: 'Cannot refer yourself', status: 400 };
+  if (customer.referralCode && customer.referralCode !== 'organic') {
+    return { success: false, error: 'A referral/sponsor is already set for this account.', status: 400 };
+  }
+  const sponsor = await findCustomerByAuthUid(sponsorAuthUid);
+  if (!sponsor) return { success: false, error: 'Referral code does not match an existing partner.', status: 404 };
+
+  await adminDb.collection('customers').doc(customer.id).set({
+    referralCode: sponsorAuthUid,
+    referralcode: sponsorAuthUid,
+    referralPartner: sponsor.name || sponsor.partnerName || '',
+    referralpartner: sponsor.name || sponsor.partnerName || ''
+  }, { merge: true });
+  return { success: true };
+}
+
+// Shared successful-payment business processing, reused identically by the real PayU
+// success paths (/api/payment/verify, /api/payment/callback/success) and by the
+// PayU-disabled testing bypass (/api/payment/bypass-checkout). Idempotent: only
+// creates the sales order/stock adjustment once per tx.orderId.
+async function finalizeSuccessfulPayment(tx: any): Promise<void> {
+  const salesOrders = await getCollectionDocs('sales_orders');
+  let order = salesOrders.find((o: any) => o.id === tx.orderId);
+  if (!order && tx.orderPayload) {
+    const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
+    order = {
+      ...tx.orderPayload,
+      id: tx.orderId,
+      orderNumber: orderNum,
+      paymentStatus: 'Paid',
+      orderStatus: 'Confirmed',
+      deliveryStatus: 'Processing',
+      createdAt: new Date().toISOString()
+    };
+    await saveCollectionDoc('sales_orders', order);
+
+    const products = await getCollectionDocs('products');
+    for (const item of (order.products || [])) {
+      const prod = products.find((p: any) => p.id === item.productId);
+      if (prod) {
+        prod.stock = Math.max(0, (prod.stock || 0) - item.quantity);
+        prod.unitsSold = (prod.unitsSold || 0) + item.quantity;
+        prod.revenue = (prod.revenue || 0) + (item.price * item.quantity);
+        await saveCollectionDoc('products', prod);
+      }
+    }
+  }
+
+  await processOrderCommissionsAuthoritative(tx);
+
+  triggerAllNotifications('Success', tx).catch(err => console.error(err));
+}
+
 async function triggerAllNotifications(type: 'Success' | 'Failed' | 'Cancelled', tx: any) {
   try {
     const settings = await getNotificationSettings();
@@ -1432,11 +1932,399 @@ async function triggerAllNotifications(type: 'Success' | 'Failed' | 'Cancelled',
   }
 }
 
+// Operational Configuration vs Secrets helper functions
+async function ensurePaymentGatewaySettings() {
+  try {
+    const configs = await getCollectionDocs('payment_gateway_settings');
+
+    let testConfig = configs.find((c: any) =>
+      (c.gateway === 'PAYU' || c.gateway_name === 'PayU') &&
+      (c.environment || '').toUpperCase() === 'TEST'
+    );
+
+    let prodConfig = configs.find((c: any) =>
+      (c.gateway === 'PAYU' || c.gateway_name === 'PayU') &&
+      (c.environment || '').toUpperCase() === 'PRODUCTION'
+    );
+
+    const nowIso = new Date().toISOString();
+
+    const fullTestRecord = {
+      id: 'payu_test',
+      gateway: 'PAYU',
+      gateway_name: 'PayU',
+      environment: 'TEST',
+      enabled: true,
+      status: 'Enabled',
+      currency: 'INR',
+      merchant_key: process.env.PAYU_TEST_KEY || process.env.PAYU_TEST_MERCHANT_KEY || 'gtK2y6',
+      merchant_salt: process.env.PAYU_TEST_SALT || process.env.PAYU_TEST_MERCHANT_SALT || 'eCwTWDvi',
+      payment_url: 'https://test.payu.in/_payment',
+      success_url: '/api/payment/callback/success',
+      failure_url: '/api/payment/callback/failure',
+      cancel_url: '/api/payment/callback/failure',
+      webhook_url: '/api/payment/callback/webhook',
+      api_version: 'v1',
+      created_at: testConfig?.created_at || testConfig?.createdAt || nowIso,
+      updated_at: nowIso,
+      updatedAt: nowIso
+    };
+
+    await saveCollectionDoc('payment_gateway_settings', fullTestRecord);
+
+    if (!prodConfig) {
+      prodConfig = {
+        id: 'payu_production',
+        gateway: 'PAYU',
+        gateway_name: 'PayU',
+        environment: 'PRODUCTION',
+        enabled: true,
+        status: 'Enabled',
+        currency: 'INR',
+        payment_url: 'https://secure.payu.in/_payment',
+        success_url: '/api/payment/callback/success',
+        failure_url: '/api/payment/callback/failure',
+        cancel_url: '/api/payment/callback/failure',
+        webhook_url: '/api/payment/callback/webhook',
+        api_version: 'v1',
+        created_at: nowIso,
+        updated_at: nowIso,
+        updatedAt: nowIso
+      };
+      await saveCollectionDoc('payment_gateway_settings', prodConfig);
+    }
+  } catch (err) {
+    console.error("[PayU Setup] Failed to ensure payment_gateway_settings:", err);
+  }
+}
+
+function getPayUSecrets(environment: string): { key: string; salt: string } | null {
+  const isProd = environment.toUpperCase() === 'PRODUCTION';
+  if (isProd) {
+    const key = process.env.PAYU_PRODUCTION_KEY || process.env.PAYU_PROD_MERCHANT_KEY || '';
+    const salt = process.env.PAYU_PRODUCTION_SALT || process.env.PAYU_PROD_MERCHANT_SALT || '';
+    if (!key || !salt) return null;
+    return { key, salt };
+  } else {
+    const key = process.env.PAYU_TEST_KEY || process.env.PAYU_TEST_MERCHANT_KEY || 'gtK2y6';
+    const salt = process.env.PAYU_TEST_SALT || process.env.PAYU_TEST_MERCHANT_SALT || 'eCwTWDvi';
+    if (!key || !salt) return null;
+    return { key, salt };
+  }
+}
+
+app.post("/api/payment/settings/seed-payu-test", async (req, res) => {
+  try {
+    await ensurePaymentGatewaySettings();
+    const configs = await getCollectionDocs('payment_gateway_settings');
+    const testConfig = configs.find((c: any) =>
+      (c.gateway === 'PAYU' || c.gateway_name === 'PayU') &&
+      (c.environment || '').toUpperCase() === 'TEST'
+    );
+    return res.json({ success: true, message: "PayU test setting record created/updated successfully", data: testConfig });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "Failed to seed PayU test record" });
+  }
+});
+
+// PayU Debug Diagnostics toggle (observation-only; never affects credentials/hash/payment logic).
+app.get("/api/payment/debug-settings", async (req, res) => {
+  try {
+    const enabled = await isPayUDebugEnabled();
+    return res.json({ success: true, payu_debug_enabled: enabled });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "Failed to read PayU debug setting" });
+  }
+});
+
+app.post("/api/payment/debug-settings", async (req, res) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) {
+      return res.status(401).json({ success: false, error: "Authentication is required to change PayU debug diagnostics." });
+    }
+    const enabled = req.body?.enabled === true;
+    await adminDb.collection('payment_gateway_settings').doc(PAYU_DEBUG_SETTINGS_DOC_ID).set({
+      id: PAYU_DEBUG_SETTINGS_DOC_ID,
+      payu_debug_enabled: enabled,
+      updatedAt: new Date().toISOString(),
+      updatedBy: authenticatedUser.uid
+    }, { merge: true });
+    return res.json({ success: true, payu_debug_enabled: enabled });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "Failed to update PayU debug setting" });
+  }
+});
+
+// PayU Payment testing toggle - available to all logged-in users (no admin/role restriction),
+// intended for the Test/development environment only. Same mechanism/pattern as the debug toggle above.
+app.get("/api/payment/payu-toggle", async (req, res) => {
+  try {
+    const enabled = await isPayUEnabled();
+    return res.json({ success: true, payu_enabled: enabled });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "Failed to read PayU toggle setting" });
+  }
+});
+
+app.post("/api/payment/payu-toggle", async (req, res) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) {
+      return res.status(401).json({ success: false, error: "Authentication is required to change the PayU payment toggle." });
+    }
+    const enabled = req.body?.enabled !== false;
+    await adminDb.collection('payment_gateway_settings').doc(PAYU_ENABLED_SETTINGS_DOC_ID).set({
+      id: PAYU_ENABLED_SETTINGS_DOC_ID,
+      payu_enabled: enabled,
+      updatedAt: new Date().toISOString(),
+      updatedBy: authenticatedUser.uid
+    }, { merge: true });
+    return res.json({ success: true, payu_enabled: enabled });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "Failed to update PayU payment toggle" });
+  }
+});
+
+// PayU-disabled testing bypass: never contacts PayU (no hash/request/WebView/redirect). Runs the exact
+// same successful-payment processing (finalizeSuccessfulPayment) used by the real PayU success callbacks.
+// Backend is authoritative: only proceeds when PAYU_ENABLED is false AND the environment is not Production.
+app.post("/api/payment/bypass-checkout", async (req, res) => {
+  try {
+    const { orderData, environment } = req.body;
+    if (!orderData) {
+      return res.status(400).json({ error: "Missing orderData payload" });
+    }
+
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser || orderData.customerId !== authenticatedUser.uid) {
+      return res.status(401).json({ error: "Authenticated customer required" });
+    }
+
+    const reqEnv = (environment || 'TEST').toString().toUpperCase();
+    const env = reqEnv === 'PRODUCTION' ? 'PRODUCTION' : 'TEST';
+    if (env === 'PRODUCTION') {
+      return res.status(403).json({ error: 'The PayU testing bypass is not available in the Production environment.' });
+    }
+
+    if (await isPayUEnabled()) {
+      return res.status(403).json({ error: 'PayU payment is currently enabled; the testing bypass is not active.' });
+    }
+
+    // Authoritative amount calculation - identical validation used by /api/payment/initiate.
+    const products = await getCollectionDocs('products');
+    const secureSubtotal = (orderData.products || []).reduce((sum: number, item: any) => {
+      const product = products.find((candidate: any) => candidate.id === item.productId);
+      if (!product) throw new Error(`Product ${item.productId} is unavailable`);
+      const unitPrice = Number(product.offerPrice ?? product.onlinePrice ?? 0);
+      return sum + unitPrice * Number(item.quantity || 0);
+    }, 0);
+    const secureAmount = Number((secureSubtotal + 30).toFixed(2));
+    if (Math.abs(secureAmount - Number(orderData.totalValue || 0)) > 0.01) {
+      return res.status(400).json({ error: "Order total could not be validated" });
+    }
+
+    const orderId = orderData.id || `so-${Date.now()}`;
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const timestampStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
+    const transactionId = `VNXBYPASS${timestampStr}${randomSuffix}`;
+    const nowIso = now.toISOString();
+
+    const tx: any = {
+      id: transactionId,
+      orderId,
+      amount: secureAmount,
+      paymentMethod: orderData.paymentMethod || 'UPI',
+      gateway: 'PayU',
+      paymentGateway: 'PayU',
+      paymentAggregator: 'PayU',
+      aggregator: 'PayU',
+      customerName: (orderData.customerName || '').trim() || 'Leafy Shopper',
+      customerEmail: (orderData.customerEmail || '').trim(),
+      customerMobile: (orderData.customerMobile || '').toString(),
+      environment: env,
+      isTestBypass: true,
+      status: 'Success',
+      transactionReference: `ref-payu-bypass-${Date.now()}`,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      orderPayload: orderData,
+      statusHistory: [
+        { status: 'Success', timestamp: nowIso, note: 'Testing bypass: PayU payment disabled - transaction treated as a successful payment.' }
+      ],
+      logs: [
+        { timestamp: nowIso, action: 'BYPASS_SUCCESS', details: `PayU disabled for testing - simulated successful payment for order ${orderId}. No PayU gateway request was made.` }
+      ]
+    };
+
+    await saveCollectionDoc('payments', tx);
+    await finalizeSuccessfulPayment(tx);
+
+    return res.json({
+      success: true,
+      bypass: true,
+      transaction: tx,
+      orderId,
+      txnid: transactionId,
+      environment: env
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to process the PayU testing bypass" });
+  }
+});
+
+app.post("/api/payment/transactions/repair", async (req, res) => {
+  try {
+    const rawSnapshot = await adminDb.collection('payments').get();
+    let count = 0;
+    for (const doc of rawSnapshot.docs) {
+      const txData = doc.data();
+      const normalized = normalizePaymentTransaction({ id: doc.id, ...txData });
+      await adminDb.collection('payments').doc(doc.id).set(normalized, { merge: true });
+      count++;
+    }
+    return res.json({ success: true, message: `Repaired ${count} payment transactions with payment gateway, aggregator, customer mobile, and address values.` });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "Failed to repair payment transactions" });
+  }
+});
+
+function generatePayUHash(params: {
+  key: string;
+  txnid: string;
+  amount: string;
+  productinfo: string;
+  firstname: string;
+  email: string;
+  udf1?: string;
+  udf2?: string;
+  udf3?: string;
+  udf4?: string;
+  udf5?: string;
+  salt: string;
+}): { hash: string; maskedString: string } {
+  const {
+    key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email,
+    udf1 = '',
+    udf2 = '',
+    udf3 = '',
+    udf4 = '',
+    udf5 = '',
+    salt
+  } = params;
+
+  // Exact PayU sequence: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT
+  const sequence = [
+    key,
+    txnid,
+    amount,
+    productinfo,
+    firstname,
+    email,
+    udf1,
+    udf2,
+    udf3,
+    udf4,
+    udf5,
+    '', '', '', '', '', // udf6, udf7, udf8, udf9, udf10
+    salt
+  ];
+
+  const hashString = sequence.join('|');
+  const hash = crypto.createHash('sha512').update(hashString).digest('hex').toLowerCase();
+
+  const maskedSeq = [...sequence];
+  maskedSeq[maskedSeq.length - 1] = '******MASKED******';
+  const maskedString = maskedSeq.join('|');
+
+  return { hash, maskedString };
+}
+
+function generatePayUReverseHash(params: {
+  salt: string;
+  status: string;
+  udf10?: string;
+  udf9?: string;
+  udf8?: string;
+  udf7?: string;
+  udf6?: string;
+  udf5?: string;
+  udf4?: string;
+  udf3?: string;
+  udf2?: string;
+  udf1?: string;
+  email: string;
+  firstname: string;
+  productinfo: string;
+  amount: string;
+  txnid: string;
+  key: string;
+}): { hash: string; maskedString: string } {
+  const {
+    salt,
+    status,
+    udf10 = '',
+    udf9 = '',
+    udf8 = '',
+    udf7 = '',
+    udf6 = '',
+    udf5 = '',
+    udf4 = '',
+    udf3 = '',
+    udf2 = '',
+    udf1 = '',
+    email,
+    firstname,
+    productinfo,
+    amount,
+    txnid,
+    key
+  } = params;
+
+  // Exact reverse sequence: SALT|status|udf10|udf9|udf8|udf7|udf6|udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key
+  const sequence = [
+    salt,
+    status,
+    udf10,
+    udf9,
+    udf8,
+    udf7,
+    udf6,
+    udf5,
+    udf4,
+    udf3,
+    udf2,
+    udf1,
+    email,
+    firstname,
+    productinfo,
+    amount,
+    txnid,
+    key
+  ];
+
+  const hashString = sequence.join('|');
+  const hash = crypto.createHash('sha512').update(hashString).digest('hex').toLowerCase();
+
+  const maskedSeq = [...sequence];
+  maskedSeq[0] = '******MASKED******';
+  const maskedString = maskedSeq.join('|');
+
+  return { hash, maskedString };
+}
+
 app.post("/api/payment/initiate", async (req, res) => {
   try {
-    const { orderData, paymentMethod, gateway } = req.body;
-    if (!orderData || !gateway) {
-      return res.status(400).json({ error: "Missing required orderData or gateway" });
+    const { orderData, paymentMethod, gateway = 'PayU', environment } = req.body;
+    if (!orderData) {
+      return res.status(400).json({ error: "Missing orderData payload" });
     }
 
     const normalizedPaymentMethod = paymentMethod || (gateway === 'PayU' ? 'UPI' : 'PayU');
@@ -1446,6 +2334,7 @@ app.post("/api/payment/initiate", async (req, res) => {
       return res.status(401).json({ error: "Authenticated customer required" });
     }
 
+    // Authoritative amount calculation
     const products = await getCollectionDocs('products');
     const secureSubtotal = (orderData.products || []).reduce((sum: number, item: any) => {
       const product = products.find((candidate: any) => candidate.id === item.productId);
@@ -1461,20 +2350,35 @@ app.post("/api/payment/initiate", async (req, res) => {
     const orderId = orderData.id || `so-${Date.now()}`;
     const amount = secureAmount.toFixed(2);
 
-    // Fetch gateway configurations
+    // Environment selection
+    const reqEnv = (environment || req.body.env || 'TEST').toString().toUpperCase();
+    const env = reqEnv === 'PRODUCTION' ? 'PRODUCTION' : 'TEST';
+
+    // 1. Operational configuration from payment_gateway_settings
+    await ensurePaymentGatewaySettings();
     const configs = await getCollectionDocs('payment_gateway_settings');
-    const payuConfig = configs.find((c: any) => c.gateway_name === 'PayU' && c.status === 'Enabled');
+    const opConfig = configs.find((c: any) =>
+      (c.gateway === 'PAYU' || c.gateway_name === 'PayU') &&
+      (c.environment || '').toUpperCase() === env &&
+      (c.enabled === true || c.enabled === 'true' || c.status === 'Enabled')
+    );
 
-    const env = (req.body.environment || payuConfig?.environment || 'Test') === 'Production' ? 'Production' : 'Test';
-    const key = env === 'Production'
-      ? (payuConfig?.prod_merchant_key || payuConfig?.merchant_key || process.env.PAYU_PROD_MERCHANT_KEY || 'gtK2y6')
-      : (payuConfig?.test_merchant_key || payuConfig?.merchant_key || process.env.PAYU_TEST_MERCHANT_KEY || 'gtK2y6');
-    const rawSalt = env === 'Production'
-      ? (payuConfig?.prod_merchant_salt || payuConfig?.merchant_salt || process.env.PAYU_PROD_MERCHANT_SALT || 'eCwTWDvi')
-      : (payuConfig?.test_merchant_salt || payuConfig?.merchant_salt || process.env.PAYU_TEST_MERCHANT_SALT || 'eCwTWDvi');
-    const salt = decryptSalt(rawSalt);
+    if (!opConfig) {
+      return res.status(503).json({ error: `PayU payment gateway is not enabled for ${env} environment.` });
+    }
 
-    // Format transaction ID as requested (VNX + YYYYMMDDHHMMSS + 3 random digits)
+    // 2. Secrets from Server Secret Store
+    const secrets = getPayUSecrets(env);
+    if (!secrets) {
+      return res.status(503).json({ error: `PayU secret credentials are not configured for ${env} environment.` });
+    }
+
+    const { key, salt } = secrets;
+
+    // PayU Debug Diagnostics toggle - observation only, never affects credentials/hash/payment logic.
+    const payuDebugEnabled = await isPayUDebugEnabled();
+
+    // Transaction ID formatting
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, '0');
     const timestampStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
@@ -1482,56 +2386,168 @@ app.post("/api/payment/initiate", async (req, res) => {
     const transactionId = `VNX${timestampStr}${randomSuffix}`;
     const transactionRef = `ref-payu-${Date.now()}`;
 
-    // PayU Hosted Checkout URL
-    const actionUrl = env === 'Production'
-      ? 'https://secure.payu.in/_payment'
-      : 'https://test.payu.in/_payment';
+    // Explicitly purge parameters that do not belong to a normal product e-commerce checkout
+    // (wealth-tech/investment/mutual-fund/subscription/SI/TPV/beneficiary parameters).
+    const forbiddenKeys = [
+      'si', 'si_details', 'free_trial', 'wtParams', 'wealthTech', 'wealth_tech',
+      'mf_member_id', 'mf_user_id', 'mf_partner', 'mf_investment_type',
+      'subscription', 'recurring', 'standing_instruction', 'sip',
+      'beneficiarydetail', 'beneficiary_details', 'tpv', 'investment_type'
+    ];
+    for (const forbiddenKey of forbiddenKeys) {
+      delete orderData[forbiddenKey];
+      delete req.body[forbiddenKey];
+    }
 
-    // Parameters for hash generation
-    const productInfo = "VioneX Organic Grocery Checkout Bundle";
-    const firstname = orderData.customerName || "VioneX Shopper";
-    const email = orderData.customerEmail || "shopper@vionex.com";
-    const configuredUpiId = process.env.PAYU_UPI_ID || 'test@payu';
-    const userCredentials = normalizedPaymentMethod === 'UPI' ? configuredUpiId : '';
+    const paymentUrl = opConfig.payment_url || (env === 'PRODUCTION' ? 'https://secure.payu.in/_payment' : 'https://test.payu.in/_payment');
+    const productInfo = "Leafy Checkout Bundle";
+    const firstname = (orderData.customerName || '').trim() || "Leafy Shopper";
+    const email = (orderData.customerEmail || '').trim();
 
-    // PayU standard hash string: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||salt
-    const hashString = `${key}|${transactionId}|${amount}|${productInfo}|${firstname}|${email}|||||||||||${salt}`;
-    const hash = crypto.createHash('sha512').update(hashString).digest('hex').toLowerCase();
+    if (!email || !email.includes('@') || email.includes('@customer.invalid')) {
+      return res.status(400).json({ error: "A valid customer email address is required for payment." });
+    }
+
+    if (isNaN(secureAmount) || secureAmount <= 0 || !isFinite(secureAmount)) {
+      return res.status(400).json({ error: "Invalid payment transaction amount." });
+    }
+
+    // Customer mobile/address metadata - standard PayU e-commerce fields (phone, address1),
+    // required by this merchant's PayU account configuration for a normal product checkout.
+    const addressObj = orderData.shippingAddress || orderData.address || {};
+    const formattedAddress = typeof addressObj === 'string'
+      ? addressObj
+      : [addressObj.addressLine, addressObj.city, addressObj.district, addressObj.state, addressObj.pincode].filter(Boolean).join(', ');
+
+    const customerMobileVal = (orderData.customerMobile || orderData.phone || orderData.mobileNumber || addressObj.mobileNumber || '').toString().trim();
+    const customerAddressVal = (formattedAddress || orderData.customerAddress || orderData.address || orderData.deliveryAddress || '').toString().trim();
+    // Payment Gateway must reflect the configured payment_gateway_settings record, not the client-supplied hint.
+    const gatewayVal = (opConfig.gateway_name || opConfig.gateway || gateway || 'PayU').toString().trim();
+
+    if (!customerMobileVal || !/^\d{10}$/.test(customerMobileVal.replace(/\D/g, '').slice(-10))) {
+      return res.status(400).json({ error: "A valid 10-digit customer mobile number is required for payment." });
+    }
+    if (!customerAddressVal) {
+      return res.status(400).json({ error: "A valid customer address is required for payment." });
+    }
+
+    // UDF fields are only populated with legitimate merchant-defined metadata explicitly
+    // supplied by the client - never repurposed to imitate wealth-tech/compliance parameters.
+    const udf1 = (orderData.udf1 || "").toString().trim();
+    const udf2 = (orderData.udf2 || "").toString().trim();
+    const udf3 = (orderData.udf3 || "").toString().trim();
+    const udf4 = (orderData.udf4 || "").toString().trim();
+    const udf5 = (orderData.udf5 || "").toString().trim();
+
+    // Generate SHA-512 Hash
+    const { hash, maskedString } = generatePayUHash({
+      key,
+      txnid: transactionId,
+      amount,
+      productinfo: productInfo,
+      firstname,
+      email,
+      udf1,
+      udf2,
+      udf3,
+      udf4,
+      udf5,
+      salt
+    });
+
+    if (payuDebugEnabled) {
+      console.log(`[PayU Debug] Environment: ${env}`);
+      console.log(`[PayU Debug] Endpoint: ${paymentUrl}`);
+      console.log(`[PayU Debug] Merchant key configured: ${Boolean(key)}`);
+      console.log(`[PayU Debug] Merchant salt configured: ${Boolean(salt)}`);
+      console.log(`[PayU Debug] Transaction ID present: ${Boolean(transactionId)}`);
+      console.log(`[PayU Debug] Hash present: ${Boolean(hash) && hash.length === 128}`);
+      console.log(`[PayU Hash Diagnostics] Env: ${env} | Txn: ${transactionId} | Amount: ${amount} | Hash: ${hash}`);
+      console.log(`[PayU Hash Diagnostics] Masked String: ${maskedString}`);
+    }
+
     const callbackBaseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
     const successUrl = `${callbackBaseUrl}/api/payment/callback/success`;
     const failureUrl = `${callbackBaseUrl}/api/payment/callback/failure`;
+
+    const payuRequest: Record<string, any> = {
+      environment: env,
+      key,
+      txnid: transactionId,
+      amount,
+      productinfo: productInfo,
+      firstname,
+      email,
+      phone: customerMobileVal,
+      address1: customerAddressVal.slice(0, 250),
+      hash,
+      surl: successUrl,
+      furl: failureUrl,
+      paymentUrl
+    };
+
+    if (addressObj && typeof addressObj === 'object') {
+      if (addressObj.city) payuRequest.city = String(addressObj.city).trim();
+      if (addressObj.state) payuRequest.state = String(addressObj.state).trim();
+      if (addressObj.pincode) payuRequest.zipcode = String(addressObj.pincode).trim();
+    }
+    payuRequest.country = 'India';
+
+    if (udf1) payuRequest.udf1 = udf1;
+    if (udf2) payuRequest.udf2 = udf2;
+    if (udf3) payuRequest.udf3 = udf3;
+    if (udf4) payuRequest.udf4 = udf4;
+    if (udf5) payuRequest.udf5 = udf5;
+
+    // Salt must never be submitted to PayU - always enforced regardless of the debug toggle.
+    if ('salt' in payuRequest) {
+      console.error('[PayU Security] Blocked outgoing request: salt field detected in payuRequest.');
+      return res.status(500).json({ error: 'Payment request blocked due to a security validation failure.' });
+    }
+
+    if (payuDebugEnabled) {
+      const submittedParamNames = Object.keys(payuRequest).filter(k => k !== 'environment' && k !== 'paymentUrl');
+      const paramPresence = submittedParamNames.reduce((acc: Record<string, boolean>, k) => {
+        acc[k] = payuRequest[k] !== null && payuRequest[k] !== undefined && String(payuRequest[k]).trim() !== '';
+        return acc;
+      }, {});
+      console.log(`[PayU Request Params] Submitted parameter names: ${submittedParamNames.join(', ')}`);
+      console.log(`[PayU Request Params] Parameter presence: ${JSON.stringify(paramPresence)}`);
+      console.log(`[PayU Security] Salt submitted: ${'salt' in payuRequest}`);
+    }
 
     const tx = {
       id: transactionId,
       orderId: orderId,
       amount: Number(amount),
       paymentMethod: normalizedPaymentMethod,
-      gateway: gateway,
+      gateway: gatewayVal,
+      paymentGateway: gatewayVal,
+      paymentAggregator: gatewayVal,
+      aggregator: gatewayVal,
+      customerName: firstname,
+      customerEmail: email,
+      customerMobile: customerMobileVal,
+      customerPhone: customerMobileVal,
+      phone: customerMobileVal,
+      customerAddress: customerAddressVal,
+      deliveryAddress: customerAddressVal,
+      address: customerAddressVal,
+      shippingAddress: addressObj,
       status: (normalizedPaymentMethod === 'COD' || gateway === 'COD') ? 'Success' : 'Initiated',
       transactionReference: transactionRef,
       environment: env,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      orderPayload: orderData, // Cache the full order data payload
+      orderPayload: orderData,
       statusHistory: [
-        { status: 'Initiated', timestamp: new Date().toISOString(), note: `Payment initiated via ${gateway} using ${paymentMethod}` }
+        { status: 'Initiated', timestamp: new Date().toISOString(), note: `Payment initiated via ${gatewayVal} using ${normalizedPaymentMethod}` }
       ],
       logs: [
         { timestamp: new Date().toISOString(), action: 'INITIATED', details: `Started payment flow for ₹${amount} in ${env} environment.` },
-        { timestamp: new Date().toISOString(), action: 'HASH_GENERATED', details: `Secure server-side SHA512 hash computed. String: key|txnid|amount|prodInfo|name|email||||||salt` }
+        { timestamp: new Date().toISOString(), action: 'HASH_GENERATED', details: `Secure server-side SHA512 hash computed. Masked String: ${maskedString}` }
       ],
-      payuRequest: {
-        key,
-        txnid: transactionId,
-        amount,
-        productinfo: productInfo,
-        firstname,
-        email,
-        hash,
-        surl: successUrl,
-        furl: failureUrl,
-        ...(userCredentials ? { user_credentials: userCredentials } : {}),
-      }
+      payuRequest
     };
 
     if (normalizedPaymentMethod === 'COD' || gateway === 'COD') {
@@ -1545,14 +2561,21 @@ app.post("/api/payment/initiate", async (req, res) => {
       success: true,
       transaction: tx,
       orderId: orderId,
+      environment: env,
       hash: hash,
       key: key,
-      actionUrl: actionUrl,
+      actionUrl: paymentUrl,
+      paymentUrl: paymentUrl,
       productInfo: productInfo,
       firstname: firstname,
       email: email,
       amount: amount,
-      txnid: transactionId
+      txnid: transactionId,
+      udf1,
+      udf2,
+      udf3,
+      udf4,
+      udf5
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to initiate payment" });
@@ -1567,10 +2590,35 @@ app.get("/api/payment/redirect", async (req, res) => {
     if (!tx?.payuRequest) return res.status(404).send('Payment transaction not found');
 
     const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const fields = Object.entries(tx.payuRequest)
+    
+    const formParams = { ...tx.payuRequest };
+    delete formParams.paymentUrl;
+    delete formParams.environment;
+
+    // Salt must never be forwarded to PayU - always enforced regardless of the debug toggle.
+    if ('salt' in formParams) {
+      console.error('[PayU Security] Blocked outgoing redirect: salt field detected in stored payuRequest.');
+      return res.status(500).send('Payment request blocked due to a security validation failure.');
+    }
+
+    if (await isPayUDebugEnabled()) {
+      const submittedParamNames = Object.keys(formParams);
+      const paramPresence = submittedParamNames.reduce((acc: Record<string, boolean>, k) => {
+        acc[k] = formParams[k] !== null && formParams[k] !== undefined && String(formParams[k]).trim() !== '';
+        return acc;
+      }, {});
+      console.log(`[PayU Debug] Environment: ${tx.environment}`);
+      console.log(`[PayU Debug] Endpoint: ${tx.payuRequest.paymentUrl || ''}`);
+      console.log(`[PayU Request Params] Submitted parameter names: ${submittedParamNames.join(', ')}`);
+      console.log(`[PayU Request Params] Parameter presence: ${JSON.stringify(paramPresence)}`);
+      console.log(`[PayU Security] Salt submitted: ${'salt' in formParams}`);
+    }
+
+    const fields = Object.entries(formParams)
+      .filter(([_, value]) => value !== null && value !== undefined && String(value).trim() !== '')
       .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(String(value))}">`)
-      .join('');
-    const actionUrl = tx.environment === 'Production' ? 'https://secure.payu.in/_payment' : 'https://test.payu.in/_payment';
+      .join('\n');
+    const actionUrl = tx.payuRequest.paymentUrl || (tx.environment === 'PRODUCTION' ? 'https://secure.payu.in/_payment' : 'https://test.payu.in/_payment');
     res.type('html').send(`<!doctype html><html><body><p>Redirecting to PayU...</p><form id="payu" method="post" action="${actionUrl}">${fields}</form><script>document.getElementById('payu').submit();</script></body></html>`);
   } catch (err: any) {
     res.status(500).send(err.message || 'Unable to open payment');
@@ -1604,35 +2652,51 @@ app.post("/api/payment/verify", async (req, res) => {
       return res.status(404).json({ error: "Payment transaction not found" });
     }
 
-    // Fetch credentials
-    const configs = await getCollectionDocs('payment_gateway_settings');
-    const payuConfig = configs.find((c: any) => c.gateway_name === 'PayU' && c.status === 'Enabled');
-    if (!payuConfig?.merchant_key || !payuConfig?.merchant_salt) {
-      return res.status(503).json({ error: "PayU is not configured" });
+    const env = (tx.environment || 'TEST').toUpperCase();
+    const secrets = getPayUSecrets(env);
+    if (!secrets) {
+      return res.status(503).json({ error: `PayU secret credentials are not configured for ${env} environment` });
     }
 
-    const key = payuConfig.merchant_key;
-    const salt = decryptSalt(payuConfig.merchant_salt);
+    const { key, salt } = secrets;
 
     tx.logs.push({
       timestamp: new Date().toISOString(),
       action: 'GATEWAY_API_CALL',
-      details: `Invoking server-to-server gateway API verification. Endpoint: https://api.payu.in/v1/payments/${tx.transactionReference}.`
+      details: `Invoking server-to-server gateway API verification for ${tx.id} in ${env} environment.`
     });
 
     let verificationSuccessful = true;
     let verificationError = '';
 
-    // Validate callback hash if response is provided from real PayU callback
     if (gatewayResponse && gatewayResponse.hash) {
       const { status, txnid, amount, productinfo, firstname, email, hash: receivedHash } = gatewayResponse;
-      // Reverse hash formula: sha512(salt|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
-      const reverseHashString = `${salt}|${status}|||||||||||${email}|${firstname}|${productinfo}|${Number(amount).toFixed(2)}|${txnid}|${key}`;
-      const computedReverseHash = crypto.createHash('sha512').update(reverseHashString).digest('hex').toLowerCase();
+      const { hash: computedReverseHash, maskedString } = generatePayUReverseHash({
+        salt,
+        status: status || '',
+        udf10: gatewayResponse.udf10 || '',
+        udf9: gatewayResponse.udf9 || '',
+        udf8: gatewayResponse.udf8 || '',
+        udf7: gatewayResponse.udf7 || '',
+        udf6: gatewayResponse.udf6 || '',
+        udf5: gatewayResponse.udf5 || '',
+        udf4: gatewayResponse.udf4 || '',
+        udf3: gatewayResponse.udf3 || '',
+        udf2: gatewayResponse.udf2 || '',
+        udf1: gatewayResponse.udf1 || '',
+        email: email || '',
+        firstname: firstname || '',
+        productinfo: productinfo || '',
+        amount: Number(amount).toFixed(2),
+        txnid: txnid || tx.id,
+        key: gatewayResponse.key || key
+      });
 
-      if (computedReverseHash !== receivedHash.toLowerCase()) {
+      console.log(`[PayU Callback Verify] Masked Reverse String: ${maskedString}`);
+
+      if (computedReverseHash !== (receivedHash || '').toLowerCase()) {
         verificationSuccessful = false;
-        verificationError = "Callback signature verification failed. Computed: " + computedReverseHash.slice(0, 8) + "... Received: " + receivedHash.slice(0, 8);
+        verificationError = "Callback signature verification failed. Computed: " + computedReverseHash.slice(0, 8) + "... Received: " + (receivedHash || '').slice(0, 8);
       }
     }
 
@@ -1659,34 +2723,7 @@ app.post("/api/payment/verify", async (req, res) => {
         details: `Payment reference ${tx.transactionReference} verified successfully. Generated digital checkout signature token: ${Buffer.from(tx.id).toString('base64')}`
       });
 
-      // Save sales order to database if not exists
-      const salesOrders = await getCollectionDocs('sales_orders');
-      let order = salesOrders.find((o: any) => o.id === tx.orderId);
-      if (!order && tx.orderPayload) {
-        const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
-        order = {
-          ...tx.orderPayload,
-          id: tx.orderId,
-          orderNumber: orderNum,
-          paymentStatus: 'Paid',
-          orderStatus: 'Confirmed',
-          deliveryStatus: 'Processing',
-          createdAt: new Date().toISOString()
-        };
-        await saveCollectionDoc('sales_orders', order);
-
-        // Deduct inventory
-        const products = await getCollectionDocs('products');
-        for (const item of (order.products || [])) {
-          const prod = products.find((p: any) => p.id === item.productId);
-          if (prod) {
-            prod.stock = Math.max(0, (prod.stock || 0) - item.quantity);
-            prod.unitsSold = (prod.unitsSold || 0) + item.quantity;
-            prod.revenue = (prod.revenue || 0) + (item.price * item.quantity);
-            await saveCollectionDoc('products', prod);
-          }
-        }
-      }
+      await finalizeSuccessfulPayment(tx);
     } else {
       tx.status = isCancelled ? 'Cancelled' : 'Failed';
       tx.errorMessage = verificationError;
@@ -1705,7 +2742,6 @@ app.post("/api/payment/verify", async (req, res) => {
     tx.updatedAt = new Date().toISOString();
     await saveCollectionDoc('payments', tx);
 
-    // Asynchronously trigger email and WhatsApp notifications
     const notifyType = tx.status === 'Success' ? 'Success' : tx.status === 'Cancelled' ? 'Cancelled' : 'Failed';
     triggerAllNotifications(notifyType, tx).catch(err => {
       console.error("Failed to run triggerAllNotifications:", err);
@@ -1731,55 +2767,43 @@ app.post("/api/payment/callback/success", async (req, res) => {
       return res.redirect("/#/payment-result?payment_status=failed&error=tx_not_found");
     }
 
-    const configs = await getCollectionDocs('payment_gateway_settings');
-    const payuConfig = configs.find((c: any) => c.gateway_name === 'PayU' && c.status === 'Enabled');
-    if (!payuConfig?.merchant_key || !payuConfig?.merchant_salt) {
+    const env = (tx.environment || 'TEST').toUpperCase();
+    const secrets = getPayUSecrets(env);
+    if (!secrets) {
       return res.redirect("/#/payment-result?payment_status=failed&error=payu_not_configured");
     }
-    const key = payuConfig.merchant_key;
-    const salt = decryptSalt(payuConfig.merchant_salt);
+    const { key, salt } = secrets;
 
-    // Verify hash
-    const reverseHashString = `${salt}|${status}|||||||||||${email}|${firstname}|${productinfo}|${Number(amount).toFixed(2)}|${txnid}|${key}`;
-    const computedReverseHash = crypto.createHash('sha512').update(reverseHashString).digest('hex').toLowerCase();
+    const { hash: computedReverseHash, maskedString } = generatePayUReverseHash({
+      salt,
+      status: status || '',
+      udf10: req.body.udf10 || '',
+      udf9: req.body.udf9 || '',
+      udf8: req.body.udf8 || '',
+      udf7: req.body.udf7 || '',
+      udf6: req.body.udf6 || '',
+      udf5: req.body.udf5 || '',
+      udf4: req.body.udf4 || '',
+      udf3: req.body.udf3 || '',
+      udf2: req.body.udf2 || '',
+      udf1: req.body.udf1 || '',
+      email: email || '',
+      firstname: firstname || '',
+      productinfo: productinfo || '',
+      amount: Number(amount).toFixed(2),
+      txnid: txnid || tx.id,
+      key: req.body.key || key
+    });
 
-    if (String(status).toLowerCase() === 'success' && Number(amount).toFixed(2) === Number(tx.amount).toFixed(2) && computedReverseHash === receivedHash?.toLowerCase()) {
+    console.log(`[PayU Success Callback] Masked Reverse String: ${maskedString}`);
+
+    if (String(status).toLowerCase() === 'success' && Number(amount).toFixed(2) === Number(tx.amount).toFixed(2) && computedReverseHash === (receivedHash || '').toLowerCase()) {
       tx.status = 'Success';
       tx.updatedAt = new Date().toISOString();
       tx.logs.push({ timestamp: new Date().toISOString(), action: 'CALLBACK_VERIFIED', details: 'Successful transaction signature verified from PayU callback POST.' });
       await saveCollectionDoc('payments', tx);
 
-      // Save sales order to database if not exists
-      const salesOrders = await getCollectionDocs('sales_orders');
-      let order = salesOrders.find((o: any) => o.id === tx.orderId);
-      if (!order && tx.orderPayload) {
-        const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
-        order = {
-          ...tx.orderPayload,
-          id: tx.orderId,
-          orderNumber: orderNum,
-          paymentStatus: 'Paid',
-          orderStatus: 'Confirmed',
-          deliveryStatus: 'Processing',
-          createdAt: new Date().toISOString()
-        };
-        await saveCollectionDoc('sales_orders', order);
-
-        // Deduct inventory
-        const products = await getCollectionDocs('products');
-        for (const item of (order.products || [])) {
-          const prod = products.find((p: any) => p.id === item.productId);
-          if (prod) {
-            prod.stock = Math.max(0, (prod.stock || 0) - item.quantity);
-            prod.unitsSold = (prod.unitsSold || 0) + item.quantity;
-            prod.revenue = (prod.revenue || 0) + (item.price * item.quantity);
-            await saveCollectionDoc('products', prod);
-          }
-        }
-      }
-
-      // Trigger notifications
-      triggerAllNotifications('Success', tx).catch(err => console.error(err));
+      await finalizeSuccessfulPayment(tx);
 
       return res.redirect(`/#/payment-result?payment_status=success&txnid=${txnid}`);
     } else {
@@ -1814,7 +2838,7 @@ app.post("/api/payment/callback/failure", async (req, res) => {
 
       triggerAllNotifications(cancelled ? 'Cancelled' : 'Failed', tx).catch(err => console.error(err));
     }
-    return res.redirect(`/#/payment-result?payment_status=${tx.status === 'Cancelled' ? 'cancelled' : 'failed'}&txnid=${txnid}`);
+    return res.redirect(`/#/payment-result?payment_status=${tx?.status === 'Cancelled' ? 'cancelled' : 'failed'}&txnid=${txnid || ''}`);
   } catch (err: any) {
     console.error('[PayU Failure Callback Error]:', err);
     return res.redirect("/#/payment-result?payment_status=failed&error=internal_error");
@@ -1877,6 +2901,8 @@ app.post("/api/payment/refund", async (req, res) => {
     };
     await saveCollectionDoc('order_refunds', refundObj);
 
+    await refundOrderCommissionsAuthoritative(tx, Number(amount));
+
     return res.json({
       success: true,
       transaction: tx,
@@ -1884,6 +2910,161 @@ app.post("/api/payment/refund", async (req, res) => {
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to process refund" });
+  }
+});
+
+// --- Customer-facing referral/commission read APIs (server-authoritative; Flutter is a thin client) ---
+
+app.get("/api/customers/:customerId/earnings", async (req, res) => {
+  try {
+    const auth = await authorizeCustomerAccess(req, req.params.customerId);
+    if ('error' in auth) return res.status(auth.status).json({ error: auth.error });
+    return res.json(await getCustomerEarningsPayload(auth.customer));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to read customer earnings" });
+  }
+});
+
+app.get("/api/customers/:customerId/commissions", async (req, res) => {
+  try {
+    const auth = await authorizeCustomerAccess(req, req.params.customerId);
+    if ('error' in auth) return res.status(auth.status).json({ error: auth.error });
+    const snap = await adminDb.collection('commission_transactions').where('referrerCustomerId', '==', auth.customer.id).get();
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return res.json(items);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to read commission history" });
+  }
+});
+
+app.get("/api/customers/:customerId/referrals", async (req, res) => {
+  try {
+    const auth = await authorizeCustomerAccess(req, req.params.customerId);
+    if ('error' in auth) return res.status(auth.status).json({ error: auth.error });
+    const snap = await adminDb.collection('customers').where('referralCode', '==', auth.customer.authUid).get();
+    const referrals = snap.docs.map(d => {
+      const data: any = d.data();
+      return { id: d.id, name: data.name || '', mobileNumber: data.mobileNumber || '', createdAt: data.createdAt || '', qualified: Number(data.dealsClosed) > 0 };
+    });
+    return res.json({ totalReferrals: referrals.length, qualifiedCount: referrals.filter(r => r.qualified).length, referrals });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to read referrals" });
+  }
+});
+
+app.post("/api/customers/:customerId/referrals", async (req, res) => {
+  try {
+    const auth = await authorizeCustomerAccess(req, req.params.customerId);
+    if ('error' in auth) return res.status(auth.status).json({ error: auth.error });
+    const result = await applyReferralSponsor(auth.customer, (req.body?.referralCode || '').toString().trim());
+    if (!result.success) return res.status(result.status || 400).json({ error: result.error });
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to apply referral code" });
+  }
+});
+
+app.get("/api/partners/referral-info", async (req, res) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ error: "Authenticated customer required" });
+    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    if (!customer) return res.status(404).json({ error: "Customer record not found" });
+
+    const downlineSnap = await adminDb.collection('customers').where('referralCode', '==', customer.authUid).get();
+    const referrals = downlineSnap.docs.map(d => d.data() as any);
+    const qualifiedCount = referrals.filter((r: any) => Number(r.dealsClosed) > 0).length;
+
+    let sponsor: any = null;
+    if (customer.referralCode && customer.referralCode !== 'organic') {
+      const sponsorCustomer = await findCustomerByAuthUid(customer.referralCode);
+      if (sponsorCustomer) {
+        sponsor = { id: sponsorCustomer.id, name: sponsorCustomer.name || sponsorCustomer.partnerName || 'Direct Sponsor', status: 'Active' };
+      }
+    }
+
+    return res.json({
+      partner: {
+        referralCode: customer.authUid,
+        referralLink: `https://violeafy.com/ref/${customer.authUid}`,
+        status: 'Active',
+        level: customer.tier || 'Bronze'
+      },
+      sponsor,
+      referralCount: referrals.length,
+      qualifiedCount,
+      commissionSummary: await getCustomerEarningsPayload(customer)
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to read referral info" });
+  }
+});
+
+app.post("/api/partners/apply-referral", async (req, res) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ error: "Authenticated customer required" });
+    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    if (!customer) return res.status(404).json({ error: "Customer record not found" });
+    const result = await applyReferralSponsor(customer, (req.body?.referralCode || '').toString().trim());
+    if (!result.success) return res.status(result.status || 400).json({ error: result.error });
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to apply referral code" });
+  }
+});
+
+app.get("/api/partners/commission-history", async (req, res) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ error: "Authenticated customer required" });
+    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    if (!customer) return res.json([]);
+    const partnerIds = Array.from(new Set([customer.id, customer.authUid, customer.mobileNumber].filter(Boolean)));
+    const snap = await adminDb.collection('commission_transactions').get();
+    const items = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter((tx: any) => partnerIds.includes(tx.referrerCustomerId) || partnerIds.includes(tx.referrerAuthUid) || partnerIds.includes(tx.referrerMobileNumber))
+      .sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return res.json(items);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to read commission history" });
+  }
+});
+
+app.post("/api/admin/reprocess-commissions", async (req, res) => {
+  try {
+    const payments = await getCollectionDocs('payments');
+    const orders = await getCollectionDocs('sales_orders');
+    let processedCount = 0;
+
+    for (const payment of payments) {
+      if (payment.status === 'Success' || payment.paymentStatus === 'Paid') {
+        await processOrderCommissionsAuthoritative(payment);
+        processedCount++;
+      }
+    }
+
+    for (const order of orders) {
+      if (order.paymentStatus === 'Paid' || order.orderStatus === 'Confirmed') {
+        const syntheticTx = {
+          id: `tx-${order.id}`,
+          orderId: order.id,
+          amount: order.totalValue || order.grandTotal || order.total || order.amount || 0,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          customerMobile: order.customerMobile,
+          orderPayload: order
+        };
+        await processOrderCommissionsAuthoritative(syntheticTx);
+        processedCount++;
+      }
+    }
+
+    return res.json({ success: true, message: `Successfully reprocessed 5-level commissions for ${processedCount} transactions/orders.` });
+  } catch (err: any) {
+    console.error('Error reprocessing commissions:', err);
+    return res.status(500).json({ error: err.message || "Failed to reprocess commissions" });
   }
 });
 

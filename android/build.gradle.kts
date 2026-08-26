@@ -22,6 +22,17 @@ subprojects {
     }
 }
 subprojects {
+    if (project.name != "app") {
+        project.afterEvaluate {
+            if (project.plugins.hasPlugin("com.android.library")) {
+                project.extensions.configure<com.android.build.gradle.LibraryExtension> {
+                    compileSdk = 36
+                }
+            }
+        }
+    }
+}
+subprojects {
     project.evaluationDependsOn(":app")
 }
 

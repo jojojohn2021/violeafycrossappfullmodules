@@ -608,6 +608,9 @@ class SalesOrder {
   final String? referralCode;
   final String? orderType; // 'Online' | 'Shop'
   final String? salesChannel;
+  final String? customerEmail;
+  final String? customerMobile;
+  final CustomerDeliveryAddress? shippingAddress;
 
   SalesOrder({
     required this.id,
@@ -630,6 +633,9 @@ class SalesOrder {
     this.referralCode,
     this.orderType,
     this.salesChannel,
+    this.customerEmail,
+    this.customerMobile,
+    this.shippingAddress,
   });
 
   factory SalesOrder.fromJson(Map<String, dynamic> json) => SalesOrder(
@@ -655,6 +661,11 @@ class SalesOrder {
     referralCode: json['referralCode'],
     orderType: json['orderType'],
     salesChannel: json['salesChannel'],
+    customerEmail: json['customerEmail'],
+    customerMobile: json['customerMobile'],
+    shippingAddress: json['shippingAddress'] is Map
+      ? CustomerDeliveryAddress.fromJson(Map<String, dynamic>.from(json['shippingAddress']))
+      : null,
   );
 
   Map<String, dynamic> toJson() => {
@@ -678,8 +689,12 @@ class SalesOrder {
     'referralCode': referralCode,
     'orderType': orderType,
     'salesChannel': salesChannel,
+    'customerEmail': customerEmail,
+    'customerMobile': customerMobile,
+    'shippingAddress': shippingAddress?.toJson(),
   };
 }
+
 
 // --- PAYOUTS & WALLET ---
 class PartnerPayout {
@@ -939,6 +954,7 @@ class CustomerDeliveryAddress {
   final String customerId;
   final String name;
   final String mobileNumber;
+  final String email;
   final String addressLine;
   final String city;
   final String district;
@@ -952,6 +968,7 @@ class CustomerDeliveryAddress {
     this.customerId = '',
     required this.name,
     required this.mobileNumber,
+    this.email = '',
     required this.addressLine,
     required this.city,
     required this.district,
@@ -966,6 +983,7 @@ class CustomerDeliveryAddress {
     customerId: json['customerId'] ?? json['userId'] ?? '',
     name: json['name'] ?? '',
     mobileNumber: json['mobileNumber'] ?? json['userId'] ?? '',
+    email: json['email'] ?? '',
     addressLine: json['addressLine'] ?? '',
     city: json['city'] ?? '',
     district: json['district'] ?? '',
@@ -980,6 +998,7 @@ class CustomerDeliveryAddress {
     'customerId': customerId.isNotEmpty ? customerId : userId,
     'name': name,
     'mobileNumber': mobileNumber,
+    'email': email,
     'addressLine': addressLine,
     'city': city,
     'district': district,
@@ -1135,6 +1154,12 @@ class PaymentTransaction {
   final double amount;
   final String paymentMethod;
   final String gateway;
+  final String paymentGateway;
+  final String paymentAggregator;
+  final String customerMobile;
+  final String customerAddress;
+  final String customerName;
+  final String customerEmail;
   String status; // 'Initiated' | 'Success' | 'Failed' | 'Cancelled'
   final String transactionReference;
   final String environment;
@@ -1150,6 +1175,12 @@ class PaymentTransaction {
     required this.amount,
     required this.paymentMethod,
     required this.gateway,
+    required this.paymentGateway,
+    required this.paymentAggregator,
+    required this.customerMobile,
+    required this.customerAddress,
+    required this.customerName,
+    required this.customerEmail,
     required this.status,
     required this.transactionReference,
     required this.environment,
@@ -1160,25 +1191,39 @@ class PaymentTransaction {
     required this.logs,
   });
 
-  factory PaymentTransaction.fromJson(Map<String, dynamic> json) => PaymentTransaction(
-    id: json['id'] ?? '',
-    orderId: json['orderId'] ?? '',
-    amount: (json['amount'] ?? 0).toDouble(),
-    paymentMethod: json['paymentMethod'] ?? 'Credit Card',
-    gateway: json['gateway'] ?? 'PayU',
-    status: json['status'] ?? 'Initiated',
-    transactionReference: json['transactionReference'] ?? '',
-    environment: json['environment'] ?? 'Test',
-    errorMessage: json['errorMessage'],
-    createdAt: json['createdAt'] ?? '',
-    updatedAt: json['updatedAt'] ?? '',
-    statusHistory: json['statusHistory'] != null 
-      ? List<Map<String, dynamic>>.from(json['statusHistory']) 
-      : [],
-    logs: json['logs'] != null 
-      ? List<Map<String, dynamic>>.from(json['logs']) 
-      : [],
-  );
+  factory PaymentTransaction.fromJson(Map<String, dynamic> json) {
+    final gatewayVal = json['paymentGateway'] ?? json['gateway'] ?? json['paymentAggregator'] ?? json['aggregator'] ?? 'PayU';
+    final mobileVal = json['customerMobile'] ?? json['customerPhone'] ?? json['phone'] ?? json['orderPayload']?['customerMobile'] ?? json['orderPayload']?['shippingAddress']?['mobileNumber'] ?? '';
+    final addressVal = json['customerAddress'] ?? json['deliveryAddress'] ?? json['address'] ?? json['orderPayload']?['customerAddress'] ?? '';
+    final nameVal = json['customerName'] ?? json['orderPayload']?['customerName'] ?? 'Leafy Shopper';
+    final emailVal = json['customerEmail'] ?? json['orderPayload']?['customerEmail'] ?? '';
+
+    return PaymentTransaction(
+      id: json['id'] ?? '',
+      orderId: json['orderId'] ?? '',
+      amount: (json['amount'] ?? 0).toDouble(),
+      paymentMethod: json['paymentMethod'] ?? 'Credit Card',
+      gateway: gatewayVal,
+      paymentGateway: gatewayVal,
+      paymentAggregator: gatewayVal,
+      customerMobile: mobileVal.toString(),
+      customerAddress: addressVal.toString(),
+      customerName: nameVal.toString(),
+      customerEmail: emailVal.toString(),
+      status: json['status'] ?? 'Initiated',
+      transactionReference: json['transactionReference'] ?? '',
+      environment: json['environment'] ?? 'Test',
+      errorMessage: json['errorMessage'],
+      createdAt: json['createdAt'] ?? '',
+      updatedAt: json['updatedAt'] ?? '',
+      statusHistory: json['statusHistory'] != null 
+        ? List<Map<String, dynamic>>.from(json['statusHistory']) 
+        : [],
+      logs: json['logs'] != null 
+        ? List<Map<String, dynamic>>.from(json['logs']) 
+        : [],
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -1186,6 +1231,12 @@ class PaymentTransaction {
     'amount': amount,
     'paymentMethod': paymentMethod,
     'gateway': gateway,
+    'paymentGateway': paymentGateway,
+    'paymentAggregator': paymentAggregator,
+    'customerMobile': customerMobile,
+    'customerAddress': customerAddress,
+    'customerName': customerName,
+    'customerEmail': customerEmail,
     'status': status,
     'transactionReference': transactionReference,
     'environment': environment,
@@ -1516,4 +1567,124 @@ class ReferralInfo {
     'commissionSummary': commissionSummary.toJson(),
   };
 }
+
+// --- CATEGORY, BRAND, & BRAND OWNER MODELS ---
+class ProductCategory {
+  final String id;
+  final String name;
+  final String? description;
+  final String status;
+  final String? imageId;
+  final String? imageUrl;
+
+  ProductCategory({
+    required this.id,
+    required this.name,
+    this.description,
+    this.status = 'Active',
+    this.imageId,
+    this.imageUrl,
+  });
+
+  factory ProductCategory.fromJson(Map<String, dynamic> json) => ProductCategory(
+    id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
+    name: json['name']?.toString() ?? json['category_name']?.toString() ?? json['category']?.toString() ?? '',
+    description: json['description']?.toString(),
+    status: json['status']?.toString() ?? 'Active',
+    imageId: json['imageId']?.toString() ?? json['imageRef']?.toString() ?? json['documentId']?.toString(),
+    imageUrl: json['imageUrl']?.toString() != null 
+        ? EnvConfig.normalizeUrl(json['imageUrl'].toString()) 
+        : (json['image']?.toString() != null ? EnvConfig.normalizeUrl(json['image'].toString()) : null),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'description': description,
+    'status': status,
+    'imageId': imageId,
+    'imageUrl': imageUrl,
+  };
+}
+
+class ProductBrand {
+  final String id;
+  final String name;
+  final String? brandOwnerId;
+  final String? description;
+  final String status;
+  final String? imageId;
+  final String? imageUrl;
+
+  ProductBrand({
+    required this.id,
+    required this.name,
+    this.brandOwnerId,
+    this.description,
+    this.status = 'Active',
+    this.imageId,
+    this.imageUrl,
+  });
+
+  factory ProductBrand.fromJson(Map<String, dynamic> json) => ProductBrand(
+    id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
+    name: json['name']?.toString() ?? json['brand_name']?.toString() ?? json['brand']?.toString() ?? '',
+    brandOwnerId: json['brandOwnerId']?.toString() ?? json['brand_owner_id']?.toString(),
+    description: json['description']?.toString(),
+    status: json['status']?.toString() ?? 'Active',
+    imageId: json['imageId']?.toString() ?? json['imageRef']?.toString() ?? json['documentId']?.toString(),
+    imageUrl: json['imageUrl']?.toString() != null 
+        ? EnvConfig.normalizeUrl(json['imageUrl'].toString()) 
+        : (json['image']?.toString() != null ? EnvConfig.normalizeUrl(json['image'].toString()) : null),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'brandOwnerId': brandOwnerId,
+    'description': description,
+    'status': status,
+    'imageId': imageId,
+    'imageUrl': imageUrl,
+  };
+}
+
+class ProductBrandOwner {
+  final String id;
+  final String name;
+  final String? company;
+  final String status;
+  final String? imageId;
+  final String? imageUrl;
+
+  ProductBrandOwner({
+    required this.id,
+    required this.name,
+    this.company,
+    this.status = 'Active',
+    this.imageId,
+    this.imageUrl,
+  });
+
+  factory ProductBrandOwner.fromJson(Map<String, dynamic> json) => ProductBrandOwner(
+    id: json['id']?.toString() ?? json['_id']?.toString() ?? '',
+    name: json['name']?.toString() ?? json['owner_name']?.toString() ?? json['brandOwner']?.toString() ?? '',
+    company: json['company']?.toString(),
+    status: json['status']?.toString() ?? 'Active',
+    imageId: json['imageId']?.toString() ?? json['imageRef']?.toString() ?? json['documentId']?.toString(),
+    imageUrl: json['imageUrl']?.toString() != null 
+        ? EnvConfig.normalizeUrl(json['imageUrl'].toString()) 
+        : (json['image']?.toString() != null ? EnvConfig.normalizeUrl(json['image'].toString()) : null),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'company': company,
+    'status': status,
+    'imageId': imageId,
+    'imageUrl': imageUrl,
+  };
+}
+
 

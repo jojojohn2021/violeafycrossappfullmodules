@@ -35,12 +35,23 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (response.body.isEmpty) return null;
       return json.decode(response.body);
-    } else if (response.statusCode == 401 || response.statusCode == 403) {
-      debugPrint('[API Client] Auth error: ${response.statusCode}');
-      throw const AuthException('Authentication failed. Please sign in again.', statusCode: 401);
     } else {
-      debugPrint('[API Client] Call failed: ${response.statusCode}');
-      throw ServerException('Request failed. Please try again.', statusCode: response.statusCode);
+      String errorMessage = 'Request failed with status ${response.statusCode}';
+      try {
+        if (response.body.isNotEmpty) {
+          final decoded = json.decode(response.body);
+          if (decoded is Map<String, dynamic> && decoded.containsKey('error')) {
+            errorMessage = decoded['error'].toString();
+          }
+        }
+      } catch (_) {}
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        debugPrint('[API Client] Auth error (${response.statusCode}): $errorMessage');
+        throw AuthException(errorMessage, statusCode: response.statusCode);
+      }
+      debugPrint('[API Client] Call failed (${response.statusCode}): $errorMessage');
+      throw ServerException(errorMessage, statusCode: response.statusCode);
     }
   }
 

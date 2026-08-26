@@ -27,7 +27,7 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
 
   void _loadAddresses() {
     final user = firebase_auth.FirebaseAuth.instance.currentUser;
-    final userKey = user?.phoneNumber ?? user?.uid ?? '';
+    final userKey = user?.uid ?? user?.phoneNumber ?? '';
     setState(() {
       _addressesFuture = userKey.isEmpty
           ? Future.value([])
@@ -37,7 +37,7 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
 
   Future<void> _setDefaultAddress(CustomerDeliveryAddress address) async {
     final user = firebase_auth.FirebaseAuth.instance.currentUser;
-    final userKey = user?.phoneNumber ?? user?.uid ?? '';
+    final userKey = user?.uid ?? user?.phoneNumber ?? '';
     if (userKey.isEmpty || address.isDefault) return;
 
     setState(() => _isActionLoading = true);
@@ -107,8 +107,13 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
   Future<void> _openAddAddressDialog([List<CustomerDeliveryAddress> existing = const []]) async {
     final messenger = ScaffoldMessenger.of(context);
     final user = firebase_auth.FirebaseAuth.instance.currentUser;
-    final userKey = user?.phoneNumber ?? user?.uid ?? '';
-    final primaryMobileNumber = user?.phoneNumber ?? user?.email ?? 'Not Available';
+    final userKey = user?.uid ?? user?.phoneNumber ?? '';
+
+    // Fetch customer profile to check if email already exists in customers table
+    final customer = await ref.read(shoppingRepositoryProvider).getCurrentCustomer();
+    if (!mounted) return;
+    final existingCustomerEmail = customer?.email.trim() ?? '';
+    final bool isEmailDisabled = existingCustomerEmail.isNotEmpty;
 
     final nameController = TextEditingController(text: user?.displayName ?? '');
     final rawMobileDigits = (user?.phoneNumber ?? '')
@@ -118,6 +123,9 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
         .trim();
     final contactMobileController = TextEditingController(
       text: rawMobileDigits.length == 10 ? rawMobileDigits : '',
+    );
+    final emailController = TextEditingController(
+      text: existingCustomerEmail.isNotEmpty ? existingCustomerEmail : (user?.email ?? ''),
     );
     final addressLineController = TextEditingController();
     final cityController = TextEditingController();
@@ -222,34 +230,21 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                         ),
                       ],
                     ),
-                    const Divider(height: 20),
+                    const SizedBox(height: 16),
 
-                    // 1. Primary Mobile (Disabled)
-                    TextFormField(
-                      initialValue: primaryMobileNumber,
-                      enabled: false,
-                      decoration: const InputDecoration(
-                        labelText: 'Primary Mobile',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.phone_locked_outlined),
-                        filled: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // 2. Recipient Name
+                    // 1. Full Name
                     TextFormField(
                       controller: nameController,
                       decoration: const InputDecoration(
-                        labelText: 'Recipient Name *',
+                        labelText: 'Full Name *',
                         border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person_outline),
+                        prefixIcon: Icon(Icons.person_outlined),
                       ),
-                      validator: (val) => val == null || val.trim().isEmpty ? 'Recipient Name is required' : null,
+                      validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
                     ),
                     const SizedBox(height: 12),
 
-                    // 3. Contact Mobile No (Non-editable +91 prefix, exactly 10 digits)
+                    // 2. Contact Mobile No (Non-editable +91 prefix, exactly 10 digits)
                     TextFormField(
                       controller: contactMobileController,
                       keyboardType: TextInputType.phone,
@@ -269,6 +264,31 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                         ),
                       ),
                       validator: (val) => val == null || val.trim().length != 10 ? 'Enter valid 10-digit mobile number' : null,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 3. Email Address (Positioned below Mobile No)
+                    TextFormField(
+                      controller: emailController,
+                      enabled: !isEmailDisabled,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: isEmailDisabled ? 'Email Address (Registered)' : 'Email Address *',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        filled: isEmailDisabled,
+                      ),
+                      validator: (val) {
+                        final text = val?.trim() ?? '';
+                        if (text.isEmpty) {
+                          return 'Email address is required';
+                        }
+                        final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+                        if (!emailRegex.hasMatch(text)) {
+                          return 'Enter a valid email address';
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 12),
 
@@ -376,7 +396,7 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                     ),
                     const SizedBox(height: 12),
 
-                    // 8. Set as Default Switch
+                    // 9. Set as Default Switch
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text(
@@ -405,13 +425,14 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                           if (formKey.currentState!.validate()) {
                             final rawDigits = contactMobileController.text.trim();
                             final fullMobile = rawDigits.startsWith('+91') ? rawDigits : '+91 $rawDigits';
-                                    final district = cityController.text.trim();
+                            final district = cityController.text.trim();
                             final addr = CustomerDeliveryAddress(
                               id: 'addr_${DateTime.now().millisecondsSinceEpoch}',
                               userId: userKey,
                               customerId: userKey,
                               name: nameController.text.trim(),
                               mobileNumber: fullMobile,
+                              email: emailController.text.trim(),
                               addressLine: addressLineController.text.trim(),
                               city: cityController.text.trim(),
                               district: district,
@@ -623,6 +644,13 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
                               address.mobileNumber,
                               style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                             ),
+                            if (address.email.trim().isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                address.email.trim(),
+                                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                              ),
+                            ],
                             const SizedBox(height: 8),
                             Text(
                               '${address.addressLine}, ${address.district}, ${address.state} - ${address.pincode}',

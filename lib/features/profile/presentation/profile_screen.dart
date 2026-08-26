@@ -232,8 +232,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       await firebase_auth.FirebaseAuth.instance.signOut();
+                      ref.invalidate(salesOrdersProvider);
+                      ref.invalidate(walletProvider);
+                      ref.invalidate(currentUserCustomerProvider);
+                      ref.invalidate(referralInfoProvider);
+                      ref.invalidate(commissionHistoryProvider);
                       if (context.mounted) {
-                        context.go('/login');
+                        context.go('/');
                       }
                     },
                     icon: const Icon(Icons.logout, color: AppColors.error, size: 18),
