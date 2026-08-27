@@ -6,7 +6,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/utils/file_download_helper.dart';
 import '../../../models/models.dart';
 import '../../../providers/app_providers.dart';
@@ -39,8 +38,8 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
     if (_cachedPdfBytes != null) {
       return _cachedPdfBytes!;
     }
-    final invoiceResponse = await ApiClient().get('/api/invoices/${Uri.encodeComponent(widget.order.id)}');
-    final invoice = Map<String, dynamic>.from(invoiceResponse['invoice'] as Map);
+    final repo = ref.read(shoppingRepositoryProvider);
+    final invoice = await repo.getInvoice(widget.order.id);
     _invoiceData = invoice;
     final header = Map<String, dynamic>.from(invoice['header'] as Map? ?? const {});
     final summary = Map<String, dynamic>.from(invoice['summary'] as Map? ?? const {});

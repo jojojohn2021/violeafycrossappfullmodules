@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import '../../../../core/theme/app_colors.dart';
 import '../../../../models/models.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../providers/app_providers.dart';
 import '../domain/payment_orchestrator.dart';
 
@@ -584,7 +583,6 @@ class PaymentResultScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
-  final _apiClient = ApiClient();
   String? _verifiedStatus;
   bool _cartCleared = false;
 
@@ -600,9 +598,10 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
       return;
     }
     try {
-      final response = await _apiClient.get('/api/payment/status/${widget.transactionId}');
+      final repo = ref.read(shoppingRepositoryProvider);
+      final response = await repo.getPaymentStatus(widget.transactionId);
       if (!mounted) return;
-      setState(() => _verifiedStatus = response['status']?.toString() ?? 'Failed');
+      setState(() => _verifiedStatus = response?['status']?.toString() ?? 'Failed');
       if (_verifiedStatus == 'Success' && !_cartCleared) {
         ref.read(cartProvider.notifier).clearCart();
         setState(() => _cartCleared = true);

@@ -46,11 +46,22 @@ class ShoppingRepository {
   final List<SalesProduct> _cartItems = [];
   final List<String> _wishlistProductIds = [];
 
-  // Fetch products from Firestore (Native SDK) or Fallback API
+  // Fetch products from Authoritative Server API with Firestore probe fallback
   Future<List<ProductPerformance>> getProducts() async {
     try {
+      debugPrint('[ShoppingRepository] Fetching products from Server API...');
+      final response = await _apiClient.get('/api/products');
+      if (response != null && response is List && response.isNotEmpty) {
+        return response.map((item) => ProductPerformance.fromJson(item)).toList();
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Server API fetch error for products: $e');
+    }
+
+    // Fallback to Firestore probe
+    try {
       if (firestore != null) {
-        debugPrint('[ShoppingRepository] Fetching products from Firestore...');
+        debugPrint('[ShoppingRepository] Falling back to Firestore probe for products...');
         final snapshot = await firestore!
             .collection('products')
             .get()
@@ -63,15 +74,8 @@ class ShoppingRepository {
           }).toList();
         }
       }
-
-      // Fallback to API
-      debugPrint('[ShoppingRepository] No products in Firestore, trying API...');
-      final response = await _apiClient.get('/api/products');
-      if (response != null && response is List) {
-        return response.map((item) => ProductPerformance.fromJson(item)).toList();
-      }
     } catch (e) {
-      debugPrint('[ShoppingRepository] Error fetching products: $e');
+      debugPrint('[ShoppingRepository] Firestore fallback error fetching products: $e');
     }
     return [];
   }
@@ -312,8 +316,38 @@ class ShoppingRepository {
   }
 
 
-  // Fetch dynamic home banners
+  // Fetch dynamic home banners from Server API with Firestore fallback
   Future<List<Map<String, String>>> getBanners() async {
+    try {
+      final response = await _apiClient.get('/api/banners');
+      if (response != null && response is List && response.isNotEmpty) {
+        return response.map((item) {
+          final Map<String, dynamic> map = item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item as Map);
+          return {
+            'title': (map['name'] ?? map['title'] ?? 'Leafy Special Offer').toString(),
+            'subtitle': (map['description'] ?? map['subtitle'] ?? 'Fresh Farm Discounts').toString(),
+            'image': EnvConfig.normalizeUrl((map['imageUrl'] ?? map['image'] ?? '').toString()),
+            'code': (map['code'] ?? map['couponCode'] ?? 'LEAFY10').toString(),
+          };
+        }).toList();
+      }
+
+      final fallbackResponse = await _apiClient.get('/api/data/campaigns');
+      if (fallbackResponse != null && fallbackResponse is List && fallbackResponse.isNotEmpty) {
+        return fallbackResponse.map((item) {
+          final Map<String, dynamic> map = item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item as Map);
+          return {
+            'title': (map['name'] ?? map['title'] ?? 'Leafy Special Offer').toString(),
+            'subtitle': (map['description'] ?? map['subtitle'] ?? 'Fresh Farm Discounts').toString(),
+            'image': EnvConfig.normalizeUrl((map['imageUrl'] ?? map['image'] ?? 'https://images.unsplash.com/photo-1553279768-865429fa0078?q=80&w=800&auto=format&fit=crop').toString()),
+            'code': (map['code'] ?? map['couponCode'] ?? 'LEAFY10').toString(),
+          };
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching banners from API: $e');
+    }
+
     try {
       if (firestore != null) {
         final snapshot = await firestore!
@@ -332,27 +366,23 @@ class ShoppingRepository {
           }).toList();
         }
       }
-
-      final response = await _apiClient.get('/api/data/campaigns');
-      if (response != null && response is List && response.isNotEmpty) {
-        return response.map((item) {
-          final Map<String, dynamic> map = item;
-          return {
-            'title': (map['name'] ?? map['title'] ?? 'Leafy Special Offer').toString(),
-            'subtitle': (map['description'] ?? map['subtitle'] ?? 'Fresh Farm Discounts').toString(),
-            'image': EnvConfig.normalizeUrl((map['imageUrl'] ?? map['image'] ?? 'https://images.unsplash.com/photo-1553279768-865429fa0078?q=80&w=800&auto=format&fit=crop').toString()),
-            'code': (map['code'] ?? map['couponCode'] ?? 'LEAFY10').toString(),
-          };
-        }).toList().cast<Map<String, String>>();
-      }
     } catch (e) {
-      debugPrint('[ShoppingRepository] Error fetching banners: $e');
+      debugPrint('[ShoppingRepository] Firestore fallback error fetching banners: $e');
     }
     return [];
   }
 
-  // Fetch active, currently redeemable coupons (used to gate the cart's "Apply Coupon" section)
+  // Fetch active, currently redeemable coupons via Server API
   Future<List<Coupon>> getCoupons() async {
+    try {
+      final response = await _apiClient.get('/api/data/coupons');
+      if (response != null && response is List && response.isNotEmpty) {
+        return response.map((item) => Coupon.fromJson(item)).where((coupon) => coupon.isActive).toList();
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching coupons from API: $e');
+    }
+
     try {
       if (firestore != null) {
         final snapshot = await firestore!
@@ -367,13 +397,8 @@ class ShoppingRepository {
           }).where((coupon) => coupon.isActive).toList();
         }
       }
-
-      final response = await _apiClient.get('/api/data/coupons');
-      if (response != null && response is List) {
-        return response.map((item) => Coupon.fromJson(item)).where((coupon) => coupon.isActive).toList();
-      }
     } catch (e) {
-      debugPrint('[ShoppingRepository] Error fetching coupons: $e');
+      debugPrint('[ShoppingRepository] Firestore fallback error fetching coupons: $e');
     }
     return [];
   }
@@ -534,6 +559,19 @@ class ShoppingRepository {
       throw Exception('Invalid invoice response');
     }
     return Map<String, dynamic>.from(response['invoice'] as Map);
+  }
+
+  // Fetch payment status from Server API
+  Future<Map<String, dynamic>?> getPaymentStatus(String transactionId) async {
+    try {
+      final response = await _apiClient.get('/api/payment/status/${Uri.encodeComponent(transactionId)}');
+      if (response != null && response is Map<String, dynamic>) {
+        return response;
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching payment status for $transactionId: $e');
+    }
+    return null;
   }
 
   Future<List<Lead>> getLeads() async {

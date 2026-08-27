@@ -14,9 +14,7 @@ dependencies:
   # UI & Design System
   cupertino_icons: ^1.0.8
   google_fonts: ^8.2.1
-  flutter_svg: ^2.0.10+1
   shimmer: ^3.0.0
-  flutter_staggered_grid_view: ^0.7.0
 
   # State Management & Navigation
   flutter_riverpod: ^2.5.1
@@ -47,7 +45,6 @@ dependencies:
   # Invoice generation & sharing
   pdf: ^3.11.1
   printing: ^5.13.4
-  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
