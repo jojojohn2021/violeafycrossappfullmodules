@@ -435,42 +435,6 @@ final isAdminUserProvider = FutureProvider<bool>((ref) async {
   }
 });
 
-// PayU Debug Diagnostics toggle - persisted server-side via payment_gateway_settings (payu_debug_enabled).
-// Observation-only: never affects PayU credentials, hash, or payment logic. Defaults ON.
-class PayUDebugNotifier extends StateNotifier<bool> {
-  final ApiClient _apiClient;
-
-  PayUDebugNotifier({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient(), super(true) {
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final response = await _apiClient.get('/api/payment/debug-settings');
-      if (response is Map) {
-        state = response['payu_debug_enabled'] != false;
-      }
-    } catch (e) {
-      debugPrint('[PayUDebugNotifier] Failed to load debug setting: $e');
-    }
-  }
-
-  Future<void> toggle() async {
-    final next = !state;
-    try {
-      final response = await _apiClient.post('/api/payment/debug-settings', {'enabled': next});
-      if (response is Map && response['success'] == true) {
-        state = response['payu_debug_enabled'] == true;
-      }
-    } catch (e) {
-      debugPrint('[PayUDebugNotifier] Failed to update debug setting: $e');
-    }
-  }
-}
-
-final payuDebugProvider = StateNotifierProvider<PayUDebugNotifier, bool>((ref) {
-  return PayUDebugNotifier();
-});
 
 // PayU Payment testing toggle (Home Page top bar) - visible to ALL logged-in users, no admin/role
 // restriction. ON (true, default) runs the normal PayU flow unchanged; OFF bypasses PayU and asks the

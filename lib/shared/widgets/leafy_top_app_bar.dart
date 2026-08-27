@@ -268,34 +268,6 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                             ),
                           );
                         }),
-                        // PayU Debug Diagnostics Toggle
-                        Consumer(builder: (context, ref, _) {
-                          final debugOn = ref.watch(payuDebugProvider);
-                          return Tooltip(
-                            message: 'PayU Debug Diagnostics',
-                            child: InkWell(
-                              onTap: () => ref.read(payuDebugProvider.notifier).toggle(),
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: debugOn ? Colors.redAccent : AppColors.textMuted,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  debugOn ? 'PayU Debug: ON' : 'PayU Debug: OFF',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
                         Consumer(builder: (context, ref, _) {
                           final payuEnv = ref.watch(payuEnvironmentProvider);
                           if (payuEnv != 'Test') return const SizedBox.shrink();
