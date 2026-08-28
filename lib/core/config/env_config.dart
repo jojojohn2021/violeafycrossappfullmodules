@@ -20,8 +20,10 @@ class EnvConfig {
       // In web browser, we default to the current host origin.
       // If we are running on a random flutter dev port on localhost, we point to the actual backend at 3000.
       final uri = Uri.base;
-      if (uri.host == 'localhost' && uri.port != 3000) {
-        _currentBaseUrl = 'http://localhost:3000';
+      final host = uri.host.toLowerCase();
+      final isLocal = host == 'localhost' || host == '127.0.0.1' || host == '0.0.0.0' || host == '::1';
+      if (isLocal && uri.port != 3000) {
+        _currentBaseUrl = '${uri.scheme}://${uri.host}:3000';
       } else {
         _currentBaseUrl = '${uri.scheme}://${uri.host}${uri.hasPort ? ":${uri.port}" : ""}';
       }

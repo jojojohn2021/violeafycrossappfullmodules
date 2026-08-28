@@ -52,7 +52,19 @@ class ShoppingRepository {
       debugPrint('[ShoppingRepository] Fetching products from Server API...');
       final response = await _apiClient.get('/api/products');
       if (response != null && response is List && response.isNotEmpty) {
-        return response.map((item) => ProductPerformance.fromJson(item)).toList();
+        final list = <ProductPerformance>[];
+        for (final item in response) {
+          try {
+            if (item is Map<String, dynamic>) {
+              list.add(ProductPerformance.fromJson(item));
+            } else if (item is Map) {
+              list.add(ProductPerformance.fromJson(Map<String, dynamic>.from(item)));
+            }
+          } catch (itemErr) {
+            debugPrint('[ShoppingRepository] Error parsing API product item: $itemErr');
+          }
+        }
+        if (list.isNotEmpty) return list;
       }
     } catch (e) {
       debugPrint('[ShoppingRepository] Server API fetch error for products: $e');
@@ -67,11 +79,17 @@ class ShoppingRepository {
             .get()
             .timeout(const Duration(seconds: 5));
         if (snapshot.docs.isNotEmpty) {
-          return snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id;
-            return ProductPerformance.fromJson(data);
-          }).toList();
+          final list = <ProductPerformance>[];
+          for (final doc in snapshot.docs) {
+            try {
+              final data = Map<String, dynamic>.from(doc.data());
+              data['id'] = doc.id;
+              list.add(ProductPerformance.fromJson(data));
+            } catch (docErr) {
+              debugPrint('[ShoppingRepository] Error parsing Firestore doc ${doc.id}: $docErr');
+            }
+          }
+          if (list.isNotEmpty) return list;
         }
       }
     } catch (e) {

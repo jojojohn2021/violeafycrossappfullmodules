@@ -30,7 +30,9 @@
       }
     }
   },
+
   "hosting": {
+    "site": "violeafycross",
     "public": "build/web",
     "ignore": [
       "firebase.json",

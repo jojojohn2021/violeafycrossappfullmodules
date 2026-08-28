@@ -339,50 +339,78 @@ class ProductPerformance {
     this.videos,
   });
 
+  static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
+    if (val == null) return defaultValue;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val) ?? defaultValue;
+    return defaultValue;
+  }
+
+  static double? _toDoubleNullable(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val);
+    return null;
+  }
+
+  static int _toInt(dynamic val, [int defaultValue = 0]) {
+    if (val == null) return defaultValue;
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val) ?? defaultValue;
+    return defaultValue;
+  }
+
+  static int? _toIntNullable(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val);
+    return null;
+  }
+
   factory ProductPerformance.fromJson(Map<String, dynamic> json) => ProductPerformance(
-    id: json['id'] ?? '',
-    name: json['name'] ?? '',
-    sku: json['sku'] ?? '',
-    packingSize: json['packingSize'] ?? '',
-    unit: json['unit'] ?? '',
-    onlinePrice: (json['onlinePrice'] ?? 0).toDouble(),
-    shopPrice: (json['shopPrice'] ?? 0).toDouble(),
-    notes: json['notes'] ?? '',
+    id: json['id']?.toString() ?? '',
+    name: json['name']?.toString() ?? '',
+    sku: json['sku']?.toString() ?? '',
+    packingSize: json['packingSize']?.toString() ?? '',
+    unit: json['unit']?.toString() ?? '',
+    onlinePrice: _toDouble(json['onlinePrice']),
+    shopPrice: _toDouble(json['shopPrice']),
+    notes: json['notes']?.toString() ?? '',
     imageUrl: (json['imageUrl'] ?? json['image'])?.toString() != null 
         ? EnvConfig.normalizeUrl((json['imageUrl'] ?? json['image']).toString()) 
         : null,
-    unitsSold: (json['unitsSold'] ?? 0).toInt(),
-    revenue: (json['revenue'] ?? 0).toDouble(),
-    growthRate: (json['growthRate'] ?? 0).toDouble(),
-    stock: (json['stock'] ?? 0).toInt(),
-    amazonSales: (json['amazonSales'] ?? 0).toDouble(),
-    flipkartSales: (json['flipkartSales'] ?? 0).toDouble(),
-    meeshoSales: (json['meeshoSales'] ?? 0).toDouble(),
-    vamjoSales: (json['vamjoSales'] ?? 0).toDouble(),
-    whatsappSales: (json['whatsappSales'] ?? 0).toDouble(),
-    countersaleSales: (json['countersaleSales'] ?? 0).toDouble(),
-    gstPercentage: json['gstPercentage'] != null ? (json['gstPercentage']).toDouble() : null,
-    stockIn: json['stockIn'] != null ? (json['stockIn']).toInt() : null,
-    stockOut: json['stockOut'] != null ? (json['stockOut']).toInt() : null,
-    vamjoWeblink: json['vamjoWeblink'],
-    amazonWeblink: json['amazonWeblink'],
-    flipkartWeblink: json['flipkartWeblink'],
-    meeshoWeblink: json['meeshoWeblink'],
-    category: json['category'],
-    brand: json['brand'],
-    brandOwner: json['brandOwner'],
-    images: json['images'] != null ? (json['images'] as List).map((e) => EnvConfig.normalizeUrl(e.toString())).toList() : null,
-    description: json['description'],
-    ingredients: json['ingredients'],
-    specifications: json['specifications'],
-    variants: json['variants'],
-    stockAvailability: json['stockAvailability'],
-    offerPrice: json['offerPrice'] != null ? (json['offerPrice']).toDouble() : null,
-    mrp: json['mrp'] != null ? (json['mrp']).toDouble() : null,
-    discount: json['discount'] != null ? (json['discount']).toDouble() : null,
-    rating: json['rating'] != null ? (json['rating']).toDouble() : null,
-    reviewsCount: json['reviewsCount'] != null ? (json['reviewsCount']).toInt() : null,
-    videos: json['videos'] != null ? List<String>.from(json['videos']) : null,
+    unitsSold: _toInt(json['unitsSold']),
+    revenue: _toDouble(json['revenue']),
+    growthRate: _toDouble(json['growthRate']),
+    stock: _toInt(json['stock']),
+    amazonSales: _toDouble(json['amazonSales']),
+    flipkartSales: _toDouble(json['flipkartSales']),
+    meeshoSales: _toDouble(json['meeshoSales']),
+    vamjoSales: _toDouble(json['vamjoSales']),
+    whatsappSales: _toDouble(json['whatsappSales']),
+    countersaleSales: _toDouble(json['countersaleSales']),
+    gstPercentage: _toDoubleNullable(json['gstPercentage']),
+    stockIn: _toIntNullable(json['stockIn']),
+    stockOut: _toIntNullable(json['stockOut']),
+    vamjoWeblink: json['vamjoWeblink']?.toString(),
+    amazonWeblink: json['amazonWeblink']?.toString(),
+    flipkartWeblink: json['flipkartWeblink']?.toString(),
+    meeshoWeblink: json['meeshoWeblink']?.toString(),
+    category: json['category']?.toString(),
+    brand: json['brand']?.toString(),
+    brandOwner: json['brandOwner']?.toString(),
+    images: json['images'] is List ? (json['images'] as List).map((e) => EnvConfig.normalizeUrl(e.toString())).toList() : null,
+    description: json['description']?.toString(),
+    ingredients: json['ingredients']?.toString(),
+    specifications: json['specifications']?.toString(),
+    variants: json['variants']?.toString(),
+    stockAvailability: json['stockAvailability']?.toString(),
+    offerPrice: _toDoubleNullable(json['offerPrice']),
+    mrp: _toDoubleNullable(json['mrp']),
+    discount: _toDoubleNullable(json['discount']),
+    rating: _toDoubleNullable(json['rating']),
+    reviewsCount: _toIntNullable(json['reviewsCount']),
+    videos: json['videos'] is List ? List<String>.from((json['videos'] as List).map((e) => e.toString())) : null,
   );
 
   Map<String, dynamic> toJson() => {
