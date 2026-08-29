@@ -37,26 +37,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         child: Column(
           children: [
             // Search Input Header
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: _controller,
-                autofocus: false,
-                onChanged: (val) {
-                  ref.read(searchQueryProvider.notifier).state = val;
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search Original, Organic, Authentic...',
-                  prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                  suffixIcon: query.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.textSecondary),
-                          onPressed: () {
-                            _controller.clear();
-                            ref.read(searchQueryProvider.notifier).state = '';
-                          },
-                        )
-                      : null,
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1400),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    controller: _controller,
+                    autofocus: false,
+                    onChanged: (val) {
+                      ref.read(searchQueryProvider.notifier).state = val;
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search Original, Organic, Authentic...',
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
+                      suffixIcon: query.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                              onPressed: () {
+                                _controller.clear();
+                                ref.read(searchQueryProvider.notifier).state = '';
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -77,18 +82,39 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         ],
                       ),
                     )
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.64,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
+                  : Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1400),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final width = constraints.maxWidth;
+                            int crossAxisCount = 2;
+                            double childAspectRatio = 0.64;
+
+                            if (width >= 900) {
+                              crossAxisCount = 4;
+                              childAspectRatio = 0.74;
+                            } else if (width >= 600) {
+                              crossAxisCount = 3;
+                              childAspectRatio = 0.68;
+                            }
+
+                            return GridView.builder(
+                              padding: const EdgeInsets.all(12),
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: crossAxisCount,
+                                childAspectRatio: childAspectRatio,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
+                              itemCount: results.length,
+                              itemBuilder: (context, index) {
+                                return ProductCard(product: results[index]);
+                              },
+                            );
+                          },
+                        ),
                       ),
-                      itemCount: results.length,
-                      itemBuilder: (context, index) {
-                        return ProductCard(product: results[index]);
-                      },
                     ),
             ),
           ],

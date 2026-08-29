@@ -19,20 +19,25 @@ class WishlistScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'My Wishlist',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1400),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'My Wishlist',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        '${wishlistIds.length} Items',
+                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '${wishlistIds.length} Items',
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                ],
+                ),
               ),
             ),
             Expanded(
@@ -73,18 +78,39 @@ class WishlistScreen extends ConsumerWidget {
                     );
                   }
 
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.64,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1400),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = constraints.maxWidth;
+                          int crossAxisCount = 2;
+                          double childAspectRatio = 0.64;
+
+                          if (width >= 900) {
+                            crossAxisCount = 4;
+                            childAspectRatio = 0.74;
+                          } else if (width >= 600) {
+                            crossAxisCount = 3;
+                            childAspectRatio = 0.68;
+                          }
+
+                          return GridView.builder(
+                            padding: const EdgeInsets.all(12),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              childAspectRatio: childAspectRatio,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                            ),
+                            itemCount: wishlistedProducts.length,
+                            itemBuilder: (context, index) {
+                              return ProductCard(product: wishlistedProducts[index]);
+                            },
+                          );
+                        },
+                      ),
                     ),
-                    itemCount: wishlistedProducts.length,
-                    itemBuilder: (context, index) {
-                      return ProductCard(product: wishlistedProducts[index]);
-                    },
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primaryGreen)),
