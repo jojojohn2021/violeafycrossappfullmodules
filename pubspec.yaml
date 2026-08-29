@@ -70,4 +70,7 @@ flutter:
   assets:
     - assets/logo.png
     - assets/web/icon-512.png
+    - assets/android/res/mipmap-hdpi/ic_launcher.png
+    - assets/ios/AppIcon@3x.png
+
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,17 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/app_providers.dart';
+
+String _getPlatformAppLogoAsset() {
+  if (kIsWeb) {
+    return 'assets/web/icon-512.png';
+  } else if (defaultTargetPlatform == TargetPlatform.android) {
+    return 'assets/android/res/mipmap-hdpi/ic_launcher.png';
+  } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return 'assets/ios/AppIcon@3x.png';
+  }
+  return 'assets/logo.png';
+}
 
 class LeafyTopAppBar extends ConsumerStatefulWidget implements PreferredSizeWidget {
   const LeafyTopAppBar({super.key});
@@ -166,17 +178,24 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: Image.asset(
-                          'assets/Logo.png',
+                          _getPlatformAppLogoAsset(),
                           height: 34,
                           width: 34,
-                          errorBuilder: (_, __, ___) => Container(
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            'assets/logo.png',
                             height: 34,
                             width: 34,
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryGreen,
-                              borderRadius: BorderRadius.circular(8),
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Container(
+                              height: 34,
+                              width: 34,
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryGreen,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.eco, color: Colors.white, size: 20),
                             ),
-                            child: const Icon(Icons.eco, color: Colors.white, size: 20),
                           ),
                         ),
                       ),

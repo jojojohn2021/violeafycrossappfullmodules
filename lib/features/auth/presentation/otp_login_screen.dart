@@ -1,9 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/app_providers.dart';
+
+String _getPlatformLogo() {
+  if (kIsWeb) {
+    return 'assets/web/icon-512.png';
+  } else if (defaultTargetPlatform == TargetPlatform.android) {
+    return 'assets/android/res/mipmap-hdpi/ic_launcher.png';
+  } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return 'assets/ios/AppIcon@3x.png';
+  }
+  return 'assets/logo.png';
+}
 
 class OtpLoginScreen extends ConsumerStatefulWidget {
   final String redirectTo;
@@ -118,10 +130,17 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
                   ),
                   child: ClipOval(
                     child: Image.asset(
-                      'assets/Logo.png',
+                      _getPlatformLogo(),
                       width: 80,
                       height: 80,
                       fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Image.asset(
+                        'assets/logo.png',
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.eco, color: AppColors.primaryGreen, size: 40),
+                      ),
                     ),
                   ),
                 ),
