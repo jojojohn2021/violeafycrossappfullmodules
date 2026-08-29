@@ -153,10 +153,42 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
                   pw.Text('Subtotal: ${amount(subtotal)}'),
                   pw.Text('Item Total: ${amount(itemTotal)}'),
                   pw.Text('GST Subtotal: ${amount(gstSubtotal)}'),
-                  pw.SizedBox(height: 6),
-                  pw.Text('SECTION-1 - GST SUBTOTAL BY HSN CODE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                  for (final group in gstByHsn) pw.Text('HSN ${group['hsnCode']}: Taxable ${amount(group['taxableAmount'])} | GST ${group['gstRate']}% ${amount(group['gstAmount'])}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.SizedBox(height: 8),
+                  pw.Text('GST BREAKDOWN BY HSN CODE & RATE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
                   pw.SizedBox(height: 4),
+                  pw.Table(
+                    border: pw.TableBorder.all(color: PdfColors.grey400),
+                    columnWidths: const {
+                      0: pw.FlexColumnWidth(1.2),
+                      1: pw.FlexColumnWidth(1.0),
+                      2: pw.FlexColumnWidth(1.5),
+                      3: pw.FlexColumnWidth(1.5),
+                      4: pw.FlexColumnWidth(1.5),
+                    },
+                    children: [
+                      pw.TableRow(
+                        decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                        children: [
+                          _cell('HSN Code', bold: true),
+                          _cell('GST Rate', bold: true),
+                          _cell('Taxable Value', bold: true),
+                          _cell('GST Amount', bold: true),
+                          _cell('Total', bold: true),
+                        ],
+                      ),
+                      for (final group in gstByHsn)
+                        pw.TableRow(
+                          children: [
+                            _cell(group['hsnCode']?.toString() ?? '-'),
+                            _cell('${group['gstRate'] ?? 0}%'),
+                            _cell(amount(group['taxableAmount'])),
+                            _cell(amount(group['gstAmount'])),
+                            _cell(amount(((group['taxableAmount'] as num?)?.toDouble() ?? 0) + ((group['gstAmount'] as num?)?.toDouble() ?? 0))),
+                          ],
+                        ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 8),
                   pw.Text('GRAND TOTAL: ${amount(grandTotal)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
                   pw.Text('TOTAL SAVED: ${amount(totalSaved)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ],
@@ -245,6 +277,44 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
         valueRow('Subtotal', summary['subtotal']), valueRow('Item Total', summary['itemTotal']), valueRow('GST Subtotal', summary['gstSubtotal']),
         const Divider(), valueRow('GRAND TOTAL', summary['grandTotal'], strong: true), valueRow('TOTAL SAVED', summary['totalSavedAmount'], strong: true),
       ]))),
+      if ((_invoiceData['gstByHsn'] as List? ?? []).isNotEmpty) ...[
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('HSN-Wise GST Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('HSN Code', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('GST Rate', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Taxable Value', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('GST Amount', style: TextStyle(fontWeight: FontWeight.bold))),
+                      DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
+                    ],
+                    rows: (_invoiceData['gstByHsn'] as List? ?? []).map((group) {
+                      final itemMap = Map<String, dynamic>.from(group as Map);
+                      final taxVal = (itemMap['taxableAmount'] as num?)?.toDouble() ?? 0.0;
+                      final gstVal = (itemMap['gstAmount'] as num?)?.toDouble() ?? 0.0;
+                      return DataRow(cells: [
+                        DataCell(Text(itemMap['hsnCode']?.toString() ?? '-')),
+                        DataCell(Text('${itemMap['gstRate'] ?? 0}%')),
+                        DataCell(Text(money(taxVal))),
+                        DataCell(Text(money(gstVal))),
+                        DataCell(Text(money(taxVal + gstVal), style: const TextStyle(fontWeight: FontWeight.bold))),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
       Card(color: AppColors.primaryGreen.withValues(alpha: 0.1), child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
         const Text('YOUR REFERRAL EARNINGS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         valueRow('Commission Earned', referral['totalCommissionEarned']), valueRow('Payout', referral['totalPayout']), valueRow('Wallet Balance', referral['walletBalance']),

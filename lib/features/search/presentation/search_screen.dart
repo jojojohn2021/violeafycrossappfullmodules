@@ -46,7 +46,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   ref.read(searchQueryProvider.notifier).state = val;
                 },
                 decoration: InputDecoration(
-                  hintText: 'Search Fruits, Vegetables, Spices...',
+                  hintText: 'Search Original, Organic, Authentic...',
                   prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
                   suffixIcon: query.isNotEmpty
                       ? IconButton(

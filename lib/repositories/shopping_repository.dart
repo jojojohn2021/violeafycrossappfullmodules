@@ -435,6 +435,7 @@ class ShoppingRepository {
         quantity: existing.quantity + quantity,
         price: existing.price,
         gstPercentage: existing.gstPercentage,
+        hsnCode: existing.hsnCode,
         category: existing.category,
         brand: existing.brand,
       );
@@ -446,6 +447,7 @@ class ShoppingRepository {
         quantity: quantity,
         price: product.offerPrice ?? product.onlinePrice,
         gstPercentage: product.gstPercentage,
+        hsnCode: product.hsnCode,
         category: product.category,
         brand: product.brand,
       ));
@@ -466,6 +468,7 @@ class ShoppingRepository {
         quantity: quantity,
         price: (item['rate'] as num?)?.toDouble() ?? 0,
         gstPercentage: (item['gstRate'] as num?)?.toDouble(),
+        hsnCode: item['hsnCode']?.toString(),
       );
       if (index >= 0) {
         final existing = _cartItems[index];
@@ -476,6 +479,7 @@ class ShoppingRepository {
           quantity: existing.quantity + quantity,
           price: existing.price,
           gstPercentage: existing.gstPercentage,
+          hsnCode: existing.hsnCode ?? product.hsnCode,
         );
       } else {
         _cartItems.add(product);
@@ -504,6 +508,7 @@ class ShoppingRepository {
         quantity: newQuantity,
         price: item.price,
         gstPercentage: item.gstPercentage,
+        hsnCode: item.hsnCode,
         category: item.category,
         brand: item.brand,
       );
@@ -569,6 +574,21 @@ class ShoppingRepository {
       debugPrint('[ShoppingRepository] Error fetching sales orders: $e');
     }
     return [];
+  }
+
+  // Request authoritative server-side GST calculation
+  Future<Map<String, dynamic>?> calculateServerGst(List<SalesProduct> items) async {
+    try {
+      final response = await _apiClient.post('/api/orders/calculate-gst', {
+        'items': items.map((item) => item.toJson()).toList(),
+      });
+      if (response != null && response is Map && response['calculation'] is Map) {
+        return Map<String, dynamic>.from(response['calculation'] as Map);
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Server GST calculation error: $e');
+    }
+    return null;
   }
 
   Future<Map<String, dynamic>> getInvoice(String invoiceOrOrderId) async {

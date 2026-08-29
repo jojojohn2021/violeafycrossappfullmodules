@@ -4,28 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/gst_calculator.dart';
 import '../../../../models/models.dart';
 import '../../../../providers/app_providers.dart';
-
-// Default GST rate applied when a product has no explicit gstPercentage (matches server.ts invoice logic).
-const double _defaultGstRate = 18.0;
-
-/// Item price is treated as GST-inclusive; this extracts the tax portion for one line item.
-double _lineGstAmount(SalesProduct item) {
-  final rate = item.gstPercentage ?? _defaultGstRate;
-  final lineTotal = item.price * item.quantity;
-  return (lineTotal * rate) / (100 + rate);
-}
-
-/// Groups the cart's GST amounts by rate, e.g. {5.0: 12.50, 18.0: 40.00}, for the Bill Details summary.
-Map<double, double> _gstSummary(List<SalesProduct> cart) {
-  final summary = <double, double>{};
-  for (final item in cart) {
-    final rate = item.gstPercentage ?? _defaultGstRate;
-    summary[rate] = (summary[rate] ?? 0) + _lineGstAmount(item);
-  }
-  return summary;
-}
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -100,8 +81,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final subtotal = cartNotifier.totalPrice;
     const deliveryFee = 30.0;
     final totalPayable = (subtotal + deliveryFee - _couponDiscount).clamp(0.0, double.infinity);
-    final gstSummary = _gstSummary(cart);
-    final totalGst = gstSummary.values.fold<double>(0, (sum, value) => sum + value);
+    final gstCartSummary = GstCalculator.calculateCartSummary(cart);
 
     return Scaffold(
       backgroundColor: AppColors.secondaryBackground,
@@ -194,10 +174,20 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                                         ),
                                         const SizedBox(height: 2),
-                                        Text(
-                                          'GST ${(item.gstPercentage ?? _defaultGstRate).toStringAsFixed(item.gstPercentage != null && item.gstPercentage! % 1 != 0 ? 1 : 0)}% (₹${_lineGstAmount(item).toStringAsFixed(2)})',
-                                          style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                                        ),
+                              Builder(builder: (context) {
+                                final calc = GstCalculator.calculateItemGst(
+                                  price: item.price,
+                                  quantity: item.quantity,
+                                  gstPercentage: item.gstPercentage,
+                                  hsnCode: item.hsnCode,
+                                );
+                                final rate = calc['gstRate'] as double;
+                                final gstVal = calc['gstAmount'] as double;
+                                return Text(
+                                  'GST ${rate.toStringAsFixed(rate % 1 != 0 ? 1 : 0)}% (₹${gstVal.toStringAsFixed(2)})',
+                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                );
+                              }),
                                       ],
                                     ),
                                   ),
@@ -285,8 +275,24 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text('Item Subtotal', style: TextStyle(color: AppColors.textSecondary)),
-                                  Text('₹${subtotal.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  const Text('Item Subtotal (GST Inclusive)', style: TextStyle(color: AppColors.textSecondary)),
+                                  Text('₹${subtotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Taxable Value (excl. GST)', style: TextStyle(color: AppColors.textSecondary)),
+                                  Text('₹${gstCartSummary.totalTaxableValue.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Total GST Included', style: TextStyle(color: AppColors.textSecondary)),
+                                  Text('₹${gstCartSummary.totalGstAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600)),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -307,27 +313,43 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   ],
                                 ),
                               ],
-                              if (gstSummary.isNotEmpty) ...[
+                              if (gstCartSummary.hsnSummary.isNotEmpty) ...[
                                 const Divider(height: 24),
-                                const Text('GST Summary (included in item price)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                const Text('HSN-Wise GST Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                 const SizedBox(height: 8),
-                                for (final rate in (gstSummary.keys.toList()..sort()))
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('GST @ ${rate.toStringAsFixed(rate % 1 != 0 ? 1 : 0)}%', style: const TextStyle(color: AppColors.textSecondary)),
-                                        Text('₹${gstSummary[rate]!.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      ],
-                                    ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: AppColors.border),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text('Total GST', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-                                    Text('₹${totalGst.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  ],
+                                  child: Table(
+                                    columnWidths: const {
+                                      0: FlexColumnWidth(1.2),
+                                      1: FlexColumnWidth(1),
+                                      2: FlexColumnWidth(1.4),
+                                      3: FlexColumnWidth(1.3),
+                                    },
+                                    children: [
+                                      TableRow(
+                                        decoration: BoxDecoration(color: AppColors.secondaryBackground),
+                                        children: const [
+                                          Padding(padding: EdgeInsets.all(6), child: Text('HSN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                                          Padding(padding: EdgeInsets.all(6), child: Text('Rate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                                          Padding(padding: EdgeInsets.all(6), child: Text('Taxable', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                                          Padding(padding: EdgeInsets.all(6), child: Text('GST Amt', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                                        ],
+                                      ),
+                                      for (final item in gstCartSummary.hsnSummary)
+                                        TableRow(
+                                          children: [
+                                            Padding(padding: const EdgeInsets.all(6), child: Text(item.hsnCode, style: const TextStyle(fontSize: 11))),
+                                            Padding(padding: const EdgeInsets.all(6), child: Text('${item.gstRate.toStringAsFixed(item.gstRate % 1 != 0 ? 1 : 0)}%', style: const TextStyle(fontSize: 11))),
+                                            Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.taxableValue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11))),
+                                            Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.gstAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                                          ],
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ],
                               const Divider(height: 24),

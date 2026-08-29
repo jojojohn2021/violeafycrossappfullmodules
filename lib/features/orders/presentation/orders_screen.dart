@@ -77,10 +77,26 @@ class OrdersScreen extends ConsumerWidget {
                         style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
                       ),
                       const SizedBox(height: 12),
+                      if (order.totalTaxableValue != null && order.totalGstAmount != null) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Taxable: ₹${order.totalTaxableValue!.toStringAsFixed(2)} | GST: ₹${order.totalGstAmount!.toStringAsFixed(2)}',
+                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                            Text(
+                              'Incl. GST',
+                              style: const TextStyle(fontSize: 10, color: AppColors.primaryGreen, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                      ],
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Total: ₹${order.totalValue.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primaryGreen)),
+                          Text('Total: ₹${order.totalValue.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primaryGreen)),
                           OutlinedButton(
                             onPressed: () => context.push('/orders/invoice', extra: order),
                             style: OutlinedButton.styleFrom(

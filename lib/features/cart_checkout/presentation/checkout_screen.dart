@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/gst_calculator.dart';
 import '../../../../models/models.dart';
 import '../../../../providers/app_providers.dart';
 import '../domain/payment_orchestrator.dart';
@@ -522,6 +523,8 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
+    final gstSummary = GstCalculator.calculateCartSummary(data.cart);
+
     return Scaffold(
       backgroundColor: AppColors.secondaryBackground,
       appBar: AppBar(title: const Text('Order Review')),
@@ -530,27 +533,87 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
         children: [
           const Text('Products', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          ...data.cart.map((item) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: item.imageUrl != null && item.imageUrl!.startsWith('http')
-                      ? CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.cover)
-                      : const Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
-                ),
-                title: Text(item.productName),
-                subtitle: Text('${item.quantity} x ₹${item.price.toStringAsFixed(0)}'),
-                trailing: Text('₹${(item.price * item.quantity).toStringAsFixed(0)}'),
-              )),
+          ...data.cart.map((item) {
+            final calc = GstCalculator.calculateItemGst(
+              price: item.price,
+              quantity: item.quantity,
+              gstPercentage: item.gstPercentage,
+              hsnCode: item.hsnCode,
+            );
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: SizedBox(
+                width: 56,
+                height: 56,
+                child: item.imageUrl != null && item.imageUrl!.startsWith('http')
+                    ? CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.cover)
+                    : const Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
+              ),
+              title: Text(item.productName),
+              subtitle: Text(
+                '${item.quantity} x ₹${item.price.toStringAsFixed(0)} | HSN: ${calc['hsnCode']} (GST ${calc['gstRate'].toStringAsFixed(0)}%)',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('₹${(item.price * item.quantity).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('GST ₹${(calc['gstAmount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                ],
+              ),
+            );
+          }),
           const Divider(height: 28),
           const Text('Deliver To', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text('${data.address.name}\n${data.address.addressLine}\n${data.address.city}, ${data.address.district}, ${data.address.state} - ${data.address.pincode}\n${data.address.mobileNumber}${data.address.email.isNotEmpty ? ' | ${data.address.email}' : ''}'),
           const SizedBox(height: 20),
-          _summaryRow('Subtotal', data.subtotal),
+          _summaryRow('Item Subtotal (GST Inclusive)', data.subtotal),
+          _summaryRow('Taxable Value (excl. GST)', gstSummary.totalTaxableValue),
+          _summaryRow('Total GST Included', gstSummary.totalGstAmount),
           _summaryRow('Delivery Fee', data.deliveryFee),
-          const Divider(),
+          if (gstSummary.hsnSummary.isNotEmpty) ...[
+            const Divider(height: 24),
+            const Text('HSN-Wise GST Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(1.2),
+                  1: FlexColumnWidth(1),
+                  2: FlexColumnWidth(1.4),
+                  3: FlexColumnWidth(1.3),
+                },
+                children: [
+                  TableRow(
+                    decoration: const BoxDecoration(color: AppColors.secondaryBackground),
+                    children: const [
+                      Padding(padding: EdgeInsets.all(6), child: Text('HSN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                      Padding(padding: EdgeInsets.all(6), child: Text('Rate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                      Padding(padding: EdgeInsets.all(6), child: Text('Taxable', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                      Padding(padding: EdgeInsets.all(6), child: Text('GST Amt', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                    ],
+                  ),
+                  for (final item in gstSummary.hsnSummary)
+                    TableRow(
+                      children: [
+                        Padding(padding: const EdgeInsets.all(6), child: Text(item.hsnCode, style: const TextStyle(fontSize: 11))),
+                        Padding(padding: const EdgeInsets.all(6), child: Text('${item.gstRate.toStringAsFixed(item.gstRate % 1 != 0 ? 1 : 0)}%', style: const TextStyle(fontSize: 11))),
+                        Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.taxableValue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11))),
+                        Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.gstAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
+          const Divider(height: 24),
           _summaryRow('Grand Total', data.total, bold: true),
           const SizedBox(height: 20),
           ElevatedButton.icon(
@@ -567,7 +630,13 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
     final style = TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: bold ? 17 : 14);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: style), Text('₹${value.toStringAsFixed(0)}', style: style)]),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text('₹${value.toStringAsFixed(2)}', style: style),
+        ],
+      ),
     );
   }
 }

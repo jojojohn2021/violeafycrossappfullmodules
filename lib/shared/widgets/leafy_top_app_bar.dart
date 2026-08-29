@@ -376,7 +376,7 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                     Expanded(
                       child: Text(
                         ref.watch(searchQueryProvider).isEmpty
-                            ? 'Search Fruits, Vegetables, Spices...'
+                            ? 'Search Original, Organic, Authentic...'
                             : ref.watch(searchQueryProvider),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

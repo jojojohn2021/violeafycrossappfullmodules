@@ -273,6 +273,7 @@ class ProductPerformance {
   final double whatsappSales;
   final double countersaleSales;
   final double? gstPercentage;
+  final String? hsnCode;
   final int? stockIn;
   final int? stockOut;
   final String? vamjoWeblink;
@@ -316,6 +317,7 @@ class ProductPerformance {
     required this.whatsappSales,
     required this.countersaleSales,
     this.gstPercentage,
+    this.hsnCode,
     this.stockIn,
     this.stockOut,
     this.vamjoWeblink,
@@ -390,6 +392,7 @@ class ProductPerformance {
     whatsappSales: _toDouble(json['whatsappSales']),
     countersaleSales: _toDouble(json['countersaleSales']),
     gstPercentage: _toDoubleNullable(json['gstPercentage']),
+    hsnCode: json['hsnCode']?.toString() ?? json['hsn']?.toString(),
     stockIn: _toIntNullable(json['stockIn']),
     stockOut: _toIntNullable(json['stockOut']),
     vamjoWeblink: json['vamjoWeblink']?.toString(),
@@ -434,6 +437,7 @@ class ProductPerformance {
     'whatsappSales': whatsappSales,
     'countersaleSales': countersaleSales,
     'gstPercentage': gstPercentage,
+    'hsnCode': hsnCode,
     'stockIn': stockIn,
     'stockOut': stockOut,
     'vamjoWeblink': vamjoWeblink,
@@ -567,6 +571,38 @@ class CustomerPerformance {
 }
 
 // --- SALES ORDERS & CHECKOUT ---
+class HsnGstSummaryItem {
+  final String hsnCode;
+  final double gstRate;
+  final double taxableValue;
+  final double gstAmount;
+  final double totalAmount;
+
+  HsnGstSummaryItem({
+    required this.hsnCode,
+    required this.gstRate,
+    required this.taxableValue,
+    required this.gstAmount,
+    required this.totalAmount,
+  });
+
+  factory HsnGstSummaryItem.fromJson(Map<String, dynamic> json) => HsnGstSummaryItem(
+    hsnCode: (json['hsnCode'] ?? json['hsn'] ?? '1234').toString(),
+    gstRate: (json['gstRate'] ?? json['gstPercentage'] ?? 18.0).toDouble(),
+    taxableValue: (json['taxableValue'] ?? json['taxableAmount'] ?? 0.0).toDouble(),
+    gstAmount: (json['gstAmount'] ?? 0.0).toDouble(),
+    totalAmount: (json['totalAmount'] ?? json['total'] ?? 0.0).toDouble(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'hsnCode': hsnCode,
+    'gstRate': gstRate,
+    'taxableValue': taxableValue,
+    'gstAmount': gstAmount,
+    'totalAmount': totalAmount,
+  };
+}
+
 class SalesProduct {
   final String productId;
   final String productName;
@@ -574,6 +610,10 @@ class SalesProduct {
   final int quantity;
   final double price;
   final double? gstPercentage;
+  final String? hsnCode;
+  final double? taxableValue;
+  final double? gstAmount;
+  final double? gstInclusiveAmount;
   final String? category;
   final String? brand;
   final String? brandOwner;
@@ -585,6 +625,10 @@ class SalesProduct {
     required this.quantity,
     required this.price,
     this.gstPercentage,
+    this.hsnCode,
+    this.taxableValue,
+    this.gstAmount,
+    this.gstInclusiveAmount,
     this.category,
     this.brand,
     this.brandOwner,
@@ -597,6 +641,10 @@ class SalesProduct {
     quantity: (json['quantity'] ?? 0).toInt(),
     price: (json['price'] ?? 0).toDouble(),
     gstPercentage: json['gstPercentage'] != null ? (json['gstPercentage']).toDouble() : null,
+    hsnCode: json['hsnCode']?.toString() ?? json['hsn']?.toString(),
+    taxableValue: json['taxableValue'] != null ? (json['taxableValue']).toDouble() : null,
+    gstAmount: json['gstAmount'] != null ? (json['gstAmount']).toDouble() : null,
+    gstInclusiveAmount: json['gstInclusiveAmount'] != null ? (json['gstInclusiveAmount']).toDouble() : null,
     category: json['category'],
     brand: json['brand'],
     brandOwner: json['brandOwner'],
@@ -609,6 +657,10 @@ class SalesProduct {
     'quantity': quantity,
     'price': price,
     'gstPercentage': gstPercentage,
+    'hsnCode': hsnCode,
+    'taxableValue': taxableValue,
+    'gstAmount': gstAmount,
+    'gstInclusiveAmount': gstInclusiveAmount,
     'category': category,
     'brand': brand,
     'brandOwner': brandOwner,
@@ -623,6 +675,9 @@ class SalesOrder {
   final String customerCompany;
   final List<SalesProduct> products;
   final double totalValue;
+  final double? totalTaxableValue;
+  final double? totalGstAmount;
+  final List<HsnGstSummaryItem>? hsnGstSummary;
   final String paymentStatus; // 'Paid' | 'Pending' | 'Overdue' | 'Refunded'
   final String deliveryStatus; // 'Pending' | 'Shipped' | 'Delivered' | 'Cancelled'
   final String assignedTo;
@@ -648,6 +703,9 @@ class SalesOrder {
     required this.customerCompany,
     required this.products,
     required this.totalValue,
+    this.totalTaxableValue,
+    this.totalGstAmount,
+    this.hsnGstSummary,
     required this.paymentStatus,
     required this.deliveryStatus,
     required this.assignedTo,
@@ -676,6 +734,13 @@ class SalesOrder {
       ? (json['products'] as List).map((i) => SalesProduct.fromJson(i)).toList()
       : [],
     totalValue: (json['totalValue'] ?? 0).toDouble(),
+    totalTaxableValue: json['totalTaxableValue'] != null ? (json['totalTaxableValue']).toDouble() : null,
+    totalGstAmount: json['totalGstAmount'] != null ? (json['totalGstAmount']).toDouble() : null,
+    hsnGstSummary: json['hsnGstSummary'] != null
+      ? (json['hsnGstSummary'] as List).map((i) => HsnGstSummaryItem.fromJson(i)).toList()
+      : (json['gstByHsn'] != null
+          ? (json['gstByHsn'] as List).map((i) => HsnGstSummaryItem.fromJson(i)).toList()
+          : null),
     paymentStatus: json['paymentStatus'] ?? 'Pending',
     deliveryStatus: json['deliveryStatus'] ?? 'Pending',
     assignedTo: json['assignedTo'] ?? '',
@@ -704,6 +769,9 @@ class SalesOrder {
     'customerCompany': customerCompany,
     'products': products.map((i) => i.toJson()).toList(),
     'totalValue': totalValue,
+    'totalTaxableValue': totalTaxableValue,
+    'totalGstAmount': totalGstAmount,
+    'hsnGstSummary': hsnGstSummary?.map((i) => i.toJson()).toList(),
     'paymentStatus': paymentStatus,
     'deliveryStatus': deliveryStatus,
     'assignedTo': assignedTo,

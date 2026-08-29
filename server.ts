@@ -1863,10 +1863,21 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
   let order = salesOrders.find((o: any) => o.id === tx.orderId);
   if (!order && tx.orderPayload) {
     const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
+    let gstCalc: any = null;
+    try {
+      gstCalc = await calculateGSTForOrderItems(tx.orderPayload.products || []);
+    } catch (_) { }
+
     order = {
       ...tx.orderPayload,
       id: tx.orderId,
       orderNumber: orderNum,
+      products: gstCalc ? gstCalc.items : (tx.orderPayload.products || []),
+      totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : undefined,
+      totalGstAmount: gstCalc ? gstCalc.totalGstAmount : undefined,
+      hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : undefined,
+      gstByHsn: gstCalc ? gstCalc.hsnGstSummary : undefined,
+      totalValue: gstCalc ? gstCalc.grandTotal : (tx.orderPayload.totalValue || tx.amount),
       paymentStatus: 'Paid',
       orderStatus: 'Confirmed',
       deliveryStatus: 'Processing',
@@ -1876,7 +1887,7 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
 
     const products = await getCollectionDocs('products');
     for (const item of (order.products || [])) {
-      const prod = products.find((p: any) => p.id === item.productId);
+      const prod = products.find((p: any) => p.id === (item.productId || item.id));
       if (prod) {
         prod.stock = Math.max(0, (prod.stock || 0) - item.quantity);
         prod.unitsSold = (prod.unitsSold || 0) + item.quantity;
@@ -2083,6 +2094,102 @@ app.post("/api/payment/payu-toggle", async (req, res) => {
     return res.json({ success: true, payu_enabled: enabled });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || "Failed to update PayU payment toggle" });
+  }
+});
+
+// Server-side Authoritative GST Calculation Helper
+export async function calculateGSTForOrderItems(rawItems: any[]): Promise<{
+  items: any[];
+  totalTaxableValue: number;
+  totalGstAmount: number;
+  subtotal: number;
+  deliveryFee: number;
+  grandTotal: number;
+  hsnGstSummary: any[];
+}> {
+  const products = await getCollectionDocs('products');
+  let totalTaxableValue = 0;
+  let totalGstAmount = 0;
+  let subtotal = 0;
+  const deliveryFee = 30.0;
+
+  const hsnGroups: Record<string, any> = {};
+
+  const enrichedItems = (rawItems || []).map((item: any) => {
+    const productId = item.productId || item.id;
+    const product = products.find((candidate: any) => candidate.id === productId) || {};
+
+    const quantity = Number(item.quantity ?? 1);
+    const unitPrice = Number(product.offerPrice ?? product.onlinePrice ?? item.price ?? 0);
+    const gstRate = Number(product.gstPercentage ?? item.gstPercentage ?? 18.0);
+    const hsnCode = String(product.hsnCode || product.hsn || item.hsnCode || '1234').trim();
+
+    const gstInclusiveAmount = Number((unitPrice * quantity).toFixed(2));
+    const taxableValue = Number((gstInclusiveAmount / (1 + gstRate / 100)).toFixed(2));
+    const gstAmount = Number((gstInclusiveAmount - taxableValue).toFixed(2));
+
+    subtotal += gstInclusiveAmount;
+    totalTaxableValue += taxableValue;
+    totalGstAmount += gstAmount;
+
+    const groupKey = `${hsnCode}|${gstRate.toFixed(2)}`;
+    if (!hsnGroups[groupKey]) {
+      hsnGroups[groupKey] = {
+        hsnCode,
+        gstRate,
+        taxableValue: 0,
+        gstAmount: 0,
+        totalAmount: 0
+      };
+    }
+    hsnGroups[groupKey].taxableValue = Number((hsnGroups[groupKey].taxableValue + taxableValue).toFixed(2));
+    hsnGroups[groupKey].gstAmount = Number((hsnGroups[groupKey].gstAmount + gstAmount).toFixed(2));
+    hsnGroups[groupKey].totalAmount = Number((hsnGroups[groupKey].totalAmount + gstInclusiveAmount).toFixed(2));
+
+    return {
+      ...item,
+      productId,
+      productName: item.productName || product.name || '',
+      imageUrl: item.imageUrl || product.imageUrl || product.image || '',
+      quantity,
+      price: unitPrice,
+      unitPrice,
+      gstPercentage: gstRate,
+      hsnCode,
+      taxableValue,
+      gstAmount,
+      gstInclusiveAmount,
+    };
+  });
+
+  const hsnGstSummary = Object.values(hsnGroups).sort((a: any, b: any) => a.hsnCode.localeCompare(b.hsnCode));
+  totalTaxableValue = Number(totalTaxableValue.toFixed(2));
+  totalGstAmount = Number(totalGstAmount.toFixed(2));
+  subtotal = Number(subtotal.toFixed(2));
+  const grandTotal = Number((subtotal + deliveryFee).toFixed(2));
+
+  return {
+    items: enrichedItems,
+    totalTaxableValue,
+    totalGstAmount,
+    subtotal,
+    deliveryFee,
+    grandTotal,
+    hsnGstSummary,
+  };
+}
+
+// POST /api/orders/calculate-gst - Authoritative server-side GST calculation endpoint
+app.post("/api/orders/calculate-gst", async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: "Missing or invalid items array in payload" });
+    }
+    const calculation = await calculateGSTForOrderItems(items);
+    return res.json({ success: true, calculation });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to calculate GST" });
   }
 });
 
