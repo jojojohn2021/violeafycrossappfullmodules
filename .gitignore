@@ -8,5 +8,6 @@ coverage/
 !.env.example
 .tmp*
 .dart_tool/
+.firebase/
 serviceAccountKey.json
 

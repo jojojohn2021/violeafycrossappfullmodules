@@ -38,10 +38,33 @@ class PaymentOrchestrator {
 
     if (context != null && context.mounted) {
       final res = await PayUWebViewScreen.start(context, txnid);
+      if (res != null && res.outcome != PaymentOutcome.initFailed) {
+        return await verifyTransaction(txnid);
+      }
       return res ?? PaymentResult(outcome: PaymentOutcome.cancelled, transactionId: txnid);
     }
 
     return WebRedirectPaymentStrategy.launch(txnid);
+  }
+
+  Future<PaymentResult> verifyTransaction(String transactionId) async {
+    try {
+      final response = await _apiClient.post('/api/payment/verify', {
+        'transactionId': transactionId,
+      });
+      if (response is Map && response['success'] == true) {
+        return PaymentResult(outcome: PaymentOutcome.success, transactionId: transactionId);
+      }
+      final tx = response is Map && response['transaction'] is Map ? response['transaction'] : {};
+      final status = (tx['status'] ?? '').toString();
+      if (status == 'Cancelled') {
+        return PaymentResult(outcome: PaymentOutcome.cancelled, transactionId: transactionId);
+      }
+      return PaymentResult(outcome: PaymentOutcome.failed, transactionId: transactionId);
+    } catch (e) {
+      debugPrint('[PaymentOrchestrator] Server verification exception: $e');
+      return PaymentResult(outcome: PaymentOutcome.failed, transactionId: transactionId);
+    }
   }
 
   /// Testing-only path: never contacts PayU. The backend re-validates that PAYU_ENABLED is

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class EnvConfig {
@@ -42,6 +43,22 @@ class EnvConfig {
 
   static String get baseUrl => _currentBaseUrl;
 
+  static List<String> get fallbackBaseUrls {
+    final urls = <String>[];
+    if (kIsWeb) {
+      urls.add('http://localhost:3000');
+      urls.add('http://127.0.0.1:3000');
+      urls.add(_defaultProductionBaseUrl);
+    } else {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        urls.add(_defaultAndroidEmulatorBaseUrl);
+      }
+      urls.add(_defaultDevBaseUrl);
+      urls.add(_defaultProductionBaseUrl);
+    }
+    return urls;
+  }
+
   static String normalizeUrl(String? url) {
     if (url == null || url.isEmpty) return '';
     if (kIsWeb) return url;
@@ -79,5 +96,69 @@ class EnvConfig {
   static Future<void> setPayUEnvironment(String environment) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('payu_environment', environment);
+  }
+
+  static Future<void> showApiConfigDialog(BuildContext context) async {
+    final controller = TextEditingController(text: baseUrl);
+    return showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Configure Backend API URL'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter the backend API server URL (e.g. http://localhost:3000 for local server, or your backend API domain):',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'API Base URL',
+                  hintText: 'http://localhost:3000',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    label: const Text('Local (3000)'),
+                    onPressed: () => controller.text = 'http://localhost:3000',
+                  ),
+                  ActionChip(
+                    label: const Text('Reset Default'),
+                    onPressed: () => controller.text = '',
+                  ),
+                ],
+              )
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final text = controller.text.trim();
+                await setCustomBaseUrl(text);
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('API Base URL set to: ${baseUrl.isEmpty ? "Default Origin" : baseUrl}')),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

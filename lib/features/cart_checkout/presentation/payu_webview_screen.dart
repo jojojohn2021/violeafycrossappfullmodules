@@ -64,6 +64,16 @@ class _PayUWebViewScreenState extends State<PayUWebViewScreen> {
               try {
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
+                } else if (url.startsWith('intent://')) {
+                  // Extract browser_fallback_url parameter if target native app is not installed
+                  final fallbackMatch = RegExp(r'S\.browser_fallback_url=([^;]+)').firstMatch(url);
+                  if (fallbackMatch != null) {
+                    final fallbackUrl = Uri.decodeFull(fallbackMatch.group(1)!);
+                    final fallbackUri = Uri.tryParse(fallbackUrl);
+                    if (fallbackUri != null && await canLaunchUrl(fallbackUri)) {
+                      await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+                    }
+                  }
                 } else {
                   await launchUrl(uri, mode: LaunchMode.externalNonBrowserApplication);
                 }
@@ -117,13 +127,21 @@ class _PayUWebViewScreenState extends State<PayUWebViewScreen> {
     }
   }
 
+  Future<void> _handleBackPress() async {
+    if (await _controller.canGoBack()) {
+      await _controller.goBack();
+    } else {
+      _finishWithResult(PaymentOutcome.cancelled);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          _finishWithResult(PaymentOutcome.cancelled);
+          _handleBackPress();
         }
       },
       child: Scaffold(
@@ -133,7 +151,7 @@ class _PayUWebViewScreenState extends State<PayUWebViewScreen> {
           foregroundColor: Colors.white,
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => _finishWithResult(PaymentOutcome.cancelled),
+            onPressed: _handleBackPress,
           ),
         ),
         body: Stack(

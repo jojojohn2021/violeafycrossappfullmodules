@@ -31,6 +31,24 @@
     }
   },
 
+  "functions": [
+    {
+      "source": ".",
+      "codebase": "default",
+      "runtime": "nodejs22",
+      "predeploy": [
+        "npm run build"
+      ],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "build"
+      ]
+    }
+  ],
+
   "hosting": {
     "site": "violeafycross",
     "public": "build/web",
@@ -40,6 +58,10 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/api/**",
+        "function": "api"
+      },
       {
         "source": "**",
         "destination": "/index.html"

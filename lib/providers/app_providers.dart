@@ -285,13 +285,18 @@ class OtpNotifier extends StateNotifier<OtpState> {
           debugPrint('[OtpNotifier] verificationCompleted (Auto-verify)');
           try {
             await firebase_auth.FirebaseAuth.instance.signInWithCredential(credential);
-            final response = await ApiClient().post('/api/auth/verify-login', {});
-            if (response != null && response['success'] == true) {
-              state = state.copyWith(isLoading: false);
-              debugPrint('[OtpNotifier] Auto-verify & backend verification success');
-            } else {
-              final errorMsg = response?['error'] ?? 'Backend verification failed';
-              state = state.copyWith(isLoading: false, errorMessage: errorMsg);
+            try {
+              final response = await ApiClient().post('/api/auth/verify-login', {});
+              if (response != null && response['success'] == true) {
+                state = state.copyWith(isLoading: false);
+                debugPrint('[OtpNotifier] Auto-verify & backend verification success');
+              } else {
+                final errorMsg = response?['error'] ?? 'Backend verification failed';
+                state = state.copyWith(isLoading: false, errorMessage: errorMsg);
+              }
+            } catch (e) {
+              debugPrint('[OtpNotifier] Auto-verify backend call warning: $e');
+              state = state.copyWith(isLoading: false, errorMessage: null);
             }
           } catch (e) {
             state = state.copyWith(isLoading: false, errorMessage: 'Auto-verification failed: $e');
@@ -372,14 +377,26 @@ class OtpNotifier extends StateNotifier<OtpState> {
       await firebase_auth.FirebaseAuth.instance.signInWithCredential(credential);
 
       // Perform single backend login verification call
-      final response = await ApiClient().post('/api/auth/verify-login', {});
-      if (response != null && response['success'] == true) {
-        state = state.copyWith(isLoading: false);
-        debugPrint('[OtpNotifier] Backend login verification succeeded: ${response['action']} - customerId: ${response['customerId']}');
-        return true;
-      } else {
-        final errorMsg = response?['error'] ?? 'Backend verification failed. Please try again.';
-        state = state.copyWith(isLoading: false, errorMessage: errorMsg);
+      try {
+        final response = await ApiClient().post('/api/auth/verify-login', {});
+        if (response != null && response['success'] == true) {
+          state = state.copyWith(isLoading: false);
+          debugPrint('[OtpNotifier] Backend login verification succeeded: ${response['action']} - customerId: ${response['customerId']}');
+          return true;
+        } else {
+          final errorMsg = response?['error'] ?? 'Backend verification failed. Please try again.';
+          state = state.copyWith(isLoading: false, errorMessage: errorMsg);
+          return false;
+        }
+      } catch (apiErr) {
+        debugPrint('[OtpNotifier] Backend verify-login API error: $apiErr');
+        // Firebase Auth sign-in succeeded, proceed if current user is logged in
+        final user = firebase_auth.FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          state = state.copyWith(isLoading: false, errorMessage: null);
+          return true;
+        }
+        state = state.copyWith(isLoading: false, errorMessage: 'Verification failed: $apiErr');
         return false;
       }
     } catch (e) {
@@ -443,7 +460,7 @@ final isAdminUserProvider = FutureProvider<bool>((ref) async {
 class PayUEnabledNotifier extends StateNotifier<bool> {
   final ApiClient _apiClient;
 
-  PayUEnabledNotifier({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient(), super(false) {
+  PayUEnabledNotifier({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient(), super(true) {
     _load();
   }
 

@@ -32,6 +32,15 @@ class ApiClient {
 
   // Handle Response states
   dynamic _processResponse(http.Response response) {
+    final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+    final isHtml = contentType.contains('text/html') || response.body.trimLeft().startsWith('<!doctype html');
+    if (isHtml) {
+      throw ServerException(
+        'The backend API is not available at this address. Configure production API routing.',
+        statusCode: response.statusCode,
+      );
+    }
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (response.body.isEmpty) return null;
       return json.decode(response.body);
@@ -55,56 +64,127 @@ class ApiClient {
     }
   }
 
+  // Helper to build list of target URLs to attempt (Primary URL + Fallbacks)
+  List<String> _buildCandidateUrls(String endpoint) {
+    final primaryBase = EnvConfig.baseUrl;
+    final candidates = <String>[];
+    if (primaryBase.isNotEmpty) {
+      candidates.add('$primaryBase$endpoint');
+    }
+    for (final fallbackBase in EnvConfig.fallbackBaseUrls) {
+      final full = '$fallbackBase$endpoint';
+      if (!candidates.contains(full)) {
+        candidates.add(full);
+      }
+    }
+    return candidates;
+  }
+
   // GET request
   Future<dynamic> get(String endpoint) async {
-    final String url = '${EnvConfig.baseUrl}$endpoint';
+    final candidateUrls = _buildCandidateUrls(endpoint);
     final headers = await _getHeaders();
+    Object? lastError;
 
-    try {
-      debugPrint('[API Client] GET -> $url');
-      final response = await _client.get(Uri.parse(url), headers: headers).timeout(
-        const Duration(seconds: 15),
-      );
-      return _processResponse(response);
-    } catch (e) {
-      debugPrint('[API Client] GET Error: $e');
-      rethrow;
+    for (final url in candidateUrls) {
+      try {
+        debugPrint('[API Client] GET -> $url');
+        final response = await _client.get(Uri.parse(url), headers: headers).timeout(
+          const Duration(seconds: 10),
+        );
+        final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+        final isHtml = contentType.contains('text/html') || response.body.trimLeft().startsWith('<!doctype html');
+        if (isHtml) {
+          debugPrint('[API Client] $url returned HTML (static web page), trying next fallback...');
+          continue;
+        }
+
+        final result = _processResponse(response);
+        final workingBaseUrl = url.replaceAll(endpoint, '');
+        if (workingBaseUrl != EnvConfig.baseUrl) {
+          EnvConfig.setCustomBaseUrl(workingBaseUrl);
+        }
+        return result;
+      } catch (e) {
+        debugPrint('[API Client] GET Error for $url: $e');
+        lastError = e;
+      }
     }
+
+    if (lastError != null) throw lastError;
+    throw ServerException('The backend API is not available at this address. Configure production API routing.');
   }
 
   // POST request
   Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
-    final String url = '${EnvConfig.baseUrl}$endpoint';
+    final candidateUrls = _buildCandidateUrls(endpoint);
     final headers = await _getHeaders();
+    Object? lastError;
 
-    try {
-      debugPrint('[API Client] POST -> $url');
-      final response = await _client.post(
-        Uri.parse(url),
-        headers: headers,
-        body: json.encode(body),
-      ).timeout(const Duration(seconds: 15));
-      return _processResponse(response);
-    } catch (e) {
-      debugPrint('[API Client] POST Error: $e');
-      rethrow;
+    for (final url in candidateUrls) {
+      try {
+        debugPrint('[API Client] POST -> $url');
+        final response = await _client.post(
+          Uri.parse(url),
+          headers: headers,
+          body: json.encode(body),
+        ).timeout(const Duration(seconds: 10));
+
+        final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+        final isHtml = contentType.contains('text/html') || response.body.trimLeft().startsWith('<!doctype html');
+        if (isHtml) {
+          debugPrint('[API Client] $url returned HTML (static web page), trying next fallback...');
+          continue;
+        }
+
+        final result = _processResponse(response);
+        final workingBaseUrl = url.replaceAll(endpoint, '');
+        if (workingBaseUrl != EnvConfig.baseUrl) {
+          EnvConfig.setCustomBaseUrl(workingBaseUrl);
+        }
+        return result;
+      } catch (e) {
+        debugPrint('[API Client] POST Error for $url: $e');
+        lastError = e;
+      }
     }
+
+    if (lastError != null) throw lastError;
+    throw ServerException('The backend API is not available at this address. Configure production API routing.');
   }
 
   // DELETE request
   Future<dynamic> delete(String endpoint) async {
-    final String url = '${EnvConfig.baseUrl}$endpoint';
+    final candidateUrls = _buildCandidateUrls(endpoint);
     final headers = await _getHeaders();
+    Object? lastError;
 
-    try {
-      debugPrint('[API Client] DELETE -> $url');
-      final response = await _client.delete(Uri.parse(url), headers: headers).timeout(
-        const Duration(seconds: 15),
-      );
-      return _processResponse(response);
-    } catch (e) {
-      debugPrint('[API Client] DELETE Error: $e');
-      rethrow;
+    for (final url in candidateUrls) {
+      try {
+        debugPrint('[API Client] DELETE -> $url');
+        final response = await _client.delete(Uri.parse(url), headers: headers).timeout(
+          const Duration(seconds: 10),
+        );
+        final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+        final isHtml = contentType.contains('text/html') || response.body.trimLeft().startsWith('<!doctype html');
+        if (isHtml) {
+          debugPrint('[API Client] $url returned HTML (static web page), trying next fallback...');
+          continue;
+        }
+
+        final result = _processResponse(response);
+        final workingBaseUrl = url.replaceAll(endpoint, '');
+        if (workingBaseUrl != EnvConfig.baseUrl) {
+          EnvConfig.setCustomBaseUrl(workingBaseUrl);
+        }
+        return result;
+      } catch (e) {
+        debugPrint('[API Client] DELETE Error for $url: $e');
+        lastError = e;
+      }
     }
+
+    if (lastError != null) throw lastError;
+    throw ServerException('The backend API is not available at this address. Configure production API routing.');
   }
 }

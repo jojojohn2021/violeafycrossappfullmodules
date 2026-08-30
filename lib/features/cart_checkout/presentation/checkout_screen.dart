@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/config/env_config.dart';
 import '../../../../core/utils/gst_calculator.dart';
 import '../../../../models/models.dart';
 import '../../../../providers/app_providers.dart';
@@ -513,7 +514,22 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unable to start payment: $error')));
+        final errorMsg = error.toString();
+        final isRoutingError = errorMsg.contains('Configure production API routing') || errorMsg.contains('text/html');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isRoutingError
+                ? 'Payment API connection required. Please set the active backend server URL.'
+                : 'Unable to start payment: $error'),
+            action: isRoutingError
+                ? SnackBarAction(
+                    label: 'Configure API',
+                    onPressed: () => EnvConfig.showApiConfigDialog(context),
+                  )
+                : null,
+            duration: const Duration(seconds: 6),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isStartingPayment = false);

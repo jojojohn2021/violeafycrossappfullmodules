@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/config/env_config.dart';
 import '../../providers/app_providers.dart';
 
 String _getPlatformAppLogoAsset() {
@@ -325,6 +326,37 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                             ),
                           );
                         }),
+                        Tooltip(
+                          message: 'Configure Backend API URL (${EnvConfig.baseUrl.isEmpty ? "Default Origin" : EnvConfig.baseUrl})',
+                          child: InkWell(
+                            onTap: () => EnvConfig.showApiConfigDialog(context),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade700,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.api_rounded, color: Colors.white, size: 12),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'API',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.favorite_border_outlined, color: AppColors.textPrimary, size: 22),
                           onPressed: () => context.push('/wishlist'),

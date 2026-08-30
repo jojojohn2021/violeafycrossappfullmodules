@@ -5,6 +5,7 @@ import fs from "fs";
 import { GoogleGenAI } from "@google/genai";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import { onRequest } from "firebase-functions/v2/https";
 import { adminApp, adminAuth, adminDb, adminStorage } from "./firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -24,6 +25,7 @@ export async function getProducts(req: any, res: any) {
 }
 
 const app = express();
+export const api = onRequest({ cors: true }, app);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
@@ -1968,8 +1970,8 @@ async function ensurePaymentGatewaySettings() {
       enabled: true,
       status: 'Enabled',
       currency: 'INR',
-      merchant_key: process.env.PAYU_TEST_KEY || process.env.PAYU_TEST_MERCHANT_KEY || 'gtK2y6',
-      merchant_salt: process.env.PAYU_TEST_SALT || process.env.PAYU_TEST_MERCHANT_SALT || 'eCwTWDvi',
+      merchant_key: process.env.PAYU_TEST_KEY || process.env.PAYU_TEST_MERCHANT_KEY || (process.env as any)['PAYU_TEST_KEY '] || 'ETHFAz',
+      merchant_salt: process.env.PAYU_TEST_SALT || process.env.PAYU_TEST_MERCHANT_SALT || (process.env as any)['PAYU_TEST_SALT '] || 'SshuKwxXGTE4W8rzP3iaKR0F2wqOHf1C',
       payment_url: 'https://test.payu.in/_payment',
       success_url: '/api/payment/callback/success',
       failure_url: '/api/payment/callback/failure',
@@ -2009,19 +2011,42 @@ async function ensurePaymentGatewaySettings() {
   }
 }
 
-function getPayUSecrets(environment: string): { key: string; salt: string } | null {
-  const isProd = environment.toUpperCase() === 'PRODUCTION';
+function logPayUConfigDiagnostics(env: string, key: string, salt: string, paymentUrl: string): void {
+  const hasKey = Boolean(key && key.trim());
+  const hasSalt = Boolean(salt && salt.trim());
+  console.log(`[PayU Config]`);
+  console.log(`Environment: ${env}`);
+  console.log(`Merchant key configured: ${hasKey}`);
+  console.log(`Merchant key length: ${hasKey ? key.trim().length : 0}`);
+  console.log(`Merchant key contains whitespace: ${hasKey ? /\s/.test(key) : false}`);
+  console.log(`Merchant salt configured: ${hasSalt}`);
+  console.log(`Payment URL configured: ${Boolean(paymentUrl)}`);
+}
+
+export function getPayUSecrets(environment: string): { key: string; salt: string } | null {
+  const envUpper = (environment || 'TEST').toUpperCase();
+  const isProd = envUpper === 'PRODUCTION';
+
+  // 1. Google Cloud Secret Manager bindings (PAYU_MERCHANT_KEY & PAYU_MERCHANT_SALT)
+  const smKey = process.env.PAYU_MERCHANT_KEY?.trim();
+  const smSalt = process.env.PAYU_MERCHANT_SALT?.trim();
+
+  let key = '';
+  let salt = '';
+
   if (isProd) {
-    const key = process.env.PAYU_PRODUCTION_KEY || process.env.PAYU_PROD_MERCHANT_KEY || '';
-    const salt = process.env.PAYU_PRODUCTION_SALT || process.env.PAYU_PROD_MERCHANT_SALT || '';
-    if (!key || !salt) return null;
-    return { key, salt };
+    key = smKey || process.env.PAYU_PRODUCTION_KEY?.trim() || process.env.PAYU_PROD_MERCHANT_KEY?.trim() || '';
+    salt = smSalt || process.env.PAYU_PRODUCTION_SALT?.trim() || process.env.PAYU_PROD_MERCHANT_SALT?.trim() || '';
   } else {
-    const key = process.env.PAYU_TEST_KEY || process.env.PAYU_TEST_MERCHANT_KEY || 'gtK2y6';
-    const salt = process.env.PAYU_TEST_SALT || process.env.PAYU_TEST_MERCHANT_SALT || 'eCwTWDvi';
-    if (!key || !salt) return null;
-    return { key, salt };
+    key = smKey || process.env.PAYU_TEST_KEY?.trim() || process.env.PAYU_TEST_MERCHANT_KEY?.trim() || (process.env as any)['PAYU_TEST_KEY ']?.trim() || 'ETHFAz';
+    salt = smSalt || process.env.PAYU_TEST_SALT?.trim() || process.env.PAYU_TEST_MERCHANT_SALT?.trim() || (process.env as any)['PAYU_TEST_SALT ']?.trim() || 'SshuKwxXGTE4W8rzP3iaKR0F2wqOHf1C';
   }
+
+  key = key.trim();
+  salt = salt.trim();
+
+  if (!key || !salt) return null;
+  return { key, salt };
 }
 
 app.post("/api/payment/settings/seed-payu-test", async (req, res) => {
@@ -2427,7 +2452,7 @@ function generatePayUReverseHash(params: {
   return { hash, maskedString };
 }
 
-app.post("/api/payment/initiate", async (req, res) => {
+export async function createPayUPayment(req: any, res: any) {
   try {
     const { orderData, paymentMethod, gateway = 'PayU', environment } = req.body;
     if (!orderData) {
@@ -2481,6 +2506,10 @@ app.post("/api/payment/initiate", async (req, res) => {
     }
 
     const { key, salt } = secrets;
+    const paymentUrl = opConfig.payment_url || (env === 'PRODUCTION' ? 'https://secure.payu.in/_payment' : 'https://test.payu.in/_payment');
+
+    // Safe diagnostics logging (never logs secret values)
+    logPayUConfigDiagnostics(env, key, salt, paymentUrl);
 
     // PayU Debug Diagnostics toggle - observation only, never affects credentials/hash/payment logic.
     const payuDebugEnabled = await isPayUDebugEnabled();
@@ -2506,7 +2535,6 @@ app.post("/api/payment/initiate", async (req, res) => {
       delete req.body[forbiddenKey];
     }
 
-    const paymentUrl = opConfig.payment_url || (env === 'PRODUCTION' ? 'https://secure.payu.in/_payment' : 'https://test.payu.in/_payment');
     const productInfo = "Leafy Checkout Bundle";
     const firstname = (orderData.customerName || '').trim() || "Leafy Shopper";
     const email = (orderData.customerEmail || '').trim();
@@ -2687,7 +2715,124 @@ app.post("/api/payment/initiate", async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to initiate payment" });
   }
-});
+}
+app.post("/api/payment/initiate", createPayUPayment);
+
+export async function verifyPayUPayment(req: any, res: any) {
+  try {
+    const { transactionId, gatewayResponse } = req.body;
+    if (!transactionId) {
+      return res.status(400).json({ error: "Missing transactionId" });
+    }
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === transactionId);
+    if (!tx) {
+      return res.status(404).json({ error: "Payment transaction not found" });
+    }
+
+    // Idempotency: If transaction is already marked as Success, return authoritative success immediately
+    if (tx.status === 'Success') {
+      return res.json({
+        success: true,
+        transaction: tx
+      });
+    }
+
+    const env = (tx.environment || 'TEST').toUpperCase();
+    const secrets = getPayUSecrets(env);
+    if (!secrets) {
+      return res.status(503).json({ error: `PayU secret credentials are not configured for ${env} environment` });
+    }
+
+    const { key, salt } = secrets;
+
+    tx.logs.push({
+      timestamp: new Date().toISOString(),
+      action: 'GATEWAY_API_CALL',
+      details: `Invoking PayU S2S verify_payment web service for ${tx.id} in ${env} environment.`
+    });
+
+    let verificationSuccessful = false;
+    let verificationError = '';
+    let isCancelled = false;
+
+    // 1. Authoritative S2S query to PayU verify_payment web service
+    const s2sResult = await queryPayUVerifyPaymentAPI(key, salt, tx.id, env);
+    if (s2sResult.success) {
+      verificationSuccessful = true;
+    } else if (s2sResult.status === 'Cancelled') {
+      verificationSuccessful = false;
+      isCancelled = true;
+      verificationError = s2sResult.error || 'Payment cancelled by customer';
+    } else {
+      // 2. Fallback: If S2S query failed or returned unverified status (e.g. test environment sandbox), check reverse hash if gatewayResponse provided
+      if (gatewayResponse && gatewayResponse.hash) {
+        const { status, txnid, amount, productinfo, firstname, email, hash: receivedHash } = gatewayResponse;
+        const { hash: computedReverseHash, maskedString } = generatePayUReverseHash({
+          salt,
+          status: status || '',
+          udf10: gatewayResponse.udf10 || '',
+          udf9: gatewayResponse.udf9 || '',
+          udf8: gatewayResponse.udf8 || '',
+          udf7: gatewayResponse.udf7 || '',
+          udf6: gatewayResponse.udf6 || '',
+          udf5: gatewayResponse.udf5 || '',
+          udf4: gatewayResponse.udf4 || '',
+          udf3: gatewayResponse.udf3 || '',
+          udf2: gatewayResponse.udf2 || '',
+          udf1: gatewayResponse.udf1 || '',
+          email: email || '',
+          firstname: firstname || '',
+          productinfo: productinfo || '',
+          amount: Number(amount).toFixed(2),
+          txnid: txnid || tx.id,
+          key: gatewayResponse.key || key
+        });
+
+        console.log(`[PayU Callback Verify] Masked Reverse String: ${maskedString}`);
+
+        if (computedReverseHash === (receivedHash || '').toLowerCase() && String(status).toLowerCase() === 'success') {
+          verificationSuccessful = true;
+        } else {
+          verificationSuccessful = false;
+          verificationError = s2sResult.error || "Callback signature verification failed.";
+        }
+      } else if (gatewayResponse && gatewayResponse.simulateCancel) {
+        verificationSuccessful = false;
+        isCancelled = true;
+        verificationError = "Payment session aborted by the customer (Simulated Cancel).";
+      } else if (gatewayResponse && gatewayResponse.simulateFailure) {
+        verificationSuccessful = false;
+        verificationError = "Payment failed.";
+      }
+    }
+
+    if (verificationSuccessful) {
+      tx.status = 'Success';
+      tx.statusHistory.push({ status: 'Success', timestamp: new Date().toISOString(), note: 'Payment verified via S2S/Hash' });
+      tx.logs.push({ timestamp: new Date().toISOString(), action: 'SUCCESS', details: 'Payment successfully verified.' });
+      await saveCollectionDoc('payments', tx);
+      return res.json({ success: true, transaction: tx });
+    } else {
+      if (isCancelled) {
+        tx.status = 'Cancelled';
+        tx.statusHistory.push({ status: 'Cancelled', timestamp: new Date().toISOString(), note: verificationError });
+        tx.logs.push({ timestamp: new Date().toISOString(), action: 'CANCELLED', details: verificationError });
+        await saveCollectionDoc('payments', tx);
+        return res.status(400).json({ success: false, error: verificationError, transaction: tx });
+      }
+      tx.status = 'Failed';
+      tx.statusHistory.push({ status: 'Failed', timestamp: new Date().toISOString(), note: verificationError || 'Verification failed' });
+      tx.logs.push({ timestamp: new Date().toISOString(), action: 'FAILED', details: verificationError || 'Verification failed' });
+      await saveCollectionDoc('payments', tx);
+      return res.status(400).json({ success: false, error: verificationError || 'Payment verification failed', transaction: tx });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to verify payment" });
+  }
+}
+app.post("/api/payment/verify", verifyPayUPayment);
 
 app.get("/api/payment/redirect", async (req, res) => {
   try {
@@ -2746,122 +2891,60 @@ app.get("/api/payment/status/:transactionId", async (req, res) => {
   }
 });
 
-app.post("/api/payment/verify", async (req, res) => {
+async function queryPayUVerifyPaymentAPI(key: string, salt: string, txnid: string, env: string): Promise<{ success: boolean; status: string; rawResponse?: any; error?: string }> {
   try {
-    const { transactionId, gatewayResponse } = req.body;
-    if (!transactionId) {
-      return res.status(400).json({ error: "Missing transactionId" });
-    }
+    const command = 'verify_payment';
+    const hashString = `${key}|${command}|${txnid}|${salt}`;
+    const hash = crypto.createHash('sha512').update(hashString).digest('hex').toLowerCase();
+    
+    const verifyUrl = (env || '').toUpperCase() === 'PRODUCTION'
+      ? 'https://info.payu.in/merchant/postservice.php?form=2'
+      : 'https://test.payu.in/merchant/postservice?form=2';
+    
+    const bodyParams = new URLSearchParams();
+    bodyParams.append('key', key);
+    bodyParams.append('command', command);
+    bodyParams.append('var1', txnid);
+    bodyParams.append('hash', hash);
 
-    const payments = await getCollectionDocs('payments');
-    const tx = payments.find((p: any) => p.id === transactionId);
-    if (!tx) {
-      return res.status(404).json({ error: "Payment transaction not found" });
-    }
-
-    const env = (tx.environment || 'TEST').toUpperCase();
-    const secrets = getPayUSecrets(env);
-    if (!secrets) {
-      return res.status(503).json({ error: `PayU secret credentials are not configured for ${env} environment` });
-    }
-
-    const { key, salt } = secrets;
-
-    tx.logs.push({
-      timestamp: new Date().toISOString(),
-      action: 'GATEWAY_API_CALL',
-      details: `Invoking server-to-server gateway API verification for ${tx.id} in ${env} environment.`
+    const response = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: bodyParams.toString(),
     });
 
-    let verificationSuccessful = true;
-    let verificationError = '';
+    if (!response.ok) {
+      return { success: false, status: 'Failed', error: `HTTP error ${response.status}` };
+    }
 
-    if (gatewayResponse && gatewayResponse.hash) {
-      const { status, txnid, amount, productinfo, firstname, email, hash: receivedHash } = gatewayResponse;
-      const { hash: computedReverseHash, maskedString } = generatePayUReverseHash({
-        salt,
-        status: status || '',
-        udf10: gatewayResponse.udf10 || '',
-        udf9: gatewayResponse.udf9 || '',
-        udf8: gatewayResponse.udf8 || '',
-        udf7: gatewayResponse.udf7 || '',
-        udf6: gatewayResponse.udf6 || '',
-        udf5: gatewayResponse.udf5 || '',
-        udf4: gatewayResponse.udf4 || '',
-        udf3: gatewayResponse.udf3 || '',
-        udf2: gatewayResponse.udf2 || '',
-        udf1: gatewayResponse.udf1 || '',
-        email: email || '',
-        firstname: firstname || '',
-        productinfo: productinfo || '',
-        amount: Number(amount).toFixed(2),
-        txnid: txnid || tx.id,
-        key: gatewayResponse.key || key
-      });
+    const text = await response.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch (_) {
+      return { success: false, status: 'Failed', error: 'Unparseable response from PayU S2S API', rawResponse: text };
+    }
 
-      console.log(`[PayU Callback Verify] Masked Reverse String: ${maskedString}`);
-
-      if (computedReverseHash !== (receivedHash || '').toLowerCase()) {
-        verificationSuccessful = false;
-        verificationError = "Callback signature verification failed. Computed: " + computedReverseHash.slice(0, 8) + "... Received: " + (receivedHash || '').slice(0, 8);
+    const txDetails = json?.transaction_details?.[txnid];
+    if (txDetails) {
+      const payuStatus = (txDetails.unmappedstatus || txDetails.status || '').toString().toLowerCase();
+      if (payuStatus === 'success') {
+        return { success: true, status: 'Success', rawResponse: json };
+      } else if (payuStatus.includes('cancel') || payuStatus === 'usercancelled') {
+        return { success: false, status: 'Cancelled', error: txDetails.error_Message || 'Payment cancelled by customer', rawResponse: json };
+      } else {
+        return { success: false, status: 'Failed', error: txDetails.error_Message || txDetails.msg || `Payment status: ${payuStatus}`, rawResponse: json };
       }
     }
 
-    let isCancelled = false;
-    if (gatewayResponse && gatewayResponse.simulateCancel) {
-      verificationSuccessful = false;
-      isCancelled = true;
-      verificationError = "Payment session aborted by the customer (Simulated Cancel).";
-    } else if (gatewayResponse && gatewayResponse.simulateFailure) {
-      verificationSuccessful = false;
-      verificationError = "Card declined or insufficient funds (Simulated Gateway Error).";
-    }
-
-    if (verificationSuccessful) {
-      tx.status = 'Success';
-      tx.statusHistory.push({
-        status: 'Success',
-        timestamp: new Date().toISOString(),
-        note: `Server-side verification succeeded. Verified with gateway API (${tx.gateway})`
-      });
-      tx.logs.push({
-        timestamp: new Date().toISOString(),
-        action: 'VERIFIED',
-        details: `Payment reference ${tx.transactionReference} verified successfully. Generated digital checkout signature token: ${Buffer.from(tx.id).toString('base64')}`
-      });
-
-      await finalizeSuccessfulPayment(tx);
-    } else {
-      tx.status = isCancelled ? 'Cancelled' : 'Failed';
-      tx.errorMessage = verificationError;
-      tx.statusHistory.push({
-        status: tx.status,
-        timestamp: new Date().toISOString(),
-        note: `Gateway verification resulted in ${tx.status}: ${verificationError}`
-      });
-      tx.logs.push({
-        timestamp: new Date().toISOString(),
-        action: isCancelled ? 'CANCELLED' : 'FAILED',
-        details: `Verification failed/cancelled. error: ${verificationError}`
-      });
-    }
-
-    tx.updatedAt = new Date().toISOString();
-    await saveCollectionDoc('payments', tx);
-
-    const notifyType = tx.status === 'Success' ? 'Success' : tx.status === 'Cancelled' ? 'Cancelled' : 'Failed';
-    triggerAllNotifications(notifyType, tx).catch(err => {
-      console.error("Failed to run triggerAllNotifications:", err);
-    });
-
-    return res.json({
-      success: verificationSuccessful,
-      transaction: tx
-    });
+    return { success: false, status: 'Failed', error: json?.msg || 'Transaction reference not found in PayU verification response', rawResponse: json };
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Failed to verify payment" });
+    console.error('[PayU S2S Verification Exception]:', err);
+    return { success: false, status: 'Failed', error: err.message || 'S2S payment verification request failed' };
   }
-});
+}
 
 app.post("/api/payment/callback/success", async (req, res) => {
   try {
@@ -3313,4 +3396,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.FUNCTION_TARGET && !process.env.FUNCTIONS_EMULATOR) {
+  startServer();
+}
