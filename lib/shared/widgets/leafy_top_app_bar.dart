@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/config/env_config.dart';
 import '../../providers/app_providers.dart';
 
 String _getPlatformAppLogoAsset() {
@@ -252,111 +251,13 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                   ),
                 ),
 
-                // Right Action Buttons: PayU Toggles, Wishlist, Cart
+                // Right Action Buttons: Wishlist, Cart, Orders
                 Flexible(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // PayU Environment Toggle Badge
-                        Builder(builder: (context) {
-                          final payuEnv = ref.watch(payuEnvironmentProvider);
-                          final isTest = payuEnv == 'Test';
-                          return Tooltip(
-                            message: isTest ? 'PayU Test Mode Active' : 'PayU Production Mode Active',
-                            child: InkWell(
-                              onTap: () => ref.read(payuEnvironmentProvider.notifier).toggleEnvironment(),
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: isTest ? Colors.amber.shade800 : AppColors.primaryGreen,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  isTest ? 'TEST' : 'PROD',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                        Consumer(builder: (context, ref, _) {
-                          final payuEnv = ref.watch(payuEnvironmentProvider);
-                          if (payuEnv != 'Test') return const SizedBox.shrink();
-                          final payuEnabled = ref.watch(payuEnabledProvider);
-                          return Tooltip(
-                            message: payuEnabled ? 'Payment is enabled' : 'Payment is disabled - testing mode',
-                            child: InkWell(
-                              onTap: () async {
-                                await ref.read(payuEnabledProvider.notifier).toggle();
-                                final enabledNow = ref.read(payuEnabledProvider);
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text(enabledNow ? 'Payment is enabled' : 'Payment is disabled - testing mode'),
-                                    duration: const Duration(seconds: 2),
-                                  ));
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: payuEnabled ? AppColors.primaryGreen : Colors.grey.shade600,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  payuEnabled ? 'Pay Payment: ON' : 'Pay Payment: OFF',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                        Tooltip(
-                          message: 'Configure Backend API URL (${EnvConfig.baseUrl.isEmpty ? "Default Origin" : EnvConfig.baseUrl})',
-                          child: InkWell(
-                            onTap: () => EnvConfig.showApiConfigDialog(context),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade700,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.api_rounded, color: Colors.white, size: 12),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'API',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
                         IconButton(
                           icon: const Icon(Icons.favorite_border_outlined, color: AppColors.textPrimary, size: 22),
                           onPressed: () => context.push('/wishlist'),

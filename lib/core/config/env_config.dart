@@ -109,19 +109,20 @@ class EnvConfig {
   // Firebase configuration
   static const String firestoreDatabaseId = 'violeafydb';
 
-  // PayU Environment Management ('Test' | 'Production')
+  // PayU Environment Management ('Test' | 'Production') - Defaulted to Production
   static Future<String> getPayUEnvironment() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('payu_environment');
-    if (saved == 'Test' || saved == 'Production') {
-      return saved!;
+    if (saved == 'Production') {
+      return 'Production';
     }
-    return kReleaseMode ? 'Production' : 'Test';
+    await prefs.setString('payu_environment', 'Production');
+    return 'Production';
   }
 
   static Future<void> setPayUEnvironment(String environment) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('payu_environment', environment);
+    await prefs.setString('payu_environment', 'Production');
   }
 
   static Future<void> showApiConfigDialog(BuildContext context) async {

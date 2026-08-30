@@ -412,7 +412,7 @@ final otpLoginProvider = StateNotifierProvider<OtpNotifier, OtpState>((ref) {
 });
 
 class PayUEnvironmentNotifier extends StateNotifier<String> {
-  PayUEnvironmentNotifier() : super(kReleaseMode ? 'Production' : 'Test') {
+  PayUEnvironmentNotifier() : super('Production') {
     _load();
   }
 
@@ -422,15 +422,13 @@ class PayUEnvironmentNotifier extends StateNotifier<String> {
   }
 
   Future<void> toggleEnvironment() async {
-    final nextEnv = state == 'Production' ? 'Test' : 'Production';
-    state = nextEnv;
-    await EnvConfig.setPayUEnvironment(nextEnv);
+    state = 'Production';
+    await EnvConfig.setPayUEnvironment('Production');
   }
 
   Future<void> setEnvironment(String env) async {
-    if (env != 'Test' && env != 'Production') return;
-    state = env;
-    await EnvConfig.setPayUEnvironment(env);
+    state = 'Production';
+    await EnvConfig.setPayUEnvironment('Production');
   }
 }
 
