@@ -96,6 +96,10 @@ class ApiClient {
         final isHtml = contentType.contains('text/html') || response.body.trimLeft().startsWith('<!doctype html');
         if (isHtml) {
           debugPrint('[API Client] $url returned HTML (static web page), trying next fallback...');
+          lastError = ServerException(
+            'The backend API is not available at this address. Configure production API routing.',
+            statusCode: response.statusCode,
+          );
           continue;
         }
 
@@ -134,6 +138,10 @@ class ApiClient {
         final isHtml = contentType.contains('text/html') || response.body.trimLeft().startsWith('<!doctype html');
         if (isHtml) {
           debugPrint('[API Client] $url returned HTML (static web page), trying next fallback...');
+          lastError = ServerException(
+            'The backend API is not available at this address. Configure production API routing.',
+            statusCode: response.statusCode,
+          );
           continue;
         }
 
@@ -169,6 +177,10 @@ class ApiClient {
         final isHtml = contentType.contains('text/html') || response.body.trimLeft().startsWith('<!doctype html');
         if (isHtml) {
           debugPrint('[API Client] $url returned HTML (static web page), trying next fallback...');
+          lastError = ServerException(
+            'The backend API is not available at this address. Configure production API routing.',
+            statusCode: response.statusCode,
+          );
           continue;
         }
 

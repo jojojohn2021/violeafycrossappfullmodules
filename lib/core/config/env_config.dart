@@ -46,9 +46,16 @@ class EnvConfig {
   static List<String> get fallbackBaseUrls {
     final urls = <String>[];
     if (kIsWeb) {
-      urls.add('http://localhost:3000');
-      urls.add('http://127.0.0.1:3000');
-      urls.add(_defaultProductionBaseUrl);
+      final uri = Uri.base;
+      final host = uri.host.toLowerCase();
+      final isLocal = host == 'localhost' || host == '127.0.0.1' || host == '0.0.0.0' || host == '::1';
+      if (isLocal) {
+        urls.add('http://localhost:3000');
+        urls.add('http://127.0.0.1:3000');
+      }
+      if (_defaultProductionBaseUrl.isNotEmpty && _defaultProductionBaseUrl != _currentBaseUrl) {
+        urls.add(_defaultProductionBaseUrl);
+      }
     } else {
       if (defaultTargetPlatform == TargetPlatform.android) {
         urls.add(_defaultAndroidEmulatorBaseUrl);
