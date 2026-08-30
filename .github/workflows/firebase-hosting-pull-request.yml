@@ -13,6 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - run: npm ci || npm install
       - run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
