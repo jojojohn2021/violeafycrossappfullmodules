@@ -12,10 +12,6 @@ class EnvConfig {
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString('custom_api_base_url');
-    if (savedUrl != null && savedUrl.isNotEmpty) {
-      _currentBaseUrl = savedUrl;
-      return;
-    }
 
     if (kIsWeb) {
       // In web browser, we default to the current host origin.
@@ -23,12 +19,30 @@ class EnvConfig {
       final uri = Uri.base;
       final host = uri.host.toLowerCase();
       final isLocal = host == 'localhost' || host == '127.0.0.1' || host == '0.0.0.0' || host == '::1';
+
+      if (savedUrl != null && savedUrl.isNotEmpty) {
+        final savedHost = Uri.tryParse(savedUrl)?.host.toLowerCase() ?? '';
+        final isSavedLocal = savedHost == 'localhost' || savedHost == '127.0.0.1' || savedHost == '0.0.0.0' || savedHost == '::1';
+        // On remote live domain (e.g. www.vamjo.com), purge any stale localhost/127.0.0.1 saved in LocalStorage
+        if (!isLocal && isSavedLocal) {
+          debugPrint('[EnvConfig] Purging stale local API URL ($savedUrl) from browser storage on remote host ($host)');
+          await prefs.remove('custom_api_base_url');
+        } else {
+          _currentBaseUrl = savedUrl;
+          return;
+        }
+      }
+
       if (isLocal && uri.port != 3000) {
         _currentBaseUrl = '${uri.scheme}://${uri.host}:3000';
       } else {
         _currentBaseUrl = '${uri.scheme}://${uri.host}${uri.hasPort ? ":${uri.port}" : ""}';
       }
     } else {
+      if (savedUrl != null && savedUrl.isNotEmpty) {
+        _currentBaseUrl = savedUrl;
+        return;
+      }
       // In mobile apps
       if (kReleaseMode) {
         _currentBaseUrl = _defaultProductionBaseUrl;
@@ -56,12 +70,17 @@ class EnvConfig {
       if (_defaultProductionBaseUrl.isNotEmpty && _defaultProductionBaseUrl != _currentBaseUrl) {
         urls.add(_defaultProductionBaseUrl);
       }
+      // Add Firebase Hosting domain as reliable Cloud Functions fallback for live web
+      if (_currentBaseUrl != 'https://violeafycross.web.app') {
+        urls.add('https://violeafycross.web.app');
+      }
     } else {
       if (defaultTargetPlatform == TargetPlatform.android) {
         urls.add(_defaultAndroidEmulatorBaseUrl);
       }
       urls.add(_defaultDevBaseUrl);
       urls.add(_defaultProductionBaseUrl);
+      urls.add('https://violeafycross.web.app');
     }
     return urls;
   }
