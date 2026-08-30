@@ -11,10 +11,8 @@ import { FieldValue } from "firebase-admin/firestore";
 
 dotenv.config();
 
-export { adminApp, adminAuth, adminDb, adminStorage };
-
 // Example API Endpoint using violeafydb
-export async function getProducts(req: any, res: any) {
+async function getProducts(req: any, res: any) {
   try {
     const snapshot = await adminDb.collection("products").get();
     const products = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
@@ -70,17 +68,19 @@ try {
 }
 
 // Save clean database status file
-try {
-  const statusDir = path.join(process.cwd(), "src");
-  if (!fs.existsSync(statusDir)) {
-    fs.mkdirSync(statusDir, { recursive: true });
-  }
-  fs.writeFileSync(path.join(statusDir, "db-status.json"), JSON.stringify({
-    status: "Connected",
-    provider: "Firebase Admin SDK",
-    databaseId: dbId
-  }, null, 2));
-} catch (e) { }
+if (!process.env.K_SERVICE && !process.env.FUNCTION_TARGET) {
+  try {
+    const statusDir = path.join(process.cwd(), "src");
+    if (!fs.existsSync(statusDir)) {
+      fs.mkdirSync(statusDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(statusDir, "db-status.json"), JSON.stringify({
+      status: "Connected",
+      provider: "Firebase Admin SDK",
+      databaseId: dbId
+    }, null, 2));
+  } catch (e) { }
+}
 
 function normalizePaymentTransaction(tx: any) {
   if (!tx || typeof tx !== 'object') return tx;
@@ -3396,6 +3396,13 @@ async function startServer() {
   });
 }
 
-if (!process.env.FUNCTION_TARGET && !process.env.FUNCTIONS_EMULATOR) {
+const isMainScript = Boolean(
+  process.argv[1] &&
+  !process.argv[1].includes("firebase-functions") &&
+  !process.argv[1].includes("firebase-tools") &&
+  (process.argv[1].endsWith("server.cjs") || process.argv[1].endsWith("server.ts") || process.argv[1].endsWith("server.js"))
+);
+
+if (isMainScript && !process.env.K_SERVICE && !process.env.FUNCTION_TARGET && !process.env.FUNCTIONS_EMULATOR) {
   startServer();
 }
