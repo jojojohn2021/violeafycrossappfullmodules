@@ -43,6 +43,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedAddress = ref.read(selectedAddressProvider);
     _loadAddresses();
   }
 
@@ -74,16 +75,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         );
         return;
       }
-      setState(() {
-        _selectedAddress = savedAddress;
-        _loadAddresses();
-      });
+      _selectAddress(savedAddress);
+      _loadAddresses();
     } finally {
       if (mounted) setState(() => _isAddingAddress = false);
     }
   }
 
-  void _continueToReview(List<SalesProduct> cart) {
+  void _selectAddress(CustomerAddress address) {
+    setState(() => _selectedAddress = address);
+    ref.read(selectedAddressProvider.notifier).state = address;
+  }
+
+  Future<void> _continueToReview(List<SalesProduct> cart) async {
     final address = _selectedAddress;
     if (address == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,14 +95,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
       return;
     }
+
+    ref.read(selectedAddressProvider.notifier).state = address;
+    final res = await ref.read(shoppingRepositoryProvider).getDeliveryCharge(address.pincode);
+    final deliveryFee = res.success ? res.deliveryCharge : 0.0;
     final subtotal = cart.fold<double>(0, (sum, item) => sum + item.price * item.quantity);
+
+    if (!mounted) return;
     context.push(
       '/order-review',
       extra: CheckoutData(
         cart: cart,
         address: address,
         subtotal: subtotal,
-        deliveryFee: 30,
+        deliveryFee: deliveryFee,
       ),
     );
   }
@@ -119,15 +129,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   return const Center(child: CircularProgressIndicator(color: AppColors.primaryGreen));
                 }
                 if (_selectedAddress == null && addresses.isNotEmpty) {
-                  // Use a post-frame callback to avoid side-effects during build
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted && _selectedAddress == null) {
-                      setState(() {
-                        _selectedAddress = addresses.firstWhere(
-                          (address) => address.isDefault,
-                          orElse: () => addresses.first,
-                        );
-                      });
+                      final chosen = addresses.firstWhere(
+                        (address) => address.isDefault,
+                        orElse: () => addresses.first,
+                      );
+                      _selectAddress(chosen);
                     }
                   });
                 }
@@ -147,7 +155,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           ...addresses.map((address) => _AddressTile(
                                 address: address,
                                 selected: _selectedAddress?.id == address.id,
-                                onTap: () => setState(() => _selectedAddress = address),
+                                onTap: () => _selectAddress(address),
                               )),
                           OutlinedButton.icon(
                             onPressed: _addAddress,
@@ -644,13 +652,16 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
 
   Widget _summaryRow(String label, double value, {bool bold = false}) {
     final style = TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: bold ? 17 : 14);
+    final isFreeDelivery = label == 'Delivery Fee' && value == 0;
+    final valueText = isFreeDelivery ? 'Free Delivery (₹0)' : '₹${value.toStringAsFixed(2)}';
+    final valueStyle = isFreeDelivery ? style.copyWith(color: AppColors.primaryGreen, fontWeight: FontWeight.bold) : style;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: style),
-          Text('₹${value.toStringAsFixed(2)}', style: style),
+          Text(valueText, style: valueStyle),
         ],
       ),
     );

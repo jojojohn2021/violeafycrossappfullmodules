@@ -213,6 +213,114 @@ final cartProvider = StateNotifierProvider<CartNotifier, List<SalesProduct>>((re
   return CartNotifier(repo);
 });
 
+// Selected Delivery Address State
+final selectedAddressProvider = StateProvider<CustomerAddress?>((ref) => null);
+
+// Delivery Charge State Model
+class DeliveryChargeState {
+  final double deliveryCharge;
+  final bool ruleFound;
+  final bool isLoading;
+  final bool hasError;
+  final String? errorMessage;
+  final String? pincode;
+
+  const DeliveryChargeState({
+    this.deliveryCharge = 0.0,
+    this.ruleFound = false,
+    this.isLoading = false,
+    this.hasError = false,
+    this.errorMessage,
+    this.pincode,
+  });
+
+  DeliveryChargeState copyWith({
+    double? deliveryCharge,
+    bool? ruleFound,
+    bool? isLoading,
+    bool? hasError,
+    String? errorMessage,
+    String? pincode,
+  }) {
+    return DeliveryChargeState(
+      deliveryCharge: deliveryCharge ?? this.deliveryCharge,
+      ruleFound: ruleFound ?? this.ruleFound,
+      isLoading: isLoading ?? this.isLoading,
+      hasError: hasError ?? this.hasError,
+      errorMessage: errorMessage ?? this.errorMessage,
+      pincode: pincode ?? this.pincode,
+    );
+  }
+}
+
+// Delivery Charge Notifier - Automatically fetches pincode-specific delivery fee from server API
+class DeliveryChargeNotifier extends StateNotifier<DeliveryChargeState> {
+  final ShoppingRepository _repo;
+  final Ref _ref;
+
+  DeliveryChargeNotifier(this._repo, this._ref) : super(const DeliveryChargeState()) {
+    _ref.listen<CustomerAddress?>(selectedAddressProvider, (previous, next) {
+      if (previous?.id != next?.id || previous?.pincode != next?.pincode) {
+        lookupDeliveryCharge(next);
+      }
+    });
+
+    final initialAddr = _ref.read(selectedAddressProvider);
+    if (initialAddr != null) {
+      lookupDeliveryCharge(initialAddr);
+    }
+  }
+
+  Future<void> lookupDeliveryCharge(CustomerAddress? address) async {
+    final pincode = address?.pincode.trim() ?? '';
+
+    if (address == null || pincode.isEmpty) {
+      state = const DeliveryChargeState(
+        deliveryCharge: 0.0,
+        ruleFound: false,
+        isLoading: false,
+        hasError: false,
+        pincode: null,
+      );
+      return;
+    }
+
+    state = DeliveryChargeState(
+      deliveryCharge: 0.0,
+      ruleFound: false,
+      isLoading: true,
+      hasError: false,
+      pincode: pincode,
+    );
+
+    final result = await _repo.getDeliveryCharge(pincode);
+
+    if (result.success) {
+      state = DeliveryChargeState(
+        deliveryCharge: result.deliveryCharge,
+        ruleFound: result.ruleFound,
+        isLoading: false,
+        hasError: false,
+        pincode: pincode,
+      );
+    } else {
+      state = DeliveryChargeState(
+        deliveryCharge: 0.0,
+        ruleFound: false,
+        isLoading: false,
+        hasError: true,
+        errorMessage: result.errorMessage ?? 'Failed to lookup delivery fee',
+        pincode: pincode,
+      );
+    }
+  }
+}
+
+final deliveryChargeProvider = StateNotifierProvider<DeliveryChargeNotifier, DeliveryChargeState>((ref) {
+  final repo = ref.watch(shoppingRepositoryProvider);
+  return DeliveryChargeNotifier(repo, ref);
+});
+
 // OTP Login State & Notifier (Persists state across deep link redirects)
 class OtpState {
   final String phone;

@@ -1136,6 +1136,45 @@ class ShoppingRepository {
     }
   }
 
+  // Fetch Pincode-specific Delivery Charge from Authoritative Server API
+  Future<DeliveryChargeResult> getDeliveryCharge(String pincode) async {
+    final cleanCode = pincode.trim();
+    if (cleanCode.isEmpty) {
+      return const DeliveryChargeResult(
+        success: true,
+        pincode: '',
+        ruleFound: false,
+        deliveryCharge: 0.0,
+      );
+    }
+
+    try {
+      debugPrint('[ShoppingRepository] Looking up delivery charge for pincode: $cleanCode');
+      final response = await _apiClient.get('/api/delivery-charges/$cleanCode');
+      if (response is Map<String, dynamic>) {
+        return DeliveryChargeResult.fromJson(response);
+      } else if (response is Map) {
+        return DeliveryChargeResult.fromJson(Map<String, dynamic>.from(response));
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error looking up delivery charge for pincode $cleanCode: $e');
+      return DeliveryChargeResult(
+        success: false,
+        pincode: cleanCode,
+        ruleFound: false,
+        deliveryCharge: 0.0,
+        errorMessage: e.toString(),
+      );
+    }
+    return DeliveryChargeResult(
+      success: false,
+      pincode: cleanCode,
+      ruleFound: false,
+      deliveryCharge: 0.0,
+      errorMessage: 'Invalid API response format',
+    );
+  }
+
   // Fetch Wallet details from backend
   Future<Wallet?> getWallet() async {
     try {

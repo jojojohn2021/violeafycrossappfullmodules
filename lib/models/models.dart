@@ -1783,4 +1783,31 @@ class ProductBrandOwner {
   };
 }
 
+class DeliveryChargeResult {
+  final bool success;
+  final String pincode;
+  final bool ruleFound;
+  final double deliveryCharge;
+  final String? errorMessage;
+
+  const DeliveryChargeResult({
+    required this.success,
+    required this.pincode,
+    required this.ruleFound,
+    required this.deliveryCharge,
+    this.errorMessage,
+  });
+
+  factory DeliveryChargeResult.fromJson(Map<String, dynamic> json) {
+    return DeliveryChargeResult(
+      success: json['success'] == true,
+      pincode: (json['pincode'] ?? '').toString(),
+      ruleFound: json['ruleFound'] == true,
+      deliveryCharge: (json['deliveryCharge'] as num?)?.toDouble() ?? 0.0,
+      errorMessage: json['error']?.toString(),
+    );
+  }
+}
+
+
 

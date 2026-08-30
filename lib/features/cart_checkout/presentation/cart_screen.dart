@@ -20,8 +20,36 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   bool _couponApplied = false;
   double _couponDiscount = 0.0;
   String? _appliedCouponCode;
+  bool _isNavigating = false;
 
-  void _applyCoupon(List<Coupon> availableCoupons, double subtotal) {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initAddress();
+    });
+  }
+
+  Future<void> _initAddress() async {
+    final selected = ref.read(selectedAddressProvider);
+    if (selected == null) {
+      final user = firebase_auth.FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        try {
+          final addresses = await ref.read(shoppingRepositoryProvider).getCustomerAddresses(user.uid);
+          if (addresses.isNotEmpty && mounted) {
+            final defaultAddr = addresses.firstWhere(
+              (a) => a.isDefault,
+              orElse: () => addresses.first,
+            );
+            ref.read(selectedAddressProvider.notifier).state = defaultAddr;
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  void _applyCoupon(List<Coupon> availableCoupons, double subtotal, double currentDeliveryFee) {
     final code = _couponController.text.trim().toUpperCase();
     Coupon? match;
     for (final coupon in availableCoupons) {
@@ -53,7 +81,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         }
         break;
       case 'free_shipping':
-        discount = 30.0; // matches the flat deliveryFee below
+        discount = currentDeliveryFee;
         break;
       default:
         discount = match.value;
@@ -69,8 +97,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  bool _isNavigating = false;
-
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
@@ -78,8 +104,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final couponsAsync = ref.watch(couponsProvider);
     final availableCoupons = couponsAsync.value ?? const <Coupon>[];
 
+    final selectedAddress = ref.watch(selectedAddressProvider);
+    final deliveryChargeState = ref.watch(deliveryChargeProvider);
+    final deliveryFee = deliveryChargeState.deliveryCharge;
+
     final subtotal = cartNotifier.totalPrice;
-    const deliveryFee = 30.0;
     final totalPayable = (subtotal + deliveryFee - _couponDiscount).clamp(0.0, double.infinity);
     final gstCartSummary = GstCalculator.calculateCartSummary(cart);
 
@@ -248,7 +277,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                     ),
                                     const SizedBox(width: 10),
                                     ElevatedButton(
-                                      onPressed: () => _applyCoupon(availableCoupons, subtotal),
+                                      onPressed: () => _applyCoupon(availableCoupons, subtotal, deliveryFee),
                                       child: Text(_couponApplied ? 'APPLIED' : 'APPLY'),
                                     ),
                                   ],
@@ -261,6 +290,50 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
+
+                          // Delivery Address Selection Summary
+                          Container(
+                            color: AppColors.card,
+                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Row(
+                                      children: [
+                                        Icon(Icons.location_on_outlined, size: 20, color: AppColors.primaryGreen),
+                                        SizedBox(width: 6),
+                                        Text('Delivery Address', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      ],
+                                    ),
+                                    TextButton(
+                                      onPressed: () => context.push('/checkout'),
+                                      child: Text(selectedAddress == null ? 'SELECT' : 'CHANGE'),
+                                    ),
+                                  ],
+                                ),
+                                if (selectedAddress != null) ...[
+                                  Text(
+                                    '${selectedAddress.name} (${selectedAddress.pincode})',
+                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  ),
+                                  Text(
+                                    '${selectedAddress.addressLine}, ${selectedAddress.city}, ${selectedAddress.state}',
+                                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                  ),
+                                ] else ...[
+                                  const Text(
+                                    'No address selected. Delivery fee defaults to Free Delivery (₹0).',
+                                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+
                         ],
 
                         // Payment Summary Breakdown
@@ -300,7 +373,20 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('Delivery Fee', style: TextStyle(color: AppColors.textSecondary)),
-                                  Text('₹${deliveryFee.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  if (deliveryChargeState.isLoading)
+                                    const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen),
+                                    )
+                                  else
+                                    Text(
+                                      deliveryFee == 0 ? 'Free Delivery' : '₹${deliveryFee.toStringAsFixed(0)}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: deliveryFee == 0 ? AppColors.primaryGreen : AppColors.textPrimary,
+                                      ),
+                                    ),
                                 ],
                               ),
                               if (_couponDiscount > 0) ...[

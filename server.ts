@@ -514,6 +514,63 @@ app.get("/api/data/:collectionName", async (req, res) => {
   }
 });
 
+// Authoritative Delivery Charge Helper and API
+export async function getDeliveryChargeDetailsForPincode(pincode: string): Promise<{ charge: number; ruleFound: boolean }> {
+  const cleanPincode = (pincode || '').trim();
+  if (!cleanPincode) {
+    return { charge: 0, ruleFound: false };
+  }
+
+  try {
+    const deliveryDocs = await getCollectionDocs('delivery_charges');
+    if (Array.isArray(deliveryDocs) && deliveryDocs.length > 0) {
+      const match = deliveryDocs.find((doc: any) => {
+        const docPincode = String(doc.pincode ?? doc.pin_code ?? doc.pinCode ?? doc.zipcode ?? '').trim();
+        if (docPincode.toLowerCase() === 'default') return false;
+        
+        const status = String(doc.status ?? doc.state ?? 'Active').toLowerCase();
+        const isActive = doc.isActive !== false && status !== 'inactive' && status !== 'disabled';
+        
+        return isActive && docPincode === cleanPincode;
+      });
+
+      if (match) {
+        const rawCharge = match.charge ?? match.deliveryCharge ?? match.delivery_charge ?? match.amount ?? match.fee ?? 0;
+        const numCharge = Number(rawCharge);
+        return {
+          charge: isNaN(numCharge) ? 0 : Math.max(0, numCharge),
+          ruleFound: true
+        };
+      }
+    }
+  } catch (err) {
+    console.error("[VIO-FIRESTORE] Error searching delivery_charges table:", err);
+    throw err;
+  }
+
+  return { charge: 0, ruleFound: false };
+}
+
+app.get(["/api/delivery-charges/:pincode", "/api/delivery-charges"], async (req, res) => {
+  try {
+    const pincode = req.params.pincode || req.query.pincode;
+    const cleanPincode = String(pincode || '').trim();
+    if (!cleanPincode) {
+      return res.status(400).json({ success: false, error: "Pincode is required" });
+    }
+    const { charge, ruleFound } = await getDeliveryChargeDetailsForPincode(cleanPincode);
+    return res.json({
+      success: true,
+      pincode: cleanPincode,
+      ruleFound,
+      deliveryCharge: charge
+    });
+  } catch (err: any) {
+    console.error("[VIO-FIRESTORE] Error handling delivery charge lookup:", err);
+    return res.status(500).json({ success: false, error: err.message || "Failed to lookup delivery charge" });
+  }
+});
+
 // Alias Routes for direct endpoints
 app.get("/api/products", async (req, res) => {
   try {
@@ -2474,7 +2531,12 @@ export async function createPayUPayment(req: any, res: any) {
       const unitPrice = Number(product.offerPrice ?? product.onlinePrice ?? 0);
       return sum + unitPrice * Number(item.quantity || 0);
     }, 0);
-    const secureAmount = Number((secureSubtotal + 30).toFixed(2));
+
+    const shippingAddressObj = orderData.shippingAddress || orderData.address || {};
+    const shippingPincodeVal = typeof shippingAddressObj === 'object' ? String(shippingAddressObj.pincode || '').trim() : '';
+    const { charge: authoritativeDeliveryCharge } = await getDeliveryChargeDetailsForPincode(shippingPincodeVal);
+
+    const secureAmount = Number((secureSubtotal + authoritativeDeliveryCharge).toFixed(2));
     if (Math.abs(secureAmount - Number(orderData.totalValue || 0)) > 0.01) {
       return res.status(400).json({ error: "Order total could not be validated" });
     }
