@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../../core/config/env_config.dart';
 import '../../../core/network/api_client.dart';
-import '../presentation/payu_webview_screen.dart';
+import '../presentation/razorpay_checkout_screen.dart';
 import 'payment_types.dart';
 
 export 'payment_types.dart';
 
-/// Centralized payment orchestration abstraction.
+/// Server-Authoritative Razorpay Payment Orchestrator.
 ///
-/// Creates a transaction against the server-configured PayU gateway (Test or Production)
-/// and launches PayU Hosted Checkout using in-app WebView on mobile or web redirect on Flutter Web.
+/// 1. Requests Razorpay payment order creation from VioleafyCross backend.
+/// 2. Launches Razorpay Checkout Interface.
+/// 3. Sends payment signature and identifiers to server for authoritative verification.
 class PaymentOrchestrator {
   final ApiClient _apiClient;
 
@@ -23,101 +21,73 @@ class PaymentOrchestrator {
     BuildContext? context,
     bool payuEnabled = true,
   }) async {
-    if (!payuEnabled) {
-      debugPrint('[PaymentOrchestrator] PayU testing toggle is OFF - bypassing PayU ($environment).');
-      return _bypassCheckout(orderData, environment);
+    debugPrint('[PaymentOrchestrator] Requesting Razorpay order creation from server ($environment).');
+    
+    final orderRes = await _apiClient.post('/api/payment/razorpay/create-order', {
+      'orderData': orderData,
+      'environment': environment,
+    });
+
+    if (orderRes is! Map || orderRes['success'] != true) {
+      throw Exception('Failed to create payment order on server.');
     }
 
-    debugPrint('[PaymentOrchestrator] Starting payment with server-configured PayU gateway ($environment).');
-    final txn = await _initiate(orderData, environment);
-    final txnid = txn['txnid'].toString();
-
-    if (kIsWeb) {
-      return WebRedirectPaymentStrategy.launch(txnid);
-    }
+    final orderId = orderRes['orderId']?.toString() ?? '';
+    final keyId = orderRes['keyId']?.toString() ?? '';
+    final amount = (orderRes['amount'] as num?)?.toInt() ?? 0;
+    final currency = orderRes['currency']?.toString() ?? 'INR';
+    final txnid = orderRes['txnid']?.toString() ?? orderData['id']?.toString() ?? '';
 
     if (context != null && context.mounted) {
-      final res = await PayUWebViewScreen.start(context, txnid);
-      if (res != null && res.outcome != PaymentOutcome.initFailed) {
-        return await verifyTransaction(txnid);
+      final callbackData = await RazorpayCheckoutScreen.start(
+        context,
+        orderId: orderId,
+        keyId: keyId,
+        amount: amount,
+        currency: currency,
+        transactionId: txnid,
+        customerName: (orderData['customerName'] ?? 'Customer').toString(),
+        customerEmail: (orderData['customerEmail'] ?? '').toString(),
+        customerMobile: (orderData['customerMobile'] ?? '').toString(),
+      );
+
+      if (callbackData != null && callbackData['outcome'] == PaymentOutcome.success) {
+        return await verifyRazorpayPayment(
+          transactionId: txnid,
+          razorpayOrderId: callbackData['razorpay_order_id'] ?? orderId,
+          razorpayPaymentId: callbackData['razorpay_payment_id'] ?? '',
+          razorpaySignature: callbackData['razorpay_signature'] ?? '',
+        );
       }
-      return res ?? PaymentResult(outcome: PaymentOutcome.cancelled, transactionId: txnid);
+
+      final outcome = (callbackData?['outcome'] as PaymentOutcome?) ?? PaymentOutcome.cancelled;
+      return PaymentResult(outcome: outcome, transactionId: txnid);
     }
 
-    return WebRedirectPaymentStrategy.launch(txnid);
+    return PaymentResult(outcome: PaymentOutcome.failed, transactionId: txnid);
   }
 
-  Future<PaymentResult> verifyTransaction(String transactionId) async {
+  Future<PaymentResult> verifyRazorpayPayment({
+    required String transactionId,
+    required String razorpayOrderId,
+    required String razorpayPaymentId,
+    required String razorpaySignature,
+  }) async {
     try {
-      final response = await _apiClient.post('/api/payment/verify', {
+      final response = await _apiClient.post('/api/payment/razorpay/verify', {
         'transactionId': transactionId,
+        'razorpay_order_id': razorpayOrderId,
+        'razorpay_payment_id': razorpayPaymentId,
+        'razorpay_signature': razorpaySignature,
       });
+
       if (response is Map && response['success'] == true) {
         return PaymentResult(outcome: PaymentOutcome.success, transactionId: transactionId);
       }
-      final tx = response is Map && response['transaction'] is Map ? response['transaction'] : {};
-      final status = (tx['status'] ?? '').toString();
-      if (status == 'Cancelled') {
-        return PaymentResult(outcome: PaymentOutcome.cancelled, transactionId: transactionId);
-      }
       return PaymentResult(outcome: PaymentOutcome.failed, transactionId: transactionId);
     } catch (e) {
-      debugPrint('[PaymentOrchestrator] Server verification exception: $e');
+      debugPrint('[PaymentOrchestrator] Server Razorpay verification exception: $e');
       return PaymentResult(outcome: PaymentOutcome.failed, transactionId: transactionId);
     }
   }
-
-  /// Testing-only path: never contacts PayU. The backend re-validates that PAYU_ENABLED is
-  /// false and the environment is not Production before running the same successful-payment
-  /// processing used after a genuine PayU success.
-  Future<PaymentResult> _bypassCheckout(Map<String, dynamic> orderData, String environment) async {
-    final response = await _apiClient.post('/api/payment/bypass-checkout', {
-      'orderData': orderData,
-      'environment': environment,
-    });
-    if (response is! Map || response['success'] != true) {
-      throw Exception('Payment testing bypass is unavailable.');
-    }
-    final result = Map<String, dynamic>.from(response);
-    final txnid = result['txnid']?.toString();
-    if (txnid == null || txnid.isEmpty) {
-      throw Exception('Payment testing bypass did not return a transaction id.');
-    }
-    return PaymentResult(outcome: PaymentOutcome.success, transactionId: txnid);
-  }
-
-  Future<Map<String, dynamic>> _initiate(Map<String, dynamic> orderData, String environment) async {
-    final response = await _apiClient.post('/api/payment/initiate', {
-      'orderData': orderData,
-      'paymentMethod': 'UPI',
-      'gateway': 'PayU',
-      'environment': environment,
-    });
-    if (response is! Map) {
-      throw Exception('Payment transaction was not created.');
-    }
-    final result = Map<String, dynamic>.from(response);
-    final txnid = result['txnid']?.toString();
-    if (txnid == null || txnid.isEmpty) {
-      throw Exception('Payment transaction was not created.');
-    }
-    return result;
-  }
 }
-
-/// Reuses the existing PayU hosted web-redirect checkout flow unchanged.
-class WebRedirectPaymentStrategy {
-  static Future<PaymentResult> launch(String transactionId) async {
-    final launched = await launchUrl(
-      Uri.parse('${EnvConfig.baseUrl}/api/payment/redirect?transactionId=$transactionId'),
-      mode: LaunchMode.externalApplication,
-    );
-    if (!launched) {
-      throw Exception('Unable to open PayU payment.');
-    }
-    // Result is determined later out-of-app; PayU's callback redirects back into
-    // the existing /payment-result route once the server verifies the transaction.
-    return PaymentResult(outcome: PaymentOutcome.launchedExternally, transactionId: transactionId);
-  }
-}
-

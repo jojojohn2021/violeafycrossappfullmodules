@@ -11,6 +11,7 @@ import '../../../../core/config/env_config.dart';
 import '../../../../core/utils/gst_calculator.dart';
 import '../../../../models/models.dart';
 import '../../../../providers/app_providers.dart';
+import '../../../../core/config/compliance_config.dart';
 import '../domain/payment_orchestrator.dart';
 
 class CheckoutData {
@@ -639,7 +640,70 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
           ],
           const Divider(height: 24),
           _summaryRow('Grand Total', data.total, bold: true),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          // Mandatory Checkout Policy Disclosure
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.secondaryBackground,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Policy Acknowledgement & Terms',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 4),
+                RichText(
+                  text: TextSpan(
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.4),
+                    children: [
+                      const TextSpan(text: 'By continuing with your order, you agree to our '),
+                      WidgetSpan(
+                        child: GestureDetector(
+                          onTap: () => context.push(ComplianceConfig.termsPath),
+                          child: const Text('Terms & Conditions', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                      const TextSpan(text: ' and acknowledge our '),
+                      WidgetSpan(
+                        child: GestureDetector(
+                          onTap: () => context.push(ComplianceConfig.privacyPolicyPath),
+                          child: const Text('Privacy', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                      const TextSpan(text: ', '),
+                      WidgetSpan(
+                        child: GestureDetector(
+                          onTap: () => context.push(ComplianceConfig.shippingPolicyPath),
+                          child: const Text('Shipping', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                      const TextSpan(text: ', '),
+                      WidgetSpan(
+                        child: GestureDetector(
+                          onTap: () => context.push(ComplianceConfig.cancellationPolicyPath),
+                          child: const Text('Cancellation', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                      const TextSpan(text: ', and '),
+                      WidgetSpan(
+                        child: GestureDetector(
+                          onTap: () => context.push(ComplianceConfig.returnRefundPolicyPath),
+                          child: const Text('Return & Refund', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                      const TextSpan(text: ' policies.'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _isStartingPayment ? null : _startPayment,
             icon: _isStartingPayment ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.lock_outline),

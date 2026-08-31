@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/app_providers.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/config/compliance_config.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -214,9 +216,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const Divider(height: 1, indent: 56),
                     _buildListTile(
                       icon: Icons.support_agent_outlined,
-                      title: 'Help & Support',
-                      subtitle: 'FAQs, Live Chat, Call Us',
-                      onTap: () {},
+                      title: 'Help & Support / Contact Us',
+                      subtitle: 'Contact support, grievance & business details',
+                      onTap: () => context.push(ComplianceConfig.contactUsPath),
                     ),
                   ],
                 ),
@@ -224,30 +226,93 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
               const SizedBox(height: 16),
 
-              // Logout Button
+              // Legal & Store Policies Card
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  children: [
+                    _buildListTile(
+                      icon: Icons.privacy_tip_outlined,
+                      title: 'Privacy Policy',
+                      subtitle: 'How we collect, protect & process your data',
+                      onTap: () => context.push(ComplianceConfig.privacyPolicyPath),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _buildListTile(
+                      icon: Icons.description_outlined,
+                      title: 'Terms & Conditions',
+                      subtitle: 'Account terms, usage & store policies',
+                      onTap: () => context.push(ComplianceConfig.termsPath),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _buildListTile(
+                      icon: Icons.local_shipping_outlined,
+                      title: 'Shipping & Delivery Policy',
+                      subtitle: 'Coverage, timelines & pincode delivery fees',
+                      onTap: () => context.push(ComplianceConfig.shippingPolicyPath),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _buildListTile(
+                      icon: Icons.cancel_outlined,
+                      title: 'Cancellation Policy',
+                      subtitle: 'Order cancellation conditions & procedures',
+                      onTap: () => context.push(ComplianceConfig.cancellationPolicyPath),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _buildListTile(
+                      icon: Icons.assignment_return_outlined,
+                      title: 'Return & Refund Policy',
+                      subtitle: 'Eligibility, inspection & Razorpay refund process',
+                      onTap: () => context.push(ComplianceConfig.returnRefundPolicyPath),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Account Controls (Logout & Account Deletion)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await firebase_auth.FirebaseAuth.instance.signOut();
-                      ref.invalidate(salesOrdersProvider);
-                      ref.invalidate(walletProvider);
-                      ref.invalidate(currentUserCustomerProvider);
-                      ref.invalidate(referralInfoProvider);
-                      ref.invalidate(commissionHistoryProvider);
-                      if (context.mounted) {
-                        context.go('/');
-                      }
-                    },
-                    icon: const Icon(Icons.logout, color: AppColors.error, size: 18),
-                    label: const Text('Log Out', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.error),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          await firebase_auth.FirebaseAuth.instance.signOut();
+                          ref.invalidate(salesOrdersProvider);
+                          ref.invalidate(walletProvider);
+                          ref.invalidate(currentUserCustomerProvider);
+                          ref.invalidate(referralInfoProvider);
+                          ref.invalidate(commissionHistoryProvider);
+                          if (context.mounted) {
+                            context.go('/');
+                          }
+                        },
+                        icon: const Icon(Icons.logout, color: AppColors.error, size: 18),
+                        label: const Text('Log Out', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.error),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => _showAccountDeletionDialog(context),
+                      icon: const Icon(Icons.delete_forever, color: AppColors.textMuted, size: 16),
+                      label: const Text(
+                        'Request Account & Data Deletion',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12, decoration: TextDecoration.underline),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -257,6 +322,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showAccountDeletionDialog(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account & Personal Data'),
+        content: const Text(
+          'Are you sure you want to delete your account? This action will permanently remove your profile, saved addresses, and active login sessions.\n\nLegally required tax invoices and financial order history will be retained on the server as mandated by Indian tax regulations.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('DELETE MY ACCOUNT'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        final apiClient = ApiClient();
+        final user = firebase_auth.FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await apiClient.post('/api/account/delete', {
+            'uid': user.uid,
+          });
+        }
+        await firebase_auth.FirebaseAuth.instance.signOut();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Account deleted successfully.')),
+        );
+        context.go('/');
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to delete account: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildListTile({

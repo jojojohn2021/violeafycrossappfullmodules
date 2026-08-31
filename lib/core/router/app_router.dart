@@ -17,6 +17,7 @@ import '../../features/orders/presentation/orders_screen.dart';
 import '../../features/orders/presentation/invoice_screen.dart';
 import '../../features/profile/presentation/delivery_addresses_screen.dart';
 import '../../features/auth/presentation/otp_login_screen.dart';
+import '../../features/legal/presentation/policy_screens.dart';
 import '../../models/models.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -205,12 +206,36 @@ final appRouter = GoRouter(
         redirectTo: state.uri.queryParameters['redirect'] ?? '/',
       ),
     ),
-    // Firebase Auth reCAPTCHA fallback web handler route
-    // Just build the login screen. The SDK will handle the result automatically.
+    // Mandatory Customer Policy Routes
     GoRoute(
-      path: '/__/auth/handler',
+      path: '/privacy-policy',
       parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => const OtpLoginScreen(),
+      builder: (context, state) => const PrivacyPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/terms-and-conditions',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const TermsAndConditionsScreen(),
+    ),
+    GoRoute(
+      path: '/shipping-and-delivery-policy',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ShippingPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/cancellation-policy',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const CancellationPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/return-and-refund-policy',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ReturnRefundPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/contact-us',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ContactUsScreen(),
     ),
   ],
 );
