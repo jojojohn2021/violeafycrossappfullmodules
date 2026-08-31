@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { onRequest } from "firebase-functions/v2/https";
+import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import { adminApp, adminAuth, adminDb, adminStorage } from "./firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { complianceConfig } from "./src/config/complianceConfig";
@@ -1978,21 +1979,61 @@ async function triggerAllNotifications(type: 'Success' | 'Failed' | 'Cancelled',
   }
 }
 
+let secretManagerClient: SecretManagerServiceClient | null = null;
+const secretCache = new Map<string, string>();
+
+async function getSecretFromGCP(secretName: string): Promise<string | null> {
+  if (secretCache.has(secretName)) {
+    return secretCache.get(secretName)!;
+  }
+  try {
+    if (!secretManagerClient) {
+      secretManagerClient = new SecretManagerServiceClient();
+    }
+    const projectId = process.env.VIO_FIREBASE_PROJECT_ID || process.env.GCP_PROJECT || 'violeafybasket';
+    const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
+    const [version] = await secretManagerClient.accessSecretVersion({ name });
+    const secretValue = version.payload?.data?.toString() || null;
+    if (secretValue) {
+      secretCache.set(secretName, secretValue);
+      return secretValue;
+    }
+  } catch (err: any) {
+    console.log(`[SecretManager] Secret "${secretName}" not found or unaccessible in GCP: ${err.message}`);
+  }
+  return null;
+}
+
 // Razorpay Credentials Helper (Google Cloud Secret Manager / Environment Bindings)
-export function getRazorpayCredentials(environment?: string): { keyId: string; keySecret: string } {
+export async function getRazorpayCredentials(environment?: string): Promise<{ keyId: string; keySecret: string }> {
   const envUpper = (environment || 'TEST').toUpperCase();
   const isLive = envUpper === 'LIVE' || envUpper === 'PRODUCTION';
 
   let keyId = isLive
-    ? (process.env.RAZORPAY_LIVE_KEY_ID || complianceConfig.razorpay.keyId || process.env.RAZORPAY_KEY_ID || '').trim()
-    : (process.env.RAZORPAY_TEST_KEY_ID || complianceConfig.razorpay.keyId || process.env.RAZORPAY_KEY_ID || '').trim();
+    ? (process.env.RAZORPAY_LIVE_KEY_ID || process.env.RAZORPAY_KEY_ID || '').trim()
+    : (process.env.RAZORPAY_TEST_KEY_ID || process.env.RAZORPAY_KEY_ID || '').trim();
 
   let keySecret = isLive
-    ? (process.env.RAZORPAY_LIVE_KEY_SECRET || complianceConfig.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET || '').trim()
-    : (process.env.RAZORPAY_TEST_KEY_SECRET || complianceConfig.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
+    ? (process.env.RAZORPAY_LIVE_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').trim()
+    : (process.env.RAZORPAY_TEST_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').trim();
 
-  if (!keyId) keyId = (process.env.RAZORPAY_KEY_ID || complianceConfig.razorpay.keyId || 'rzp_test_VioleafyKey').trim();
-  if (!keySecret) keySecret = (process.env.RAZORPAY_KEY_SECRET || complianceConfig.razorpay.keySecret || '').trim();
+  // Strip out dummy key strings
+  if (keyId.includes('VioleafyKey') || keyId.includes('VioleafyDefaultKeyId')) {
+    keyId = '';
+  }
+
+  // Attempt Google Cloud Secret Manager fallback if not in env
+  if (!keyId) {
+    const secretName = isLive ? 'RAZORPAY_LIVE_KEY_ID' : 'RAZORPAY_TEST_KEY_ID';
+    const fetched = await getSecretFromGCP(secretName);
+    if (fetched) keyId = fetched.trim();
+  }
+
+  if (!keySecret) {
+    const secretName = isLive ? 'RAZORPAY_LIVE_KEY_SECRET' : 'RAZORPAY_TEST_KEY_SECRET';
+    const fetched = await getSecretFromGCP(secretName);
+    if (fetched) keySecret = fetched.trim();
+  }
 
   return { keyId, keySecret };
 }
@@ -2368,37 +2409,49 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
     const amountInPaise = Math.round(finalAmount * 100);
     const transactionId = orderData.id;
 
-    const { keyId, keySecret } = getRazorpayCredentials(environment);
+    const { keyId, keySecret } = await getRazorpayCredentials(environment);
+
+    if (!keyId || keyId.length < 5 || keyId.includes('Violeafy')) {
+      console.error("[Razorpay API] Invalid or missing Razorpay Key ID:", keyId);
+      return res.status(400).json({
+        error: "Razorpay Payment Gateway credentials not configured. Please set RAZORPAY_TEST_KEY_ID and RAZORPAY_TEST_KEY_SECRET in .env or Google Cloud Secret Manager."
+      });
+    }
 
     let razorpayOrderId = `order_rzp_${Date.now()}`;
 
-    if (keySecret && keySecret.length > 5 && keyId && !keyId.includes('VioleafyKey')) {
-      try {
-        const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
-        const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": authHeader
-          },
-          body: JSON.stringify({
-            amount: amountInPaise,
-            currency: "INR",
-            receipt: transactionId,
-            notes: {
-              customerEmail: orderData.customerEmail || "",
-              customerName: orderData.customerName || ""
-            }
-          })
-        });
+    try {
+      const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+      const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader
+        },
+        body: JSON.stringify({
+          amount: amountInPaise,
+          currency: "INR",
+          receipt: transactionId,
+          notes: {
+            customerEmail: orderData.customerEmail || "",
+            customerName: orderData.customerName || ""
+          }
+        })
+      });
 
-        if (rzpResponse.ok) {
-          const rzpData: any = await rzpResponse.json();
-          razorpayOrderId = rzpData.id;
-        }
-      } catch (rzpErr) {
-        console.error("[Razorpay API] Error creating Razorpay Order, falling back to server-side ID:", rzpErr);
+      if (rzpResponse.ok) {
+        const rzpData: any = await rzpResponse.json();
+        razorpayOrderId = rzpData.id;
+      } else {
+        const errText = await rzpResponse.text();
+        console.error("[Razorpay API] Error creating Razorpay Order from API:", rzpResponse.status, errText);
+        return res.status(rzpResponse.status).json({
+          error: `Razorpay Order creation failed (${rzpResponse.status}): ${errText}`
+        });
       }
+    } catch (rzpErr: any) {
+      console.error("[Razorpay API] Exception creating Razorpay Order:", rzpErr);
+      return res.status(500).json({ error: `Razorpay API connection error: ${rzpErr.message}` });
     }
 
     const tx = {
@@ -2474,7 +2527,7 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
     }
 
     const env = tx.environment || 'Test';
-    const { keyId, keySecret } = getRazorpayCredentials(env);
+    const { keyId, keySecret } = await getRazorpayCredentials(env);
 
     // 1. HMAC SHA256 Signature Verification
     let signatureValid = false;
