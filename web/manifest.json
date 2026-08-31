@@ -1,11 +1,11 @@
 {
-    "name": "leafy_webapp",
-    "short_name": "leafy_webapp",
+    "name": "VioleafyCross",
+    "short_name": "VioleafyCross",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "VioleafyCross - Authentic Online Store",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
