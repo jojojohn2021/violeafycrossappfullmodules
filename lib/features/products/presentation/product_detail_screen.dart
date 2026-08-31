@@ -226,17 +226,21 @@ class ProductDetailScreen extends ConsumerWidget {
                                 children: [
                                   Row(
                                     children: [
-                                      Icon(Icons.local_shipping_outlined, color: AppColors.primaryGreen, size: 20),
+                                      Icon(Icons.verified_outlined, color: AppColors.primaryGreen, size: 20),
                                       SizedBox(width: 10),
-                                      Text('Same Day Express Delivery', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                      Expanded(
+                                        child: Text('Best Quality Products', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                      ),
                                     ],
                                   ),
                                   SizedBox(height: 8),
                                   Row(
                                     children: [
-                                      Icon(Icons.verified_outlined, color: AppColors.primaryGreen, size: 20),
+                                      Icon(Icons.eco_outlined, color: AppColors.primaryGreen, size: 20),
                                       SizedBox(width: 10),
-                                      Text('100% Quality Guaranteed or Instant Refund', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                      Expanded(
+                                        child: Text('Organic And Authentic Direct Sourcing', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                      ),
                                     ],
                                   ),
                                 ],
