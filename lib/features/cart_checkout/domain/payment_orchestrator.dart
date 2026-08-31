@@ -1,14 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
 import '../presentation/razorpay_checkout_screen.dart';
 import 'payment_types.dart';
+import 'razorpay_checkout_helper.dart';
 
 export 'payment_types.dart';
 
 /// Server-Authoritative Razorpay Payment Orchestrator.
 ///
 /// 1. Requests Razorpay payment order creation from VioleafyCross backend.
-/// 2. Launches Razorpay Checkout Interface.
+/// 2. Launches Razorpay Checkout Interface (Web JS Modal on Web, WebView Screen on Mobile).
 /// 3. Sends payment signature and identifiers to server for authoritative verification.
 class PaymentOrchestrator {
   final ApiClient _apiClient;
@@ -19,7 +21,6 @@ class PaymentOrchestrator {
     required Map<String, dynamic> orderData,
     String environment = 'Test',
     BuildContext? context,
-    bool payuEnabled = true,
   }) async {
     debugPrint('[PaymentOrchestrator] Requesting Razorpay order creation from server ($environment).');
     
@@ -38,8 +39,21 @@ class PaymentOrchestrator {
     final currency = orderRes['currency']?.toString() ?? 'INR';
     final txnid = orderRes['txnid']?.toString() ?? orderData['id']?.toString() ?? '';
 
-    if (context != null && context.mounted) {
-      final callbackData = await RazorpayCheckoutScreen.start(
+    Map<String, dynamic>? callbackData;
+
+    if (kIsWeb) {
+      callbackData = await launchPlatformRazorpayCheckout(
+        orderId: orderId,
+        keyId: keyId,
+        amount: amount,
+        currency: currency,
+        transactionId: txnid,
+        customerName: (orderData['customerName'] ?? 'Customer').toString(),
+        customerEmail: (orderData['customerEmail'] ?? '').toString(),
+        customerMobile: (orderData['customerMobile'] ?? '').toString(),
+      );
+    } else if (context != null && context.mounted) {
+      callbackData = await RazorpayCheckoutScreen.start(
         context,
         orderId: orderId,
         keyId: keyId,
@@ -50,21 +64,19 @@ class PaymentOrchestrator {
         customerEmail: (orderData['customerEmail'] ?? '').toString(),
         customerMobile: (orderData['customerMobile'] ?? '').toString(),
       );
-
-      if (callbackData != null && callbackData['outcome'] == PaymentOutcome.success) {
-        return await verifyRazorpayPayment(
-          transactionId: txnid,
-          razorpayOrderId: callbackData['razorpay_order_id'] ?? orderId,
-          razorpayPaymentId: callbackData['razorpay_payment_id'] ?? '',
-          razorpaySignature: callbackData['razorpay_signature'] ?? '',
-        );
-      }
-
-      final outcome = (callbackData?['outcome'] as PaymentOutcome?) ?? PaymentOutcome.cancelled;
-      return PaymentResult(outcome: outcome, transactionId: txnid);
     }
 
-    return PaymentResult(outcome: PaymentOutcome.failed, transactionId: txnid);
+    if (callbackData != null && callbackData['outcome'] == PaymentOutcome.success) {
+      return await verifyRazorpayPayment(
+        transactionId: txnid,
+        razorpayOrderId: callbackData['razorpay_order_id']?.toString() ?? orderId,
+        razorpayPaymentId: callbackData['razorpay_payment_id']?.toString() ?? '',
+        razorpaySignature: callbackData['razorpay_signature']?.toString() ?? '',
+      );
+    }
+
+    final outcome = (callbackData?['outcome'] as PaymentOutcome?) ?? PaymentOutcome.cancelled;
+    return PaymentResult(outcome: outcome, transactionId: txnid);
   }
 
   Future<PaymentResult> verifyRazorpayPayment({

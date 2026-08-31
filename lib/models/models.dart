@@ -1288,7 +1288,7 @@ class PaymentTransaction {
   });
 
   factory PaymentTransaction.fromJson(Map<String, dynamic> json) {
-    final gatewayVal = json['paymentGateway'] ?? json['gateway'] ?? json['paymentAggregator'] ?? json['aggregator'] ?? 'PayU';
+    final gatewayVal = json['paymentGateway'] ?? json['gateway'] ?? json['paymentAggregator'] ?? json['aggregator'] ?? 'Razorpay';
     final mobileVal = json['customerMobile'] ?? json['customerPhone'] ?? json['phone'] ?? json['orderPayload']?['customerMobile'] ?? json['orderPayload']?['shippingAddress']?['mobileNumber'] ?? '';
     final addressVal = json['customerAddress'] ?? json['deliveryAddress'] ?? json['address'] ?? json['orderPayload']?['customerAddress'] ?? '';
     final nameVal = json['customerName'] ?? json['orderPayload']?['customerName'] ?? 'Leafy Shopper';

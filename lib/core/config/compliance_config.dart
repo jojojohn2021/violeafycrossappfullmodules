@@ -1,15 +1,16 @@
 /// Centralized Compliance Configuration for VioleafyCross Flutter Application.
 class ComplianceConfig {
-  static const String businessLegalName = 'Violeafy Cross Private Limited';
-  static const String businessDisplayName = 'VioleafyCross';
-  static const String businessAddress = 'Plot 102, Green Tech Park, Electronic City, Bengaluru, Karnataka 560100, India';
-  static const String supportEmail = 'support@violeafy.com';
-  static const String supportPhone = '+91 80 4567 8900';
-  static const String privacyEmail = 'privacy@violeafy.com';
+  static const String businessLegalName = 'VAMJO';
+  static const String businessDisplayName = 'VAMJO';
+  static const String businessAddress =
+      '3/286 Panamkoodan Commerial Corner,kallettumkara,Thrissur,Kerala,680683';
+  static const String supportEmail = 'sales@vamjo.com';
+  static const String supportPhone = '+91 8547927539';
+  static const String privacyEmail = 'info@vamjo.com';
   static const String grievanceName = 'Compliance & Safety Officer';
-  static const String grievanceEmail = 'grievance@violeafy.com';
+  static const String grievanceEmail = 'info@vamjo.com';
 
-  static const String websiteUrl = 'https://violeafy.com';
+  static const String websiteUrl = 'https://vamjo.com';
   static const String privacyPolicyPath = '/privacy-policy';
   static const String termsPath = '/terms-and-conditions';
   static const String shippingPolicyPath = '/shipping-and-delivery-policy';

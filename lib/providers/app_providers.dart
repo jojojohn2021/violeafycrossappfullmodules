@@ -519,31 +519,6 @@ final otpLoginProvider = StateNotifierProvider<OtpNotifier, OtpState>((ref) {
   return OtpNotifier();
 });
 
-class PayUEnvironmentNotifier extends StateNotifier<String> {
-  PayUEnvironmentNotifier() : super('Production') {
-    _load();
-  }
-
-  Future<void> _load() async {
-    final env = await EnvConfig.getPayUEnvironment();
-    state = env;
-  }
-
-  Future<void> toggleEnvironment() async {
-    state = 'Production';
-    await EnvConfig.setPayUEnvironment('Production');
-  }
-
-  Future<void> setEnvironment(String env) async {
-    state = 'Production';
-    await EnvConfig.setPayUEnvironment('Production');
-  }
-}
-
-final payuEnvironmentProvider = StateNotifierProvider<PayUEnvironmentNotifier, String>((ref) {
-  return PayUEnvironmentNotifier();
-});
-
 // Reuses the existing users/{uid}.role Firestore field already relied upon by firestore.rules' isAdmin().
 final isAdminUserProvider = FutureProvider<bool>((ref) async {
   final user = firebase_auth.FirebaseAuth.instance.currentUser;
@@ -556,45 +531,5 @@ final isAdminUserProvider = FutureProvider<bool>((ref) async {
     debugPrint('[isAdminUserProvider] role lookup failed: $e');
     return false;
   }
-});
-
-
-// PayU Payment testing toggle (Home Page top bar) - visible to ALL logged-in users, no admin/role
-// restriction. ON (true, default) runs the normal PayU flow unchanged; OFF bypasses PayU and asks the
-// backend to process the transaction via the same successful-payment path used by a real PayU success.
-// The backend is authoritative and only honors the bypass outside the Production environment.
-class PayUEnabledNotifier extends StateNotifier<bool> {
-  final ApiClient _apiClient;
-
-  PayUEnabledNotifier({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient(), super(true) {
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final response = await _apiClient.get('/api/payment/payu-toggle');
-      if (response is Map) {
-        state = response['payu_enabled'] != false;
-      }
-    } catch (e) {
-      debugPrint('[PayUEnabledNotifier] Failed to load PayU toggle setting: $e');
-    }
-  }
-
-  Future<void> toggle() async {
-    final next = !state;
-    try {
-      final response = await _apiClient.post('/api/payment/payu-toggle', {'enabled': next});
-      if (response is Map && response['success'] == true) {
-        state = response['payu_enabled'] != false;
-      }
-    } catch (e) {
-      debugPrint('[PayUEnabledNotifier] Failed to update PayU toggle setting: $e');
-    }
-  }
-}
-
-final payuEnabledProvider = StateNotifierProvider<PayUEnabledNotifier, bool>((ref) {
-  return PayUEnabledNotifier();
 });
 

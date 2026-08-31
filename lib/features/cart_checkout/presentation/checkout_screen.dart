@@ -492,23 +492,17 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       'shippingAddress': widget.data.address.toJson(),
     };
 
-    final payuEnv = ref.read(payuEnvironmentProvider);
-    final payuEnabled = ref.read(payuEnabledProvider);
-
     if (!mounted) return;
     try {
       final result = await _orchestrator.pay(
         orderData: orderData,
-        environment: payuEnv,
+        environment: 'Test',
         context: context,
-        payuEnabled: payuEnabled,
       );
 
       if (!mounted) return;
       switch (result.outcome) {
         case PaymentOutcome.launchedExternally:
-          // Web Redirect opened in the external browser; PayU's callback will
-          // bring the user back into the existing /payment-result route.
           break;
         case PaymentOutcome.success:
           context.push('/payment-result?txnid=${result.transactionId}&payment_status=success');

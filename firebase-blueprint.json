@@ -420,7 +420,7 @@
     },
     "PaymentGatewaySetting": {
       "title": "PaymentGatewaySetting",
-      "description": "Payment gateway configuration settings for PayU integration",
+      "description": "Payment gateway configuration settings for Razorpay integration",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -534,7 +534,7 @@
     },
     "/payment_gateway_settings": {
       "schema": "#/entities/PaymentGatewaySetting",
-      "description": "Secure server-side configurations for PayU payment gateway"
+      "description": "Secure server-side configurations for Razorpay payment gateway"
     }
   }
 }

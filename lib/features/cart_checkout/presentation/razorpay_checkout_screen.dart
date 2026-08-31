@@ -1,9 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/payment_types.dart';
 
-/// Screen for displaying Razorpay Checkout in a WebView container.
+/// Screen for displaying Razorpay Checkout in a WebView container on mobile devices.
 /// Receives orderId, keyId, amount, currency, and transactionId from server.
 class RazorpayCheckoutScreen extends StatefulWidget {
   final String orderId;
@@ -65,7 +66,9 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    _initWebView();
+    if (!kIsWeb) {
+      _initWebView();
+    }
   }
 
   void _initWebView() {

@@ -176,9 +176,9 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
-    // App Settings Collection (e.g. PayU Payment Flow mode) - readable by anyone (no
+    // App Settings Collection - readable by anyone (no
     // secrets stored), but only authorized administrators may modify it. Missing/absent
-    // documents remain valid; the app defaults to Web Redirect Flow when unset.
+    // documents remain valid.
     // NOTE: the top-level `match /{document=**}` rule above currently grants unrestricted
     // access to every collection in this project; this rule is defense-in-depth for when
     // that wildcard is tightened. Server-side admin authorization is always enforced
