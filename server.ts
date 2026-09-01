@@ -1980,6 +1980,7 @@ async function triggerAllNotifications(type: 'Success' | 'Failed' | 'Cancelled',
 }
 
 let secretManagerClient: SecretManagerServiceClient | null = null;
+let secretManagerInitAttempted = false;
 const secretCache = new Map<string, string>();
 
 async function getSecretFromGCP(secretName: string): Promise<string | null> {
@@ -1987,9 +1988,17 @@ async function getSecretFromGCP(secretName: string): Promise<string | null> {
     return secretCache.get(secretName)!;
   }
   try {
-    if (!secretManagerClient) {
-      secretManagerClient = new SecretManagerServiceClient();
+    if (!secretManagerClient && !secretManagerInitAttempted) {
+      secretManagerInitAttempted = true;
+      const keyFilePath = path.join(process.cwd(), 'serviceAccountKey.json');
+      const options: any = {};
+      if (fs.existsSync(keyFilePath)) {
+        options.keyFilename = keyFilePath;
+      }
+      secretManagerClient = new SecretManagerServiceClient(options);
     }
+    if (!secretManagerClient) return null;
+
     const projectId = process.env.VIO_FIREBASE_PROJECT_ID || process.env.GCP_PROJECT || 'violeafybasket';
     const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
     const [version] = await secretManagerClient.accessSecretVersion({ name });
@@ -2409,49 +2418,59 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
     const amountInPaise = Math.round(finalAmount * 100);
     const transactionId = orderData.id;
 
-    const { keyId, keySecret } = await getRazorpayCredentials(environment);
+    let { keyId, keySecret } = await getRazorpayCredentials(environment);
 
-    if (!keyId || keyId.length < 5 || keyId.includes('Violeafy')) {
-      console.error("[Razorpay API] Invalid or missing Razorpay Key ID:", keyId);
-      return res.status(400).json({
-        error: "Razorpay Payment Gateway credentials not configured. Please set RAZORPAY_TEST_KEY_ID and RAZORPAY_TEST_KEY_SECRET in .env or Google Cloud Secret Manager."
-      });
+    let isDemoMode = false;
+    if (!keyId || keyId.length < 5 || keyId.includes('Violeafy') || keyId === 'rzp_test_demo') {
+      const isTestEnv = (environment || 'Test').toUpperCase() === 'TEST' || (environment || 'Test').toUpperCase() === 'DEVELOPMENT';
+      if (isTestEnv) {
+        isDemoMode = true;
+        keyId = 'rzp_test_demo';
+        keySecret = 'rzp_test_secret_demo';
+      } else {
+        console.error("[Razorpay API] Invalid or missing Razorpay Key ID:", keyId);
+        return res.status(400).json({
+          error: "Razorpay Payment Gateway credentials not configured. Please set RAZORPAY_TEST_KEY_ID and RAZORPAY_TEST_KEY_SECRET in .env or Google Cloud Secret Manager."
+        });
+      }
     }
 
     let razorpayOrderId = `order_rzp_${Date.now()}`;
 
-    try {
-      const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
-      const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader
-        },
-        body: JSON.stringify({
-          amount: amountInPaise,
-          currency: "INR",
-          receipt: transactionId,
-          notes: {
-            customerEmail: orderData.customerEmail || "",
-            customerName: orderData.customerName || ""
-          }
-        })
-      });
-
-      if (rzpResponse.ok) {
-        const rzpData: any = await rzpResponse.json();
-        razorpayOrderId = rzpData.id;
-      } else {
-        const errText = await rzpResponse.text();
-        console.error("[Razorpay API] Error creating Razorpay Order from API:", rzpResponse.status, errText);
-        return res.status(rzpResponse.status).json({
-          error: `Razorpay Order creation failed (${rzpResponse.status}): ${errText}`
+    if (!isDemoMode) {
+      try {
+        const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+        const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": authHeader
+          },
+          body: JSON.stringify({
+            amount: amountInPaise,
+            currency: "INR",
+            receipt: transactionId,
+            notes: {
+              customerEmail: orderData.customerEmail || "",
+              customerName: orderData.customerName || ""
+            }
+          })
         });
+
+        if (rzpResponse.ok) {
+          const rzpData: any = await rzpResponse.json();
+          razorpayOrderId = rzpData.id;
+        } else {
+          const errText = await rzpResponse.text();
+          console.error("[Razorpay API] Error creating Razorpay Order from API:", rzpResponse.status, errText);
+          return res.status(rzpResponse.status).json({
+            error: `Razorpay Order creation failed (${rzpResponse.status}): ${errText}`
+          });
+        }
+      } catch (rzpErr: any) {
+        console.error("[Razorpay API] Exception creating Razorpay Order:", rzpErr);
+        return res.status(500).json({ error: `Razorpay API connection error: ${rzpErr.message}` });
       }
-    } catch (rzpErr: any) {
-      console.error("[Razorpay API] Exception creating Razorpay Order:", rzpErr);
-      return res.status(500).json({ error: `Razorpay API connection error: ${rzpErr.message}` });
     }
 
     const tx = {
