@@ -496,7 +496,7 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
     try {
       final result = await _orchestrator.pay(
         orderData: orderData,
-        environment: 'Test',
+        environment: 'Live',
         context: context,
       );
 
@@ -755,8 +755,10 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
       final repo = ref.read(shoppingRepositoryProvider);
       final response = await repo.getPaymentStatus(widget.transactionId);
       if (!mounted) return;
-      setState(() => _verifiedStatus = response?['status']?.toString() ?? 'Failed');
-      if (_verifiedStatus == 'Success' && !_cartCleared) {
+      final fetchedStatus = response?['status']?.toString() ?? 'Failed';
+      final isSuccess = fetchedStatus == 'Success' || fetchedStatus == 'Paid' || fetchedStatus == 'PAYMENT_SUCCESS';
+      setState(() => _verifiedStatus = isSuccess ? 'Success' : fetchedStatus);
+      if (isSuccess && !_cartCleared) {
         ref.read(cartProvider.notifier).clearCart();
         setState(() => _cartCleared = true);
         // Brief confirmation, then land on the same My Orders screen a successful checkout leads to.

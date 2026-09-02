@@ -2015,32 +2015,22 @@ async function getSecretFromGCP(secretName: string): Promise<string | null> {
 
 // Razorpay Credentials Helper (Google Cloud Secret Manager / Environment Bindings)
 export async function getRazorpayCredentials(environment?: string): Promise<{ keyId: string; keySecret: string }> {
-  const envUpper = (environment || 'TEST').toUpperCase();
-  const isLive = envUpper === 'LIVE' || envUpper === 'PRODUCTION';
+  let keyId = (process.env.RAZORPAY_LIVE_KEY_ID || process.env.RAZORPAY_KEY_ID || '').trim();
+  let keySecret = (process.env.RAZORPAY_LIVE_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').trim();
 
-  let keyId = isLive
-    ? (process.env.RAZORPAY_LIVE_KEY_ID || process.env.RAZORPAY_KEY_ID || '').trim()
-    : (process.env.RAZORPAY_TEST_KEY_ID || process.env.RAZORPAY_KEY_ID || '').trim();
-
-  let keySecret = isLive
-    ? (process.env.RAZORPAY_LIVE_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').trim()
-    : (process.env.RAZORPAY_TEST_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').trim();
-
-  // Strip out dummy key strings
-  if (keyId.includes('VioleafyKey') || keyId.includes('VioleafyDefaultKeyId')) {
+  // Strip out dummy or demo key strings if present
+  if (keyId.includes('VioleafyKey') || keyId.includes('VioleafyDefaultKeyId') || keyId === 'rzp_test_demo') {
     keyId = '';
   }
 
-  // Attempt Google Cloud Secret Manager fallback if not in env
+  // Attempt Google Cloud Secret Manager retrieval for live production credentials if not set in environment
   if (!keyId) {
-    const secretName = isLive ? 'RAZORPAY_LIVE_KEY_ID' : 'RAZORPAY_TEST_KEY_ID';
-    const fetched = await getSecretFromGCP(secretName);
+    const fetched = await getSecretFromGCP('RAZORPAY_LIVE_KEY_ID');
     if (fetched) keyId = fetched.trim();
   }
 
   if (!keySecret) {
-    const secretName = isLive ? 'RAZORPAY_LIVE_KEY_SECRET' : 'RAZORPAY_TEST_KEY_SECRET';
-    const fetched = await getSecretFromGCP(secretName);
+    const fetched = await getSecretFromGCP('RAZORPAY_LIVE_KEY_SECRET');
     if (fetched) keySecret = fetched.trim();
   }
 
@@ -2298,8 +2288,12 @@ app.get("/api/payment/status/:transactionId", async (req, res) => {
     const payments = await getCollectionDocs('payments');
     const tx = payments.find((payment: any) => payment.id === req.params.transactionId);
     if (!tx) return res.status(404).json({ error: 'Payment transaction not found' });
-    if (tx.orderPayload?.customerId !== authenticatedUser.uid) return res.status(403).json({ error: 'Payment does not belong to customer' });
-    return res.json({ status: tx.status, orderId: tx.orderId, amount: tx.amount });
+    if (tx.orderPayload?.customerId && tx.orderPayload.customerId !== authenticatedUser.uid && tx.customerId !== authenticatedUser.uid) {
+      return res.status(403).json({ error: 'Payment does not belong to customer' });
+    }
+    const isPaidSuccess = tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success';
+    const statusResult = isPaidSuccess ? 'Success' : tx.status;
+    return res.json({ status: statusResult, rawStatus: tx.status, orderId: tx.orderId, amount: tx.amount });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Unable to read payment status' });
   }
@@ -2393,7 +2387,7 @@ app.post("/api/payment/refund", async (req, res) => {
 
 app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
   try {
-    const { orderData, environment = 'Test' } = req.body;
+    const { orderData } = req.body;
     if (!orderData || !orderData.id) {
       return res.status(400).json({ error: "Invalid order payload" });
     }
@@ -2418,59 +2412,49 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
     const amountInPaise = Math.round(finalAmount * 100);
     const transactionId = orderData.id;
 
-    let { keyId, keySecret } = await getRazorpayCredentials(environment);
+    const { keyId, keySecret } = await getRazorpayCredentials('Live');
 
-    let isDemoMode = false;
-    if (!keyId || keyId.length < 5 || keyId.includes('Violeafy') || keyId === 'rzp_test_demo') {
-      const isTestEnv = (environment || 'Test').toUpperCase() === 'TEST' || (environment || 'Test').toUpperCase() === 'DEVELOPMENT';
-      if (isTestEnv) {
-        isDemoMode = true;
-        keyId = 'rzp_test_demo';
-        keySecret = 'rzp_test_secret_demo';
-      } else {
-        console.error("[Razorpay API] Invalid or missing Razorpay Key ID:", keyId);
-        return res.status(400).json({
-          error: "Razorpay Payment Gateway credentials not configured. Please set RAZORPAY_TEST_KEY_ID and RAZORPAY_TEST_KEY_SECRET in .env or Google Cloud Secret Manager."
-        });
-      }
+    if (!keyId || keyId.length < 5 || !keySecret || keySecret.length < 5) {
+      console.error("[Razorpay API] Invalid or missing live Razorpay credentials.");
+      return res.status(400).json({
+        error: "Razorpay Payment Gateway live credentials not configured. Please set RAZORPAY_LIVE_KEY_ID and RAZORPAY_LIVE_KEY_SECRET in Google Cloud Secret Manager or environment variables."
+      });
     }
 
-    let razorpayOrderId = `order_rzp_${Date.now()}`;
+    let razorpayOrderId = '';
 
-    if (!isDemoMode) {
-      try {
-        const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
-        const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": authHeader
-          },
-          body: JSON.stringify({
-            amount: amountInPaise,
-            currency: "INR",
-            receipt: transactionId,
-            notes: {
-              customerEmail: orderData.customerEmail || "",
-              customerName: orderData.customerName || ""
-            }
-          })
+    try {
+      const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+      const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader
+        },
+        body: JSON.stringify({
+          amount: amountInPaise,
+          currency: "INR",
+          receipt: transactionId,
+          notes: {
+            customerEmail: orderData.customerEmail || "",
+            customerName: orderData.customerName || ""
+          }
+        })
+      });
+
+      if (rzpResponse.ok) {
+        const rzpData: any = await rzpResponse.json();
+        razorpayOrderId = rzpData.id;
+      } else {
+        const errText = await rzpResponse.text();
+        console.error("[Razorpay API] Error creating Razorpay Order from API:", rzpResponse.status, errText);
+        return res.status(rzpResponse.status).json({
+          error: `Razorpay Order creation failed (${rzpResponse.status}): ${errText}`
         });
-
-        if (rzpResponse.ok) {
-          const rzpData: any = await rzpResponse.json();
-          razorpayOrderId = rzpData.id;
-        } else {
-          const errText = await rzpResponse.text();
-          console.error("[Razorpay API] Error creating Razorpay Order from API:", rzpResponse.status, errText);
-          return res.status(rzpResponse.status).json({
-            error: `Razorpay Order creation failed (${rzpResponse.status}): ${errText}`
-          });
-        }
-      } catch (rzpErr: any) {
-        console.error("[Razorpay API] Exception creating Razorpay Order:", rzpErr);
-        return res.status(500).json({ error: `Razorpay API connection error: ${rzpErr.message}` });
       }
+    } catch (rzpErr: any) {
+      console.error("[Razorpay API] Exception creating Razorpay Order:", rzpErr);
+      return res.status(500).json({ error: `Razorpay API connection error: ${rzpErr.message}` });
     }
 
     const tx = {
@@ -2485,17 +2469,17 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
       paymentGateway: "Razorpay",
       paymentAggregator: "Razorpay",
       paymentMethod: "Razorpay",
-      environment: environment,
+      environment: "Live",
       razorpayOrderId: razorpayOrderId,
       logs: [{
         timestamp: new Date().toISOString(),
         action: "INITIATED",
-        details: `Razorpay payment order created. RZP Order ID: ${razorpayOrderId}`
+        details: `Razorpay live payment order created. RZP Order ID: ${razorpayOrderId}`
       }],
       statusHistory: [{
         status: "PAYMENT_CREATED",
         timestamp: new Date().toISOString(),
-        note: "Order initialized for Razorpay Checkout"
+        note: "Order initialized for Razorpay Live Checkout"
       }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -2545,73 +2529,77 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
       return res.json({ success: true, transactionId: tx.id, status: 'Success' });
     }
 
-    const env = tx.environment || 'Test';
-    const { keyId, keySecret } = await getRazorpayCredentials(env);
+    const { keyId, keySecret } = await getRazorpayCredentials('Live');
 
-    // 1. HMAC SHA256 Signature Verification
-    let signatureValid = false;
-    if (keySecret && razorpay_order_id && razorpay_payment_id && razorpay_signature) {
-      const generatedSignature = crypto
-        .createHmac("sha256", keySecret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest("hex");
-      signatureValid = (generatedSignature === razorpay_signature);
-    } else if (!keySecret || keySecret.length <= 5) {
-      signatureValid = true;
-    }
-
-    if (!signatureValid) {
+    // 1. Strict HMAC SHA256 Signature Verification
+    if (!keySecret || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       tx.status = 'PAYMENT_FAILED';
       tx.logs.push({
         timestamp: new Date().toISOString(),
         action: 'VERIFICATION_FAILED',
-        details: 'Razorpay HMAC signature verification failed.'
+        details: 'Missing Razorpay signature parameters or secret.'
+      });
+      await saveCollectionDoc('payments', tx);
+      return res.status(400).json({ error: "Invalid or incomplete Razorpay payment signature parameters" });
+    }
+
+    const generatedSignature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      tx.status = 'PAYMENT_FAILED';
+      tx.logs.push({
+        timestamp: new Date().toISOString(),
+        action: 'VERIFICATION_FAILED',
+        details: 'Razorpay HMAC signature mismatch.'
       });
       await saveCollectionDoc('payments', tx);
       return res.status(400).json({ error: "Invalid Razorpay payment signature" });
     }
 
     // 2. Server-to-Server Razorpay API Payment Status Verification
-    if (keySecret && keySecret.length > 5 && razorpay_payment_id) {
-      try {
-        const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
-        const s2sRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpay_payment_id}`, {
-          headers: { "Authorization": authHeader }
-        });
+    try {
+      const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+      const s2sRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpay_payment_id}`, {
+        headers: { "Authorization": authHeader }
+      });
 
-        if (s2sRes.ok) {
-          const paymentEntity: any = await s2sRes.json();
-          const validState = paymentEntity.status === 'captured' || paymentEntity.status === 'authorized';
-          const validCurrency = paymentEntity.currency === 'INR';
-          
-          if (!validState || !validCurrency) {
-            tx.status = 'PAYMENT_FAILED';
-            tx.logs.push({
-              timestamp: new Date().toISOString(),
-              action: 'S2S_VERIFICATION_FAILED',
-              details: `S2S payment status verification failed. Status: ${paymentEntity.status}`
-            });
-            await saveCollectionDoc('payments', tx);
-            return res.status(400).json({ error: "Server-to-server payment verification failed" });
-          }
+      if (s2sRes.ok) {
+        const paymentEntity: any = await s2sRes.json();
+        const pStatus = (paymentEntity.status || '').toString().toLowerCase();
+        const pCurrency = (paymentEntity.currency || '').toString().toUpperCase();
+        const validState = pStatus === 'captured' || pStatus === 'authorized';
+        const validCurrency = pCurrency === 'INR';
+        
+        if (!validState || !validCurrency) {
+          tx.status = 'PAYMENT_FAILED';
+          tx.logs.push({
+            timestamp: new Date().toISOString(),
+            action: 'S2S_VERIFICATION_FAILED',
+            details: `S2S payment status verification failed. Status: ${paymentEntity.status}`
+          });
+          await saveCollectionDoc('payments', tx);
+          return res.status(400).json({ error: "Server-to-server payment verification failed" });
         }
-      } catch (s2sErr) {
-        console.warn("[Razorpay S2S Verification Warning] Could not reach Razorpay API, proceeding with HMAC signature verification:", s2sErr);
       }
+    } catch (s2sErr) {
+      console.warn("[Razorpay S2S Verification Warning] Could not reach Razorpay API, proceeding with HMAC signature verification:", s2sErr);
     }
 
     tx.status = 'Paid';
-    tx.transactionReference = razorpay_payment_id || `pay_${Date.now()}`;
+    tx.transactionReference = razorpay_payment_id;
     tx.razorpayPaymentId = razorpay_payment_id;
     tx.logs.push({
       timestamp: new Date().toISOString(),
       action: 'VERIFIED_SUCCESS',
-      details: `Razorpay payment signature & status verified successfully. Payment ID: ${razorpay_payment_id}`
+      details: `Razorpay live payment signature & status verified successfully. Payment ID: ${razorpay_payment_id}`
     });
     tx.statusHistory.push({
       status: 'Paid',
       timestamp: new Date().toISOString(),
-      note: 'Razorpay payment verified by server'
+      note: 'Razorpay live payment verified by server'
     });
     tx.updatedAt = new Date().toISOString();
 

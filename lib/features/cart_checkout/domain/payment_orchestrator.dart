@@ -19,7 +19,7 @@ class PaymentOrchestrator {
 
   Future<PaymentResult> pay({
     required Map<String, dynamic> orderData,
-    String environment = 'Test',
+    String environment = 'Live',
     BuildContext? context,
   }) async {
     debugPrint('[PaymentOrchestrator] Requesting Razorpay order creation from server ($environment).');

@@ -29,8 +29,8 @@ export const complianceConfig = {
     contactUs: "/contact-us",
   },
   razorpay: {
-    keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_VioleafyDefaultKeyId",
-    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
+    keyId: process.env.RAZORPAY_LIVE_KEY_ID || process.env.RAZORPAY_KEY_ID || "",
+    keySecret: process.env.RAZORPAY_LIVE_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || "",
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
   },
 };

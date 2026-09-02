@@ -28,9 +28,9 @@
    * Select the saved address or enter a test PIN code (e.g. `560100`).
    * Review order breakdown (Subtotal, GST, Delivery Fee).
    * Note the Policy Acknowledgement notice linking to Privacy, Terms, Shipping, Cancellation, and Return policies.
-3. **Payment Processing (Test Gateway)**:
-   * Tap "PAY NOW". Razorpay test mode checkout will launch.
-   * Choose Test Netbanking or Test UPI to complete payment verification.
+3. **Payment Processing (Razorpay Gateway)**:
+   * Tap "PAY NOW". Secure Razorpay checkout will launch with server-side signature verification.
+   * Complete payment authorization using preferred payment method.
 4. **Account & Policy Access**:
    * Visit Profile tab to inspect legal policy screens (Privacy Policy, Terms & Conditions, Shipping Policy, Cancellation Policy, Return & Refund Policy, Contact Us).
    * Verify "Request Account & Data Deletion" option.
