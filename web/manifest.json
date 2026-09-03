@@ -1,11 +1,11 @@
 {
-    "name": "VioleafyCross",
-    "short_name": "VioleafyCross",
+    "name": "Leafyearth",
+    "short_name": "Leafyearth",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#0175C2",
-    "description": "VioleafyCross - Authentic Online Store",
+    "description": "Leafyearth - Authentic Online Store",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

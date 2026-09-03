@@ -1,6 +1,6 @@
 # App Store & Google Play Console App Review Instructions — VioleafyCross
 
-**App Name**: VioleafyCross  
+**App Name**: LeafyEarth 
 **Primary Functionality**: E-Commerce shopping platform for physical goods with dynamic delivery calculations and Razorpay payment integration.
 
 ---
@@ -39,5 +39,5 @@
 
 ## 3. Support Contacts for Reviewers
 
-* **Technical Support Email**: `support@violeafy.com`
-* **Compliance Lead Email**: `privacy@violeafy.com`
+* **Technical Support Email**: `info@vamjo.com`
+* **Compliance Lead Email**: `sales@vamjo.com`

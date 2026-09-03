@@ -201,7 +201,7 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                       ),
                       const SizedBox(width: 8),
                       ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 140),
+                        constraints: const BoxConstraints(maxWidth: 170),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,7 +211,7 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                               TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: 'Leafy ',
+                                    text: 'Leafyearth ',
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
