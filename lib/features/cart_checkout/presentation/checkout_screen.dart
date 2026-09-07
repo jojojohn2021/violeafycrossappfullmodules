@@ -547,163 +547,166 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
     return Scaffold(
       backgroundColor: AppColors.secondaryBackground,
       appBar: AppBar(title: const Text('Order Review')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text('Products', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ...data.cart.map((item) {
-            final calc = GstCalculator.calculateItemGst(
-              price: item.price,
-              quantity: item.quantity,
-              gstPercentage: item.gstPercentage,
-              hsnCode: item.hsnCode,
-            );
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: SizedBox(
-                width: 56,
-                height: 56,
-                child: item.imageUrl != null && item.imageUrl!.startsWith('http')
-                    ? CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.cover)
-                    : const Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
-              ),
-              title: Text(item.productName),
-              subtitle: Text(
-                '${item.quantity} x ₹${item.price.toStringAsFixed(0)} | HSN: ${calc['hsnCode']} (GST ${calc['gstRate'].toStringAsFixed(0)}%)',
-                style: const TextStyle(fontSize: 12),
-              ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('₹${(item.price * item.quantity).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text('GST ₹${(calc['gstAmount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                ],
-              ),
-            );
-          }),
-          const Divider(height: 28),
-          const Text('Deliver To', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text('${data.address.name}\n${data.address.addressLine}\n${data.address.city}, ${data.address.district}, ${data.address.state} - ${data.address.pincode}\n${data.address.mobileNumber}${data.address.email.isNotEmpty ? ' | ${data.address.email}' : ''}'),
-          const SizedBox(height: 20),
-          _summaryRow('Item Subtotal (GST Inclusive)', data.subtotal),
-          _summaryRow('Taxable Value (excl. GST)', gstSummary.totalTaxableValue),
-          _summaryRow('Total GST Included', gstSummary.totalGstAmount),
-          _summaryRow('Delivery Fee', data.deliveryFee),
-          if (gstSummary.hsnSummary.isNotEmpty) ...[
-            const Divider(height: 24),
-            const Text('HSN-Wise GST Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Products', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(1.2),
-                  1: FlexColumnWidth(1),
-                  2: FlexColumnWidth(1.4),
-                  3: FlexColumnWidth(1.3),
-                },
-                children: [
-                  TableRow(
-                    decoration: const BoxDecoration(color: AppColors.secondaryBackground),
-                    children: const [
-                      Padding(padding: EdgeInsets.all(6), child: Text('HSN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(6), child: Text('Rate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(6), child: Text('Taxable', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(6), child: Text('GST Amt', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                    ],
-                  ),
-                  for (final item in gstSummary.hsnSummary)
+            ...data.cart.map((item) {
+              final calc = GstCalculator.calculateItemGst(
+                price: item.price,
+                quantity: item.quantity,
+                gstPercentage: item.gstPercentage,
+                hsnCode: item.hsnCode,
+              );
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: item.imageUrl != null && item.imageUrl!.startsWith('http')
+                      ? CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.cover)
+                      : const Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
+                ),
+                title: Text(item.productName),
+                subtitle: Text(
+                  '${item.quantity} x ₹${item.price.toStringAsFixed(0)} | HSN: ${calc['hsnCode']} (GST ${calc['gstRate'].toStringAsFixed(0)}%)',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('₹${(item.price * item.quantity).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('GST ₹${(calc['gstAmount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                  ],
+                ),
+              );
+            }),
+            const Divider(height: 28),
+            const Text('Deliver To', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('${data.address.name}\n${data.address.addressLine}\n${data.address.city}, ${data.address.district}, ${data.address.state} - ${data.address.pincode}\n${data.address.mobileNumber}${data.address.email.isNotEmpty ? ' | ${data.address.email}' : ''}'),
+            const SizedBox(height: 20),
+            _summaryRow('Item Subtotal (GST Inclusive)', data.subtotal),
+            _summaryRow('Taxable Value (excl. GST)', gstSummary.totalTaxableValue),
+            _summaryRow('Total GST Included', gstSummary.totalGstAmount),
+            _summaryRow('Delivery Fee', data.deliveryFee),
+            if (gstSummary.hsnSummary.isNotEmpty) ...[
+              const Divider(height: 24),
+              const Text('HSN-Wise GST Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Table(
+                  columnWidths: const {
+                    0: FlexColumnWidth(1.2),
+                    1: FlexColumnWidth(1),
+                    2: FlexColumnWidth(1.4),
+                    3: FlexColumnWidth(1.3),
+                  },
+                  children: [
                     TableRow(
-                      children: [
-                        Padding(padding: const EdgeInsets.all(6), child: Text(item.hsnCode, style: const TextStyle(fontSize: 11))),
-                        Padding(padding: const EdgeInsets.all(6), child: Text('${item.gstRate.toStringAsFixed(item.gstRate % 1 != 0 ? 1 : 0)}%', style: const TextStyle(fontSize: 11))),
-                        Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.taxableValue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11))),
-                        Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.gstAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                      decoration: const BoxDecoration(color: AppColors.secondaryBackground),
+                      children: const [
+                        Padding(padding: EdgeInsets.all(6), child: Text('HSN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Rate', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('Taxable', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                        Padding(padding: EdgeInsets.all(6), child: Text('GST Amt', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
                       ],
                     ),
+                    for (final item in gstSummary.hsnSummary)
+                      TableRow(
+                        children: [
+                          Padding(padding: const EdgeInsets.all(6), child: Text(item.hsnCode, style: const TextStyle(fontSize: 11))),
+                          Padding(padding: const EdgeInsets.all(6), child: Text('${item.gstRate.toStringAsFixed(item.gstRate % 1 != 0 ? 1 : 0)}%', style: const TextStyle(fontSize: 11))),
+                          Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.taxableValue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11))),
+                          Padding(padding: const EdgeInsets.all(6), child: Text('₹${item.gstAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            const Divider(height: 24),
+            _summaryRow('Grand Total', data.total, bold: true),
+            const SizedBox(height: 16),
+            // Mandatory Checkout Policy Disclosure
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.secondaryBackground,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Policy Acknowledgement & Terms',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 4),
+                  RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.4),
+                      children: [
+                        const TextSpan(text: 'By continuing with your order, you agree to our '),
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: () => context.push(ComplianceConfig.termsPath),
+                            child: const Text('Terms & Conditions', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                          ),
+                        ),
+                        const TextSpan(text: ' and acknowledge our '),
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: () => context.push(ComplianceConfig.privacyPolicyPath),
+                            child: const Text('Privacy', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                          ),
+                        ),
+                        const TextSpan(text: ', '),
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: () => context.push(ComplianceConfig.shippingPolicyPath),
+                            child: const Text('Shipping', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                          ),
+                        ),
+                        const TextSpan(text: ', '),
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: () => context.push(ComplianceConfig.cancellationPolicyPath),
+                            child: const Text('Cancellation', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                          ),
+                        ),
+                        const TextSpan(text: ', and '),
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: () => context.push(ComplianceConfig.returnRefundPolicyPath),
+                            child: const Text('Return & Refund', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                          ),
+                        ),
+                        const TextSpan(text: ' policies.'),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _isStartingPayment ? null : _startPayment,
+              icon: _isStartingPayment ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.lock_outline),
+              label: Text(_isStartingPayment ? 'STARTING PAYMENT...' : 'PAY NOW'),
+            ),
           ],
-          const Divider(height: 24),
-          _summaryRow('Grand Total', data.total, bold: true),
-          const SizedBox(height: 16),
-          // Mandatory Checkout Policy Disclosure
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.secondaryBackground,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Policy Acknowledgement & Terms',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 4),
-                RichText(
-                  text: TextSpan(
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.4),
-                    children: [
-                      const TextSpan(text: 'By continuing with your order, you agree to our '),
-                      WidgetSpan(
-                        child: GestureDetector(
-                          onTap: () => context.push(ComplianceConfig.termsPath),
-                          child: const Text('Terms & Conditions', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                        ),
-                      ),
-                      const TextSpan(text: ' and acknowledge our '),
-                      WidgetSpan(
-                        child: GestureDetector(
-                          onTap: () => context.push(ComplianceConfig.privacyPolicyPath),
-                          child: const Text('Privacy', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                        ),
-                      ),
-                      const TextSpan(text: ', '),
-                      WidgetSpan(
-                        child: GestureDetector(
-                          onTap: () => context.push(ComplianceConfig.shippingPolicyPath),
-                          child: const Text('Shipping', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                        ),
-                      ),
-                      const TextSpan(text: ', '),
-                      WidgetSpan(
-                        child: GestureDetector(
-                          onTap: () => context.push(ComplianceConfig.cancellationPolicyPath),
-                          child: const Text('Cancellation', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                        ),
-                      ),
-                      const TextSpan(text: ', and '),
-                      WidgetSpan(
-                        child: GestureDetector(
-                          onTap: () => context.push(ComplianceConfig.returnRefundPolicyPath),
-                          child: const Text('Return & Refund', style: TextStyle(fontSize: 11, color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
-                        ),
-                      ),
-                      const TextSpan(text: ' policies.'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _isStartingPayment ? null : _startPayment,
-            icon: _isStartingPayment ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.lock_outline),
-            label: Text(_isStartingPayment ? 'STARTING PAYMENT...' : 'PAY NOW'),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -173,14 +173,17 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
           onPressed: () => Navigator.of(context).pop({'outcome': PaymentOutcome.cancelled}),
         ),
       ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(color: AppColors.primaryGreen),
-            ),
-        ],
+      body: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            if (_isLoading)
+              const Center(
+                child: CircularProgressIndicator(color: AppColors.primaryGreen),
+              ),
+          ],
+        ),
       ),
     );
   }
