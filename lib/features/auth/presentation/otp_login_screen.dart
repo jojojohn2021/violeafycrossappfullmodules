@@ -147,12 +147,12 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
               ),
               const SizedBox(height: 24),
               const Text(
-                'Welcome to Leafy',
+                'Welcome to LeafyEarth',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
               ),
               const SizedBox(height: 6),
               const Text(
-                'Sign in with your mobile number to start shopping fresh fruits & vegetables.',
+                'Shop natural products, discover new possibilities, and grow with our community.\n\nOriginal. Organic. Authentic.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 32),

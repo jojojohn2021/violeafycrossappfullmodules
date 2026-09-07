@@ -8,7 +8,7 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.violeafy.crossapp" />
+                  <option name="appId" value="com.vamjo.leafyearth" />
                   <option name="mobileSdkAppId" value="1:347630935812:android:debe09fb5de0aed29b3a51" />
                   <option name="projectId" value="violeafybasket" />
                   <option name="projectNumber" value="347630935812" />
