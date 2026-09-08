@@ -41,6 +41,8 @@ Future<Map<String, dynamic>?> launchWebRazorpayCheckout({
 
   html.window.addEventListener(callbackName, listener);
 
+  final callbackUrl = '${html.window.location.origin}/api/payment/razorpay/callback?txnid=$transactionId';
+
   final options = {
     'key': keyId,
     'amount': amount,
@@ -48,6 +50,7 @@ Future<Map<String, dynamic>?> launchWebRazorpayCheckout({
     'name': 'VioleafyCross',
     'description': 'Order Payment $transactionId',
     'order_id': orderId,
+    'callback_url': callbackUrl,
     'prefill': {
       'name': customerName,
       'email': customerEmail,

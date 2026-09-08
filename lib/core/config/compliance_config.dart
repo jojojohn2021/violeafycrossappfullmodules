@@ -13,9 +13,9 @@ class ComplianceConfig {
   static const String websiteUrl = 'https://vamjo.com';
   static const String privacyPolicyPath = '/privacy-policy';
   static const String termsPath = '/terms-and-conditions';
-  static const String shippingPolicyPath = '/shipping-and-delivery-policy';
+  static const String shippingPolicyPath = '/shipping-policy';
   static const String cancellationPolicyPath = '/cancellation-policy';
-  static const String returnRefundPolicyPath = '/return-and-refund-policy';
+  static const String returnRefundPolicyPath = '/return-refund-policy';
   static const String contactUsPath = '/contact-us';
 
   static const String checkoutDisclosureText =

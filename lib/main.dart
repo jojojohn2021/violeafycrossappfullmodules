@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'core/config/env_config.dart';
 import 'firebase_options.dart';
 import 'app/main_app.dart';
  
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
 
   // Load environment configurations (URLs, API keys)
   await EnvConfig.initialize();

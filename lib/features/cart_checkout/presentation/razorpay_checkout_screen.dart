@@ -94,6 +94,7 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
       "description": "Order Payment ${widget.transactionId}",
       "image": "https://violeafy.com/assets/logo.png",
       "order_id": "${widget.orderId}",
+      "callback_url": "https://violeafy.local/payment_callback?txnid=${widget.transactionId}",
       "prefill": {
         "name": "${widget.customerName}",
         "email": "${widget.customerEmail}",
@@ -140,13 +141,16 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
             if (request.url.startsWith('https://violeafy.local/payment_callback')) {
               final uri = Uri.parse(request.url);
               final status = uri.queryParameters['status'];
+              final rzpPaymentId = uri.queryParameters['razorpay_payment_id'];
+              final rzpOrderId = uri.queryParameters['razorpay_order_id'];
+              final rzpSignature = uri.queryParameters['razorpay_signature'];
 
-              if (status == 'success') {
+              if (status == 'success' || (rzpPaymentId != null && rzpPaymentId.isNotEmpty)) {
                 Navigator.of(context).pop({
                   'outcome': PaymentOutcome.success,
-                  'razorpay_payment_id': uri.queryParameters['razorpay_payment_id'],
-                  'razorpay_order_id': uri.queryParameters['razorpay_order_id'],
-                  'razorpay_signature': uri.queryParameters['razorpay_signature'],
+                  'razorpay_payment_id': rzpPaymentId,
+                  'razorpay_order_id': rzpOrderId,
+                  'razorpay_signature': rzpSignature,
                 });
               } else if (status == 'cancelled') {
                 Navigator.of(context).pop({'outcome': PaymentOutcome.cancelled});

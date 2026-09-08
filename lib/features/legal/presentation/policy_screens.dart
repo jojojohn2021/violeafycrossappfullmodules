@@ -4,30 +4,35 @@ import '../../../core/theme/app_colors.dart';
 
 class _PolicyLayout extends StatelessWidget {
   final String title;
+  final String? webTitle;
   final List<Widget> children;
 
-  const _PolicyLayout({required this.title, required this.children});
+  const _PolicyLayout({required this.title, this.webTitle, required this.children});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.secondaryBackground,
-      appBar: AppBar(
-        title: Text(title),
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Container(
-          padding: const EdgeInsets.all(24.0),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(16.0),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: children,
+    return Title(
+      color: AppColors.primaryGreen,
+      title: 'VioleafyCross - ${webTitle ?? title}',
+      child: Scaffold(
+        backgroundColor: AppColors.secondaryBackground,
+        appBar: AppBar(
+          title: Text(title),
+          elevation: 0,
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(20.0),
+          child: Container(
+            padding: const EdgeInsets.all(24.0),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(16.0),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
           ),
         ),
       ),
@@ -176,6 +181,7 @@ class ShippingPolicyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PolicyLayout(
       title: 'Shipping & Delivery Policy',
+      webTitle: 'Shipping Policy',
       children: [
         Text(
           'Shipping & Delivery Policy',

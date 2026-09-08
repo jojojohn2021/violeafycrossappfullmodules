@@ -2659,6 +2659,111 @@ app.post("/api/payment/razorpay/webhook", async (req: any, res: any) => {
   }
 });
 
+// --- RAZORPAY PAYMENT CALLBACK & REDIRECT HANDLER (Net Banking & 3DS Redirects) ---
+
+async function handleRazorpayCallback(req: any, res: any) {
+  try {
+    const body = req.body || {};
+    const query = req.query || {};
+
+    const razorpay_payment_id = (body.razorpay_payment_id || query.razorpay_payment_id || '').toString();
+    const razorpay_order_id = (body.razorpay_order_id || query.razorpay_order_id || '').toString();
+    const razorpay_signature = (body.razorpay_signature || query.razorpay_signature || '').toString();
+    const transactionId = (query.txnid || body.txnid || body.transactionId || query.transactionId || '').toString();
+
+    console.log(`[Razorpay Callback] Received callback. OrderID: ${razorpay_order_id}, PaymentID: ${razorpay_payment_id}, TxnID: ${transactionId}`);
+
+    const payments = await getCollectionDocs('payments');
+    let tx = payments.find((p: any) =>
+      (transactionId && p.id === transactionId) ||
+      (razorpay_order_id && p.razorpayOrderId === razorpay_order_id) ||
+      (transactionId && p.txnid === transactionId)
+    );
+
+    const targetTxnId = tx ? tx.id : (transactionId || razorpay_order_id);
+
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      console.warn("[Razorpay Callback] Missing payment parameters in callback.");
+      return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=cancelled`);
+    }
+
+    const { keyId, keySecret } = await getRazorpayCredentials('Live');
+
+    if (!keySecret) {
+      console.error("[Razorpay Callback] Live key secret not available for verification.");
+      return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=failed`);
+    }
+
+    // Verify HMAC SHA256 Signature
+    const generatedSignature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      console.error("[Razorpay Callback] Signature mismatch in callback.");
+      if (tx) {
+        tx.status = 'PAYMENT_FAILED';
+        tx.logs.push({
+          timestamp: new Date().toISOString(),
+          action: 'CALLBACK_VERIFICATION_FAILED',
+          details: 'HMAC signature mismatch in Razorpay net banking callback.'
+        });
+        await saveCollectionDoc('payments', tx);
+      }
+      return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=failed`);
+    }
+
+    // Server-to-Server Razorpay API verification
+    try {
+      const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+      const s2sRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpay_payment_id}`, {
+        headers: { "Authorization": authHeader }
+      });
+      if (s2sRes.ok) {
+        const paymentEntity: any = await s2sRes.json();
+        const pStatus = (paymentEntity.status || '').toString().toLowerCase();
+        if (pStatus !== 'captured' && pStatus !== 'authorized') {
+          console.error(`[Razorpay Callback] S2S payment status invalid: ${pStatus}`);
+          return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=failed`);
+        }
+      }
+    } catch (s2sErr) {
+      console.warn("[Razorpay Callback S2S Warning] S2S verification warning:", s2sErr);
+    }
+
+    if (tx) {
+      tx.status = 'Paid';
+      tx.transactionReference = razorpay_payment_id;
+      tx.razorpayPaymentId = razorpay_payment_id;
+      tx.logs.push({
+        timestamp: new Date().toISOString(),
+        action: 'CALLBACK_VERIFIED_SUCCESS',
+        details: `Razorpay net banking payment verified via callback. Payment ID: ${razorpay_payment_id}`
+      });
+      tx.statusHistory.push({
+        status: 'Paid',
+        timestamp: new Date().toISOString(),
+        note: 'Razorpay net banking payment verified by server callback'
+      });
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      await finalizeSuccessfulPayment(tx);
+    }
+
+    return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=success`);
+  } catch (err: any) {
+    console.error("[Razorpay Callback Exception]:", err);
+    return res.redirect(303, `/payment-result?payment_status=failed`);
+  }
+}
+
+app.post("/api/payment/razorpay/callback", handleRazorpayCallback);
+app.get("/api/payment/razorpay/callback", handleRazorpayCallback);
+app.post("/payment_callback", handleRazorpayCallback);
+app.post("/payment-result", handleRazorpayCallback);
+
+
 // --- ACCOUNT DELETION ENDPOINT (Platform Policy Compliance) ---
 
 app.post("/api/account/delete", async (req: any, res: any) => {
@@ -2959,6 +3064,17 @@ async function startServer() {
 
   app.use((req, res, next) => {
     express.static(getDistPath())(req, res, next);
+  });
+
+  app.post("*", (req, res) => {
+    if (req.path.startsWith("/api")) {
+      return res.status(404).json({ error: "API endpoint not found" });
+    }
+    if (req.body?.razorpay_payment_id || req.query?.razorpay_payment_id) {
+      return handleRazorpayCallback(req, res);
+    }
+    const targetUrl = req.originalUrl || "/";
+    return res.redirect(303, targetUrl);
   });
 
   app.get("*", (req, res) => {

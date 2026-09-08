@@ -165,7 +165,7 @@ final appRouter = GoRouter(
       path: '/payment-result',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => PaymentResultScreen(
-        transactionId: state.uri.queryParameters['txnid'] ?? '',
+        transactionId: state.uri.queryParameters['txnid'] ?? state.uri.queryParameters['transactionId'] ?? '',
         status: state.uri.queryParameters['payment_status'] ?? 'failed',
       ),
     ),
@@ -218,6 +218,11 @@ final appRouter = GoRouter(
       builder: (context, state) => const TermsAndConditionsScreen(),
     ),
     GoRoute(
+      path: '/shipping-policy',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ShippingPolicyScreen(),
+    ),
+    GoRoute(
       path: '/shipping-and-delivery-policy',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const ShippingPolicyScreen(),
@@ -226,6 +231,11 @@ final appRouter = GoRouter(
       path: '/cancellation-policy',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const CancellationPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/return-refund-policy',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ReturnRefundPolicyScreen(),
     ),
     GoRoute(
       path: '/return-and-refund-policy',

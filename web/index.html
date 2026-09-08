@@ -40,6 +40,10 @@
       var options = JSON.parse(detail.options || '{}');
       var callbackName = detail.callbackName;
 
+      if (options.callback_url && options.callback_url.startsWith('/')) {
+        options.callback_url = window.location.origin + options.callback_url;
+      }
+
       options.handler = function(response) {
         window.dispatchEvent(new CustomEvent(callbackName, {
           detail: {
