@@ -17,12 +17,45 @@ class DeliveryAddressesScreen extends ConsumerStatefulWidget {
 
 class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScreen> {
   late Future<List<CustomerDeliveryAddress>> _addressesFuture;
+  late Future<CustomerPerformance?> _customerFuture;
   bool _isActionLoading = false;
+
+  // Permanent Address form controllers & nodes
+  final _permFormKey = GlobalKey<FormState>();
+  final _permNameController = TextEditingController();
+  final _permMobileController = TextEditingController();
+  final _permCompanyController = TextEditingController();
+  final _permEmailController = TextEditingController();
+  final _permPincodeController = TextEditingController();
+  final _permStateController = TextEditingController();
+  final _permDistrictController = TextEditingController();
+  final _permAddressController = TextEditingController();
+  final _permPincodeFocusNode = FocusNode();
+
+  bool _isPermPincodeLoading = false;
+  String? _permPincodeErrorText;
+  bool _isPermUpdating = false;
+  bool _isPermFormPopulated = false;
 
   @override
   void initState() {
     super.initState();
     _loadAddresses();
+    _loadCustomerProfile();
+  }
+
+  @override
+  void dispose() {
+    _permNameController.dispose();
+    _permMobileController.dispose();
+    _permCompanyController.dispose();
+    _permEmailController.dispose();
+    _permPincodeController.dispose();
+    _permStateController.dispose();
+    _permDistrictController.dispose();
+    _permAddressController.dispose();
+    _permPincodeFocusNode.dispose();
+    super.dispose();
   }
 
   void _loadAddresses() {
@@ -33,6 +66,126 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
           ? Future.value([])
           : ref.read(shoppingRepositoryProvider).getCustomerAddresses(userKey);
     });
+  }
+
+  void _loadCustomerProfile() {
+    setState(() {
+      _isPermFormPopulated = false;
+      _customerFuture = ref.read(shoppingRepositoryProvider).getCurrentCustomer();
+    });
+  }
+
+  void _populatePermanentAddressForm(CustomerPerformance? customer) {
+    if (_isPermFormPopulated && !_isPermUpdating) return;
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    final userPhone = user?.phoneNumber ?? '';
+
+    final rawMobile = (customer?.mobilenumberwithcountrycode != null && customer!.mobilenumberwithcountrycode.isNotEmpty)
+        ? customer.mobilenumberwithcountrycode
+        : ((customer?.mobileNumber != null && customer!.mobileNumber.isNotEmpty) ? customer.mobileNumber : userPhone);
+
+    _permNameController.text = customer?.name ?? (user?.displayName ?? '');
+    _permMobileController.text = rawMobile;
+    _permCompanyController.text = customer?.company ?? '';
+    _permEmailController.text = (customer?.email != null && customer!.email.isNotEmpty) ? customer.email : (user?.email ?? '');
+    _permPincodeController.text = customer?.pincode ?? '';
+    _permStateController.text = customer?.state ?? '';
+    _permDistrictController.text = customer?.district ?? '';
+    _permAddressController.text = customer?.address ?? '';
+    _isPermFormPopulated = true;
+  }
+
+  Future<void> _performPermPincodeLookup(String code) async {
+    final cleanedPincode = code.trim();
+    if (cleanedPincode.length != 6 || !RegExp(r'^\d{6}$').hasMatch(cleanedPincode)) {
+      setState(() {
+        _permPincodeErrorText = 'Not a valid pincode (exactly 6 digits required)';
+        _permStateController.clear();
+        _permDistrictController.clear();
+      });
+      return;
+    }
+
+    setState(() {
+      _isPermPincodeLoading = true;
+      _permPincodeErrorText = null;
+    });
+
+    try {
+      final result = await ref.read(shoppingRepositoryProvider).lookupPincode(cleanedPincode);
+      if (result != null) {
+        setState(() {
+          _permStateController.text = result.state;
+          _permDistrictController.text = result.district;
+          _permPincodeErrorText = null;
+          _isPermPincodeLoading = false;
+        });
+        return;
+      }
+    } catch (e) {
+      debugPrint('[PermPincodeLookup] Error: $e');
+    }
+
+    setState(() {
+      _isPermPincodeLoading = false;
+      _permPincodeErrorText = 'Not a valid pincode or location could not be resolved';
+      _permStateController.clear();
+      _permDistrictController.clear();
+    });
+  }
+
+  Future<void> _submitPermanentAddressUpdate() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final pincode = _permPincodeController.text.trim();
+
+    if (pincode.length != 6 || !RegExp(r'^\d{6}$').hasMatch(pincode)) {
+      await _performPermPincodeLookup(pincode);
+    }
+
+    if (!(_permFormKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    if (_permStateController.text.trim().isEmpty || _permDistrictController.text.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Valid 6-digit pincode is required to resolve State and District')),
+      );
+      return;
+    }
+
+    setState(() => _isPermUpdating = true);
+
+    try {
+      final updatedCustomer = await ref.read(shoppingRepositoryProvider).updatePermanentAddress(
+        name: _permNameController.text.trim(),
+        company: _permCompanyController.text.trim(),
+        email: _permEmailController.text.trim(),
+        address: _permAddressController.text.trim(),
+        pincode: pincode,
+      );
+
+      if (updatedCustomer != null && mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Permanent Address updated successfully!')),
+        );
+        _populatePermanentAddressForm(updatedCustomer);
+        setState(() {
+          _customerFuture = Future.value(updatedCustomer);
+        });
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Failed to update Permanent Address')),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error updating Permanent Address: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isPermUpdating = false);
+      }
+    }
   }
 
   Future<void> _setDefaultAddress(CustomerDeliveryAddress address) async {
@@ -483,6 +636,376 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
     }
   }
 
+  Widget _buildFieldLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('CUSTOMER FULL NAME *:'),
+        TextFormField(
+          controller: _permNameController,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'e.g. Johnathan Doe',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+          validator: (val) => val == null || val.trim().isEmpty ? 'Customer full name is required' : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('MOBILE NUMBER * (UNIQUE KEY):'),
+        TextFormField(
+          controller: _permMobileController,
+          enabled: false,
+          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: 'e.g. +91 9876543210',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            filled: true,
+            fillColor: Colors.grey.shade100,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompanyField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('COMPANY BRANCH / STORE NAME:'),
+        TextFormField(
+          controller: _permCompanyController,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'e.g. Acme Retailers (Optional)',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmailField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('CORPORATE EMAIL ADDRESS:'),
+        TextFormField(
+          controller: _permEmailController,
+          keyboardType: TextInputType.emailAddress,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'e.g. jdoe@acme.com',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPincodeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('PIN CODE:'),
+        Focus(
+          onFocusChange: (hasFocus) {
+            if (!hasFocus && _permPincodeController.text.trim().isNotEmpty) {
+              _performPermPincodeLookup(_permPincodeController.text.trim());
+            }
+          },
+          child: TextFormField(
+            controller: _permPincodeController,
+            focusNode: _permPincodeFocusNode,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(6),
+            ],
+            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'e.g. 682011',
+              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              errorText: _permPincodeErrorText,
+              suffixIcon: _isPermPincodeLoading
+                  ? const UnconstrainedBox(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreen),
+                      ),
+                    )
+                  : null,
+            ),
+            onFieldSubmitted: (_) => _performPermPincodeLookup(_permPincodeController.text.trim()),
+            onChanged: (val) {
+              if (val.trim().length == 6) {
+                _performPermPincodeLookup(val);
+              } else if (_permPincodeErrorText != null) {
+                setState(() => _permPincodeErrorText = null);
+              }
+            },
+            validator: (val) {
+              if (val == null || val.trim().length != 6 || !RegExp(r'^\d{6}$').hasMatch(val.trim())) {
+                return 'Enter valid 6-digit pincode';
+              }
+              if (_permPincodeErrorText != null) {
+                return _permPincodeErrorText;
+              }
+              return null;
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStateField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('STATE REGION:'),
+        TextFormField(
+          controller: _permStateController,
+          enabled: false,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+          decoration: InputDecoration(
+            hintText: '-- Search & Select State --',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            filled: true,
+            fillColor: Colors.grey.shade100,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+          validator: (val) => val == null || val.trim().isEmpty ? 'State is auto-populated from pincode' : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDistrictField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('DISTRICT:'),
+        TextFormField(
+          controller: _permDistrictController,
+          enabled: false,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+          decoration: InputDecoration(
+            hintText: 'Select State First',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            filled: true,
+            fillColor: Colors.grey.shade100,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+          validator: (val) => val == null || val.trim().isEmpty ? 'District is auto-populated from pincode' : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddressField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel('FULL GEOGRAPHIC ADDRESS DESTINATION:'),
+        TextFormField(
+          controller: _permAddressController,
+          maxLines: 2,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'e.g. Door No. 45-B, MG Road, opposite Grand Mall',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+          validator: (val) => val == null || val.trim().isEmpty ? 'Full address destination is required' : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPermanentAddressCard(CustomerPerformance? customer) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Form(
+        key: _permFormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryGreen.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.home_work_outlined, color: AppColors.primaryGreen, size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PERMANENT ADDRESS',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Customer primary record & destination',
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 700;
+                if (isWide) {
+                  return Column(
+                    children: [
+                      // Row 1: Name, Mobile, Company
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildNameField()),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildMobileField()),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildCompanyField()),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      // Row 2: Email, Pincode, State
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildEmailField()),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildPincodeField()),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildStateField()),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      // Row 3: District, Full Address
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 1, child: _buildDistrictField()),
+                          const SizedBox(width: 12),
+                          Expanded(flex: 2, child: _buildAddressField()),
+                        ],
+                      ),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildNameField(),
+                      const SizedBox(height: 12),
+                      _buildMobileField(),
+                      const SizedBox(height: 12),
+                      _buildCompanyField(),
+                      const SizedBox(height: 12),
+                      _buildEmailField(),
+                      const SizedBox(height: 12),
+                      _buildPincodeField(),
+                      const SizedBox(height: 12),
+                      _buildStateField(),
+                      const SizedBox(height: 12),
+                      _buildDistrictField(),
+                      const SizedBox(height: 12),
+                      _buildAddressField(),
+                    ],
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryGreen,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 1,
+                ),
+                onPressed: _isPermUpdating ? null : _submitPermanentAddressUpdate,
+                icon: _isPermUpdating
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.save_outlined, color: Colors.white),
+                label: Text(
+                  _isPermUpdating ? 'Updating...' : 'Update',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -495,203 +1018,256 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
       ),
       body: Stack(
         children: [
-          FutureBuilder<List<CustomerDeliveryAddress>>(
-            future: _addressesFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: CircularProgressIndicator(color: AppColors.primaryGreen),
-                );
-              }
-
-              final addresses = snapshot.data ?? [];
-
-              if (addresses.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
+          RefreshIndicator(
+            onRefresh: () async {
+              _loadAddresses();
+              _loadCustomerProfile();
+            },
+            color: AppColors.primaryGreen,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // --- TOP SECTION: Permanent Address Card ---
+                  FutureBuilder<CustomerPerformance?>(
+                    future: _customerFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting && !_isPermFormPopulated) {
+                        return Container(
+                          margin: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(32),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(
-                            Icons.location_off_outlined,
-                            size: 48,
-                            color: AppColors.primaryGreen,
+                          child: const Center(
+                            child: CircularProgressIndicator(color: AppColors.primaryGreen),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No Delivery Addresses Saved',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Add your home, office or delivery location to order faster.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryGreen,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: () => _openAddAddressDialog(addresses),
-                          icon: const Icon(Icons.add_location_alt_outlined, color: Colors.white),
-                          label: const Text(
-                            'Add New Address',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                        );
+                      }
+
+                      final customer = snapshot.data;
+                      _populatePermanentAddressForm(customer);
+
+                      return _buildPermanentAddressCard(customer);
+                    },
+                  ),
+
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Text(
+                      'OTHER DELIVERY LOCATIONS',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
-                );
-              }
 
-              return RefreshIndicator(
-                onRefresh: () async => _loadAddresses(),
-                color: AppColors.primaryGreen,
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: addresses.length,
-                  itemBuilder: (context, index) {
-                    final address = addresses[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.card,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: address.isDefault ? AppColors.primaryGreen : AppColors.border,
-                          width: address.isDefault ? 1.5 : 1,
-                        ),
-                        boxShadow: [
-                          if (address.isDefault)
-                            BoxShadow(
-                              color: AppColors.primaryGreen.withValues(alpha: 0.1),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // --- LOWER SECTION: Additional Delivery Addresses List ---
+                  FutureBuilder<List<CustomerDeliveryAddress>>(
+                    future: _addressesFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(
+                            child: CircularProgressIndicator(color: AppColors.primaryGreen),
+                          ),
+                        );
+                      }
+
+                      final addresses = snapshot.data ?? [];
+
+                      if (addresses.isEmpty) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      address.name,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                    if (address.isDefault) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primaryGreen.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: AppColors.primaryGreen, width: 0.8),
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.check_circle, size: 12, color: AppColors.primaryGreen),
-                                            SizedBox(width: 4),
-                                            Text(
-                                              'DEFAULT',
-                                              style: TextStyle(
-                                                color: AppColors.primaryGreen,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ],
+                                Icon(
+                                  Icons.location_off_outlined,
+                                  size: 36,
+                                  color: AppColors.primaryGreen.withValues(alpha: 0.7),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
-                                  tooltip: 'Delete Address',
-                                  onPressed: () => _deleteAddress(address),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'No Additional Delivery Addresses',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Add your office, secondary home or branch locations below.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                ),
+                                const SizedBox(height: 16),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.primaryGreen,
+                                    side: const BorderSide(color: AppColors.primaryGreen),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  onPressed: () => _openAddAddressDialog(addresses),
+                                  icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+                                  label: const Text('Add Location', style: TextStyle(fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              address.mobileNumber,
-                              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                            ),
-                            if (address.email.trim().isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                address.email.trim(),
-                                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        itemCount: addresses.length,
+                        itemBuilder: (context, index) {
+                          final address = addresses[index];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.card,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: address.isDefault ? AppColors.primaryGreen : AppColors.border,
+                                width: address.isDefault ? 1.5 : 1,
                               ),
-                            ],
-                            const SizedBox(height: 8),
-                            Text(
-                              '${address.addressLine}, ${address.district}, ${address.state} - ${address.pincode}',
-                              style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.3),
-                            ),
-                            const SizedBox(height: 12),
-                            const Divider(height: 1),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                if (!address.isDefault)
-                                  TextButton.icon(
-                                    onPressed: () => _setDefaultAddress(address),
-                                    icon: const Icon(Icons.radio_button_unchecked, size: 16, color: AppColors.primaryGreen),
-                                    label: const Text(
-                                      'Set as Default',
-                                      style: TextStyle(color: AppColors.primaryGreen, fontSize: 12, fontWeight: FontWeight.bold),
-                                    ),
-                                  )
-                                else
-                                  const Row(
-                                    children: [
-                                      Icon(Icons.radio_button_checked, size: 16, color: AppColors.primaryGreen),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Default Address',
-                                        style: TextStyle(color: AppColors.primaryGreen, fontSize: 12, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
+                              boxShadow: [
+                                if (address.isDefault)
+                                  BoxShadow(
+                                    color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
                                   ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            address.name,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          if (address.isDefault) ...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primaryGreen.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: AppColors.primaryGreen, width: 0.8),
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(Icons.check_circle, size: 12, color: AppColors.primaryGreen),
+                                                  SizedBox(width: 4),
+                                                  Text(
+                                                    'DEFAULT',
+                                                    style: TextStyle(
+                                                      color: AppColors.primaryGreen,
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
+                                        tooltip: 'Delete Address',
+                                        onPressed: () => _deleteAddress(address),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    address.mobileNumber,
+                                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                  ),
+                                  if (address.email.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      address.email.trim(),
+                                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '${address.addressLine}, ${address.district}, ${address.state} - ${address.pincode}',
+                                    style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.3),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      if (!address.isDefault)
+                                        TextButton.icon(
+                                          onPressed: () => _setDefaultAddress(address),
+                                          icon: const Icon(Icons.radio_button_unchecked, size: 16, color: AppColors.primaryGreen),
+                                          label: const Text(
+                                            'Set as Default',
+                                            style: TextStyle(color: AppColors.primaryGreen, fontSize: 12, fontWeight: FontWeight.bold),
+                                          ),
+                                        )
+                                      else
+                                        const Row(
+                                          children: [
+                                            Icon(Icons.radio_button_checked, size: 16, color: AppColors.primaryGreen),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Default Address',
+                                              style: TextStyle(color: AppColors.primaryGreen, fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 80),
+                ],
+              ),
+            ),
           ),
           if (_isActionLoading)
             Container(

@@ -10,9 +10,14 @@ class ApiClient {
 
   // Retrieve auth headers (including dynamic Firebase ID token)
   Future<Map<String, String>> _getHeaders() async {
+    final String platformHeader = kIsWeb
+        ? 'WEB'
+        : (defaultTargetPlatform == TargetPlatform.iOS ? 'IOS' : 'ANDROID');
+
     final Map<String, String> headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-Client-Platform': platformHeader,
     };
 
     try {
@@ -49,8 +54,14 @@ class ApiClient {
       try {
         if (response.body.isNotEmpty) {
           final decoded = json.decode(response.body);
-          if (decoded is Map<String, dynamic> && decoded.containsKey('error')) {
-            errorMessage = decoded['error'].toString();
+          if (decoded is Map<String, dynamic>) {
+            if (decoded.containsKey('message') && decoded['message'].toString().isNotEmpty) {
+              errorMessage = decoded['message'].toString();
+            } else if (decoded.containsKey('error') && decoded['error'].toString().isNotEmpty) {
+              errorMessage = decoded['error'].toString();
+            } else if (decoded.containsKey('details') && decoded['details'].toString().isNotEmpty) {
+              errorMessage = decoded['details'].toString();
+            }
           }
         }
       } catch (_) {}

@@ -102,4 +102,23 @@ class PaymentOrchestrator {
       return PaymentResult(outcome: PaymentOutcome.failed, transactionId: transactionId);
     }
   }
+
+  /// Server-Authoritative Cash on Delivery (COD) Order Creation (Web Only)
+  Future<PaymentResult> payCod({
+    required Map<String, dynamic> orderData,
+  }) async {
+    debugPrint('[PaymentOrchestrator] Submitting Cash on Delivery order request to server.');
+
+    final res = await _apiClient.post('/api/orders/create-cod', {
+      'orderData': orderData,
+    });
+
+    if (res is Map && res['success'] == true) {
+      final txnid = res['orderId']?.toString() ?? orderData['id']?.toString() ?? '';
+      return PaymentResult(outcome: PaymentOutcome.success, transactionId: txnid);
+    }
+
+    final errorMsg = (res is Map ? res['message'] ?? res['error'] : null)?.toString() ?? 'Failed to create Cash on Delivery order.';
+    throw Exception(errorMsg);
+  }
 }

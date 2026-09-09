@@ -566,6 +566,10 @@ class ShoppingRepository {
   // Fetch Sales Orders from backend
   Future<List<SalesOrder>> getSalesOrders() async {
     try {
+      final user = firebase_auth.FirebaseAuth.instance.currentUser;
+      if (user == null || user.isAnonymous) {
+        return [];
+      }
       final response = await _apiClient.get('/api/sales-orders');
       if (response != null && response is List) {
         return response.map((item) => SalesOrder.fromJson(item)).toList();
@@ -577,10 +581,11 @@ class ShoppingRepository {
   }
 
   // Request authoritative server-side GST calculation
-  Future<Map<String, dynamic>?> calculateServerGst(List<SalesProduct> items) async {
+  Future<Map<String, dynamic>?> calculateServerGst(List<SalesProduct> items, {double deliveryFee = 0.0}) async {
     try {
       final response = await _apiClient.post('/api/orders/calculate-gst', {
         'items': items.map((item) => item.toJson()).toList(),
+        'deliveryFee': deliveryFee,
       });
       if (response != null && response is Map && response['calculation'] is Map) {
         return Map<String, dynamic>.from(response['calculation'] as Map);
@@ -894,6 +899,57 @@ class ShoppingRepository {
     }
     return null;
   }
+
+  /// Pincode location lookup via server-side API
+  Future<({String state, String district})?> lookupPincode(String pincode) async {
+    final cleanPincode = pincode.trim();
+    if (cleanPincode.length != 6 || !RegExp(r'^\d{6}$').hasMatch(cleanPincode)) {
+      return null;
+    }
+    try {
+      final response = await _apiClient.get('/api/pincode/$cleanPincode');
+      if (response != null && response is Map<String, dynamic> && response['success'] == true) {
+        final state = response['state']?.toString() ?? '';
+        final district = response['district']?.toString() ?? '';
+        if (state.isNotEmpty && district.isNotEmpty) {
+          return (state: state, district: district);
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Server API pincode lookup error: $e');
+    }
+    return null;
+  }
+
+  /// Authoritative server-side API update for customer Permanent Address
+  Future<CustomerPerformance?> updatePermanentAddress({
+    required String name,
+    required String company,
+    required String email,
+    required String address,
+    required String pincode,
+  }) async {
+    try {
+      final response = await _apiClient.post('/api/customer/permanent-address', {
+        'name': name.trim(),
+        'company': company.trim(),
+        'email': email.trim(),
+        'address': address.trim(),
+        'pincode': pincode.trim(),
+      });
+      if (response != null && response is Map<String, dynamic> && response['success'] == true) {
+        final customerMap = response['customer'];
+        if (customerMap is Map<String, dynamic>) {
+          return CustomerPerformance.fromJson(customerMap);
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error updating permanent address via API: $e');
+      rethrow;
+    }
+    return null;
+  }
+
 
   Future<CustomerPerformance?> _findCustomerByMobile(String mobile) async {
     final mobileSnapshot = await firestore!

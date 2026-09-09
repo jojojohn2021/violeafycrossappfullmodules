@@ -479,10 +479,60 @@ app.get("/api/data", async (req, res) => {
   }
 });
 
+async function fetchUserScopedSalesOrders(authenticatedUser: any): Promise<any[]> {
+  if (!authenticatedUser || authenticatedUser.firebase?.sign_in_provider === 'anonymous' || authenticatedUser.provider_id === 'anonymous') {
+    return [];
+  }
+
+  const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+
+  const userUids = new Set([
+    authenticatedUser.uid,
+    customer?.id,
+    customer?.authUid
+  ].filter(Boolean));
+
+  const cleanAuthEmail = authenticatedUser.email ? String(authenticatedUser.email).trim().toLowerCase() : (customer?.email ? String(customer.email).trim().toLowerCase() : '');
+
+  const rawAuthMobile = authenticatedUser.phone_number || authenticatedUser.phoneNumber || customer?.mobileNumber || customer?.mobile || '';
+  const cleanAuthMobile = String(rawAuthMobile).replace(/\D/g, '').slice(-10);
+
+  const docs = await getCollectionDocs("sales_orders");
+  const ownOrders = docs.filter((order: any) => {
+    const orderCustId = String(order.customerId || order.userId || '').trim();
+
+    // 1. If order has an explicit customerId / userId set:
+    if (orderCustId && orderCustId !== 'guest' && orderCustId !== 'anonymous') {
+      return userUids.has(orderCustId);
+    }
+
+    // 2. Fallback matching only for legacy orders without explicit customerId:
+    const orderEmail = String(order.customerEmail || '').trim().toLowerCase();
+    if (cleanAuthEmail && orderEmail && cleanAuthEmail === orderEmail) {
+      return true;
+    }
+
+    const orderMobile = String(order.customerMobile || order.contactNo || '').replace(/\D/g, '').slice(-10);
+    if (cleanAuthMobile && orderMobile && cleanAuthMobile.length === 10 && cleanAuthMobile === orderMobile) {
+      return true;
+    }
+
+    return false;
+  });
+
+  ownOrders.sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  return ownOrders;
+}
+
 // GET documents for a specific collection
 app.get("/api/data/:collectionName", async (req, res) => {
   const { collectionName } = req.params;
   try {
+    if (collectionName === 'sales_orders') {
+      const authenticatedUser = await getAuthenticatedUser(req);
+      const orders = await fetchUserScopedSalesOrders(authenticatedUser);
+      return res.json(orders);
+    }
     const docs = await getCollectionDocs(collectionName);
     return res.json(docs);
   } catch (err: any) {
@@ -547,6 +597,131 @@ app.get(["/api/delivery-charges/:pincode", "/api/delivery-charges"], async (req,
     return res.status(500).json({ success: false, error: err.message || "Failed to lookup delivery charge" });
   }
 });
+
+// Pincode Resolution Helper
+async function resolvePincodeLocation(pincode: string): Promise<{ success: boolean; state?: string; district?: string; error?: string }> {
+  const cleanPincode = String(pincode || '').trim();
+  if (!/^\d{6}$/.test(cleanPincode)) {
+    return { success: false, error: 'Pincode must be exactly 6 numeric digits' };
+  }
+  try {
+    const response = await fetch(`https://api.postalpincode.in/pincode/${cleanPincode}`);
+    if (response.ok) {
+      const data: any = await response.json();
+      if (Array.isArray(data) && data.length > 0 && data[0].Status === 'Success') {
+        const postOffices = data[0].PostOffice;
+        if (Array.isArray(postOffices) && postOffices.length > 0) {
+          const district = postOffices[0].District || postOffices[0].Name || '';
+          const state = postOffices[0].State || '';
+          if (district && state) {
+            return { success: true, state, district };
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('[PincodeLookup] External API error:', err);
+  }
+  return { success: false, error: 'Not a valid pincode or location could not be resolved' };
+}
+
+// API: GET /api/pincode/:pincode (Pincode -> State & District Resolution)
+app.get(['/api/pincode/:pincode', '/api/pincode-lookup/:pincode'], async (req, res) => {
+  try {
+    const pincode = req.params.pincode;
+    const result = await resolvePincodeLocation(pincode);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[PincodeLookup] Endpoint error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Pincode resolution failed' });
+  }
+});
+
+// API: POST /api/customer/permanent-address (Update authenticated customer's permanent address)
+app.post(['/api/customer/permanent-address', '/api/customers/permanent-address'], async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser?.uid) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const { name, company, email, address, pincode } = req.body || {};
+
+    const cleanName = String(name || '').trim();
+    const cleanCompany = String(company || '').trim();
+    const cleanEmail = String(email || '').trim();
+    const cleanAddress = String(address || '').trim();
+    const cleanPincode = String(pincode || '').trim();
+
+    if (!cleanName) {
+      return res.status(400).json({ success: false, error: 'Customer name is required' });
+    }
+    if (!cleanAddress) {
+      return res.status(400).json({ success: false, error: 'Full geographic address destination is required' });
+    }
+    if (!/^\d{6}$/.test(cleanPincode)) {
+      return res.status(400).json({ success: false, error: 'Pincode must be exactly 6 numeric digits' });
+    }
+
+    // Resolve State and District server-side
+    const location = await resolvePincodeLocation(cleanPincode);
+    if (!location.success || !location.state || !location.district) {
+      return res.status(400).json({ success: false, error: location.error || 'Pincode resolution failed' });
+    }
+
+    // Find existing customer doc for authenticated user
+    let customerDoc = await findCustomerByAuthUid(authenticatedUser.uid);
+    let customerRef;
+
+    if (customerDoc && customerDoc.id) {
+      customerRef = adminDb.collection('customers').doc(customerDoc.id);
+    } else {
+      const userPhone = (authenticatedUser.phone_number || '').replace(/\D/g, '');
+      if (userPhone) {
+        const phoneMatch = await adminDb.collection('customers').where('mobileNumber', '==', userPhone).limit(1).get();
+        if (!phoneMatch.empty) {
+          customerRef = phoneMatch.docs[0].ref;
+          customerDoc = { id: phoneMatch.docs[0].id, ...phoneMatch.docs[0].data() };
+        }
+      }
+      if (!customerRef) {
+        customerRef = adminDb.collection('customers').doc();
+      }
+    }
+
+    // Permitted updates only (Excludes mobileNumber, authUid, referralCode, etc.)
+    const updatePayload: Record<string, any> = {
+      name: cleanName,
+      company: cleanCompany,
+      email: cleanEmail,
+      address: cleanAddress,
+      pincode: cleanPincode,
+      state: location.state,
+      district: location.district,
+      authUid: authenticatedUser.uid,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await customerRef.set(updatePayload, { merge: true });
+
+    const updatedDoc = await customerRef.get();
+    const finalCustomer = { id: customerRef.id, ...updatedDoc.data() };
+
+    return res.json({
+      success: true,
+      message: 'Permanent address updated successfully',
+      customer: finalCustomer,
+    });
+  } catch (err: any) {
+    console.error('[PermanentAddressUpdate] Error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update permanent address' });
+  }
+});
+
+
 
 // Alias Routes for direct endpoints
 app.get("/api/products", async (req, res) => {
@@ -801,22 +976,10 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
 app.get("/api/sales-orders", async (req, res) => {
   try {
     const authenticatedUser = await getAuthenticatedUser(req);
-    if (!authenticatedUser) {
+    if (!authenticatedUser || authenticatedUser.firebase?.sign_in_provider === 'anonymous' || authenticatedUser.provider_id === 'anonymous') {
       return res.status(401).json({ error: "Authenticated customer required" });
     }
-    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
-    const validCustomerIds = new Set([
-      authenticatedUser.uid,
-      customer?.id,
-      customer?.authUid,
-      authenticatedUser.email,
-      customer?.email
-    ].filter(Boolean));
-
-    const docs = await getCollectionDocs("sales_orders");
-    const ownOrders = docs.filter((order: any) => 
-      validCustomerIds.has(order.customerId) || validCustomerIds.has(order.userId) || validCustomerIds.has(order.customerEmail)
-    );
+    const ownOrders = await fetchUserScopedSalesOrders(authenticatedUser);
     return res.json(ownOrders);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to fetch sales-orders" });
@@ -1899,21 +2062,25 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
   let order = salesOrders.find((o: any) => o.id === tx.orderId);
   if (!order && tx.orderPayload) {
     const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
+    const deliveryFee = typeof tx.orderPayload?.deliveryFee === 'number'
+      ? tx.orderPayload.deliveryFee
+      : (typeof tx.orderPayload?.deliveryCharge === 'number' ? tx.orderPayload.deliveryCharge : 0);
     let gstCalc: any = null;
     try {
-      gstCalc = await calculateGSTForOrderItems(tx.orderPayload.products || []);
+      gstCalc = await calculateGSTForOrderItems(tx.orderPayload?.products || [], deliveryFee);
     } catch (_) { }
 
     order = {
       ...tx.orderPayload,
       id: tx.orderId,
       orderNumber: orderNum,
-      products: gstCalc ? gstCalc.items : (tx.orderPayload.products || []),
+      products: gstCalc ? gstCalc.items : (tx.orderPayload?.products || []),
       totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : undefined,
       totalGstAmount: gstCalc ? gstCalc.totalGstAmount : undefined,
       hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : undefined,
       gstByHsn: gstCalc ? gstCalc.hsnGstSummary : undefined,
-      totalValue: gstCalc ? gstCalc.grandTotal : (tx.orderPayload.totalValue || tx.amount),
+      deliveryFee: deliveryFee,
+      totalValue: gstCalc ? gstCalc.grandTotal : (tx.orderPayload?.totalValue || tx.amount),
       paymentStatus: 'Paid',
       orderStatus: 'Confirmed',
       deliveryStatus: 'Processing',
@@ -2039,7 +2206,7 @@ export async function getRazorpayCredentials(environment?: string): Promise<{ ke
 
 
 // Server-side Authoritative GST Calculation Helper
-export async function calculateGSTForOrderItems(rawItems: any[]): Promise<{
+export async function calculateGSTForOrderItems(rawItems: any[], deliveryFeeOverride?: number): Promise<{
   items: any[];
   totalTaxableValue: number;
   totalGstAmount: number;
@@ -2052,7 +2219,7 @@ export async function calculateGSTForOrderItems(rawItems: any[]): Promise<{
   let totalTaxableValue = 0;
   let totalGstAmount = 0;
   let subtotal = 0;
-  const deliveryFee = 30.0;
+  const deliveryFee = typeof deliveryFeeOverride === 'number' && !isNaN(deliveryFeeOverride) ? Math.max(0, deliveryFeeOverride) : 0;
 
   const hsnGroups: Record<string, any> = {};
 
@@ -2123,11 +2290,11 @@ export async function calculateGSTForOrderItems(rawItems: any[]): Promise<{
 // POST /api/orders/calculate-gst - Authoritative server-side GST calculation endpoint
 app.post("/api/orders/calculate-gst", async (req, res) => {
   try {
-    const { items } = req.body;
+    const { items, deliveryFee } = req.body;
     if (!items || !Array.isArray(items)) {
       return res.status(400).json({ error: "Missing or invalid items array in payload" });
     }
-    const calculation = await calculateGSTForOrderItems(items);
+    const calculation = await calculateGSTForOrderItems(items, typeof deliveryFee === 'number' ? deliveryFee : 0);
     return res.json({ success: true, calculation });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to calculate GST" });
@@ -2147,6 +2314,63 @@ app.post("/api/payment/transactions/repair", async (req, res) => {
     return res.json({ success: true, message: `Repaired ${count} payment transactions with payment gateway, aggregator, customer mobile, and address values.` });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || "Failed to repair payment transactions" });
+  }
+});
+
+export async function auditAndRepairSalesOrders(): Promise<number> {
+  let repairedCount = 0;
+  try {
+    const orders = await getCollectionDocs('sales_orders');
+    for (const order of orders) {
+      if (!order.products || !Array.isArray(order.products) || order.products.length === 0) continue;
+
+      const itemsSum = order.products.reduce((sum: number, item: any) => {
+        const qty = Number(item.quantity || 1);
+        const price = Number(item.price ?? item.unitPrice ?? item.offeredPrice ?? item.onlinePrice ?? 0);
+        return sum + (price * qty);
+      }, 0);
+
+      const delFee = typeof order.deliveryFee === 'number'
+        ? order.deliveryFee
+        : (typeof order.deliveryCharge === 'number' ? order.deliveryCharge : 0);
+
+      const expectedTotal = Number((itemsSum + delFee).toFixed(2));
+      const currentTotal = Number(Number(order.totalValue || 0).toFixed(2));
+
+      if (Math.abs(expectedTotal - currentTotal) > 0.01) {
+        console.log(`[SalesOrders Audit] Repairing order ${order.id || order.orderNumber}: current totalValue=${currentTotal}, recalculated=${expectedTotal} (itemsSum=${itemsSum}, deliveryFee=${delFee})`);
+        
+        let gstCalc: any = null;
+        try {
+          gstCalc = await calculateGSTForOrderItems(order.products, delFee);
+        } catch (_) {}
+
+        const updatedOrder = {
+          ...order,
+          deliveryFee: delFee,
+          products: gstCalc ? gstCalc.items : order.products,
+          totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : order.totalTaxableValue,
+          totalGstAmount: gstCalc ? gstCalc.totalGstAmount : order.totalGstAmount,
+          hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : order.hsnGstSummary,
+          totalValue: expectedTotal,
+          updatedAt: new Date().toISOString()
+        };
+        await saveCollectionDoc('sales_orders', updatedOrder);
+        repairedCount++;
+      }
+    }
+  } catch (err: any) {
+    console.error('[SalesOrders Audit] Error auditing sales_orders:', err);
+  }
+  return repairedCount;
+}
+
+app.post("/api/admin/repair-sales-orders", async (req, res) => {
+  try {
+    const repairedCount = await auditAndRepairSalesOrders();
+    return res.json({ success: true, message: `Successfully audited and repaired ${repairedCount} sales_orders with incorrect totalValue.` });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "Failed to repair sales orders" });
   }
 });
 
@@ -2286,14 +2510,28 @@ app.get("/api/payment/status/:transactionId", async (req, res) => {
     const authenticatedUser = await getAuthenticatedUser(req);
     if (!authenticatedUser) return res.status(401).json({ error: 'Authenticated customer required' });
     const payments = await getCollectionDocs('payments');
-    const tx = payments.find((payment: any) => payment.id === req.params.transactionId);
+    const tx = payments.find((payment: any) =>
+      payment.id === req.params.transactionId ||
+      payment.txnid === req.params.transactionId ||
+      payment.orderId === req.params.transactionId ||
+      payment.razorpayOrderId === req.params.transactionId
+    );
     if (!tx) return res.status(404).json({ error: 'Payment transaction not found' });
     if (tx.orderPayload?.customerId && tx.orderPayload.customerId !== authenticatedUser.uid && tx.customerId !== authenticatedUser.uid) {
       return res.status(403).json({ error: 'Payment does not belong to customer' });
     }
     const isPaidSuccess = tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success';
-    const statusResult = isPaidSuccess ? 'Success' : tx.status;
-    return res.json({ status: statusResult, rawStatus: tx.status, orderId: tx.orderId, amount: tx.amount });
+    const isCodPending = (tx.paymentMethod === 'COD' || tx.paymentGateway === 'COD' || tx.orderPayload?.paymentMethod === 'COD') && (tx.status === 'PENDING' || tx.status === 'Pending');
+    const statusResult = (isPaidSuccess || isCodPending) ? 'Success' : tx.status;
+    return res.json({
+      status: statusResult,
+      rawStatus: tx.status,
+      orderId: tx.orderId || tx.id,
+      amount: tx.amount,
+      paymentMethod: tx.paymentMethod || tx.orderPayload?.paymentMethod || 'Razorpay',
+      paymentGateway: tx.paymentGateway || 'Razorpay',
+      orderPayload: tx.orderPayload
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Unable to read payment status' });
   }
@@ -2498,6 +2736,180 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to create Razorpay payment order" });
   }
+});
+
+// --- SERVER-AUTHORITATIVE CASH ON DELIVERY (COD) ORDER CREATION (WEB ONLY) ---
+
+async function handleCreateCodOrder(req: any, res: any) {
+  try {
+    const orderData = req.body?.orderData || req.body;
+    if (!orderData || !orderData.id) {
+      const msg = "Invalid order payload";
+      return res.status(400).json({ success: false, error: msg, message: msg });
+    }
+
+    // 1. Authenticate user
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser || (orderData.customerId && orderData.customerId !== authenticatedUser.uid)) {
+      const msg = "Authenticated customer required";
+      return res.status(401).json({ success: false, error: msg, message: msg });
+    }
+
+    // 2. Strict Platform Availability Check (Web Only)
+    const clientPlatformHeader = (req.headers['x-client-platform'] || '').toString().toUpperCase();
+    const userAgent = (req.headers['user-agent'] || '').toString().toLowerCase();
+
+    const isMobileHeader = clientPlatformHeader === 'ANDROID' || clientPlatformHeader === 'IOS';
+    const isMobileClient = isMobileHeader || (userAgent.includes('dart/') && !userAgent.includes('mozilla/'));
+
+    if (isMobileClient || clientPlatformHeader !== 'WEB') {
+      console.warn(`[COD Security] Rejected COD request from non-web platform. Platform header: '${clientPlatformHeader}', User-Agent: '${userAgent}'`);
+      const msg = "Cash on Delivery is available only on the web application";
+      return res.status(403).json({
+        success: false,
+        error: msg,
+        message: msg
+      });
+    }
+
+    // 3. Authoritative Amount & Stock Validation
+    const products = await getCollectionDocs('products');
+    let secureSubtotal = 0;
+    const validatedProducts: any[] = [];
+
+    for (const item of (orderData.products || [])) {
+      const targetId = String(item.productId || item.id || '').trim();
+      const product = products.find((candidate: any) =>
+        String(candidate.id || '').trim() === targetId ||
+        String(candidate.productId || '').trim() === targetId
+      );
+
+      const requestedQty = Number(item.quantity || 1);
+
+      if (product) {
+        const stockVal = product.stock ?? product.availableStock;
+        if (typeof stockVal === 'number' && stockVal < requestedQty) {
+          const msg = `Insufficient stock for '${product.productName || product.name || item.productName}'. Available: ${stockVal}`;
+          return res.status(400).json({ success: false, error: msg, message: msg });
+        }
+      }
+
+      const unitPrice = product && typeof product.offeredPrice === 'number'
+        ? product.offeredPrice
+        : (product && typeof product.onlinePrice === 'number' ? product.onlinePrice : (item.price || 0));
+
+      secureSubtotal += unitPrice * requestedQty;
+      validatedProducts.push({
+        ...item,
+        price: unitPrice,
+        quantity: requestedQty
+      });
+    }
+
+    const deliveryFee = typeof orderData.deliveryFee === 'number' ? orderData.deliveryFee : 0;
+    const finalAmount = Math.max(0, secureSubtotal + deliveryFee);
+    const transactionId = orderData.id;
+
+    // 4. Create Payment Record (COD, status: PENDING)
+    const tx = {
+      id: transactionId,
+      txnid: transactionId,
+      orderId: transactionId,
+      orderPayload: {
+        ...orderData,
+        products: validatedProducts,
+        totalValue: finalAmount,
+        paymentMethod: "COD",
+        paymentStatus: "Pending"
+      },
+      amount: finalAmount,
+      currency: "INR",
+      status: "PENDING",
+      paymentGateway: "COD",
+      paymentAggregator: "COD",
+      paymentMethod: "COD",
+      environment: "Live",
+      logs: [{
+        timestamp: new Date().toISOString(),
+        action: "INITIATED_COD",
+        details: `Cash on Delivery order created. Order ID: ${transactionId}`
+      }],
+      statusHistory: [{
+        status: "PENDING",
+        timestamp: new Date().toISOString(),
+        note: "COD order created for Web client, payment pending delivery"
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await saveCollectionDoc('payments', tx);
+
+    // 5. Create Sales Order Record & Deduct Inventory Stock Idempotently
+    const salesOrders = await getCollectionDocs('sales_orders');
+    let order = salesOrders.find((o: any) => o.id === transactionId);
+    if (!order) {
+      const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
+      let gstCalc: any = null;
+      try {
+        gstCalc = await calculateGSTForOrderItems(validatedProducts, deliveryFee);
+      } catch (_) { }
+
+      order = {
+        ...orderData,
+        id: transactionId,
+        orderNumber: orderNum,
+        customerId: authenticatedUser.uid || orderData.customerId,
+        products: gstCalc ? gstCalc.items : validatedProducts,
+        totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : undefined,
+        totalGstAmount: gstCalc ? gstCalc.totalGstAmount : undefined,
+        hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : undefined,
+        gstByHsn: gstCalc ? gstCalc.hsnGstSummary : undefined,
+        deliveryFee: deliveryFee,
+        totalValue: gstCalc ? gstCalc.grandTotal : finalAmount,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        orderStatus: 'Confirmed',
+        deliveryStatus: 'Processing',
+        createdAt: new Date().toISOString()
+      };
+      await saveCollectionDoc('sales_orders', order);
+
+      // Deduct product stock
+      for (const item of (order.products || [])) {
+        const prod = products.find((p: any) => p.id === (item.productId || item.id));
+        if (prod) {
+          prod.stock = Math.max(0, (prod.stock || 0) - item.quantity);
+          prod.unitsSold = (prod.unitsSold || 0) + item.quantity;
+          prod.revenue = (prod.revenue || 0) + (item.price * item.quantity);
+          await saveCollectionDoc('products', prod);
+        }
+      }
+
+      await processOrderCommissionsAuthoritative(tx);
+      triggerAllNotifications('Success', tx).catch(err => console.error(err));
+    }
+
+    return res.json({
+      success: true,
+      orderId: transactionId,
+      paymentMethod: "COD",
+      paymentStatus: "PENDING"
+    });
+  } catch (err: any) {
+    console.error("[COD API Exception]:", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to create Cash on Delivery order" });
+  }
+}
+
+app.post("/api/orders/create-cod", handleCreateCodOrder);
+app.post("/api/payment/cod/create-order", handleCreateCodOrder);
+app.post("/api/orders", (req: any, res: any, next: any) => {
+  const pm = (req.body?.paymentMethod || req.body?.orderData?.paymentMethod || '').toString().toUpperCase();
+  if (pm === 'COD') {
+    return handleCreateCodOrder(req, res);
+  }
+  next();
 });
 
 app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {

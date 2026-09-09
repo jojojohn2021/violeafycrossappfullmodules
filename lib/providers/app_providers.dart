@@ -82,7 +82,7 @@ final authStateProvider = StreamProvider<firebase_auth.User?>((ref) {
 // Sales Orders FutureProvider (Live API / MongoDB) - Bounded to Auth User State
 final salesOrdersProvider = FutureProvider<List<SalesOrder>>((ref) async {
   final user = ref.watch(authStateProvider).value;
-  if (user == null) return [];
+  if (user == null || user.isAnonymous) return [];
   final repo = ref.watch(shoppingRepositoryProvider);
   return repo.getSalesOrders();
 });

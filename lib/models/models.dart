@@ -687,6 +687,7 @@ class SalesOrder {
   final String? pickupDate;
   final String? courierAgency;
   final double? courierCharges;
+  final double? deliveryFee;
   final String? contactNo;
   final String? referralCode;
   final String? orderType; // 'Online' | 'Shop'
@@ -715,6 +716,7 @@ class SalesOrder {
     this.pickupDate,
     this.courierAgency,
     this.courierCharges,
+    this.deliveryFee,
     this.contactNo,
     this.referralCode,
     this.orderType,
@@ -750,6 +752,9 @@ class SalesOrder {
     pickupDate: json['pickupDate'],
     courierAgency: json['courierAgency'],
     courierCharges: json['courierCharges'] != null ? (json['courierCharges']).toDouble() : null,
+    deliveryFee: json['deliveryFee'] != null 
+      ? (json['deliveryFee']).toDouble() 
+      : (json['deliveryCharge'] != null ? (json['deliveryCharge']).toDouble() : null),
     contactNo: json['contactNo'],
     referralCode: json['referralCode'],
     orderType: json['orderType'],
@@ -772,6 +777,7 @@ class SalesOrder {
     'totalTaxableValue': totalTaxableValue,
     'totalGstAmount': totalGstAmount,
     'hsnGstSummary': hsnGstSummary?.map((i) => i.toJson()).toList(),
+    'deliveryFee': deliveryFee,
     'paymentStatus': paymentStatus,
     'deliveryStatus': deliveryStatus,
     'assignedTo': assignedTo,

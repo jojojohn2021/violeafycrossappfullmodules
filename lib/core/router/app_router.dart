@@ -51,7 +51,8 @@ bool _isProtectedPath(String path) {
 // in which case we simply treat the session as "not logged in" instead of throwing.
 bool _isLoggedIn() {
   try {
-    return firebase_auth.FirebaseAuth.instance.currentUser != null;
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    return user != null && !user.isAnonymous;
   } catch (_) {
     return false;
   }

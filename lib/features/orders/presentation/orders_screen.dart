@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/app_providers.dart';
 
@@ -9,6 +10,30 @@ class OrdersScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    final isGuest = user == null || user.isAnonymous;
+
+    if (isGuest) {
+      return Scaffold(
+        backgroundColor: AppColors.secondaryBackground,
+        appBar: AppBar(
+          title: const Text('My Orders', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.receipt_long_outlined, size: 56, color: AppColors.textMuted),
+              SizedBox(height: 12),
+              Text('No past orders placed yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              SizedBox(height: 4),
+              Text('Your order history will appear here.', style: TextStyle(color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      );
+    }
+
     final ordersAsync = ref.watch(salesOrdersProvider);
 
     return Scaffold(

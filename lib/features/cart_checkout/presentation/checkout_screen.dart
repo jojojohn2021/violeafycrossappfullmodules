@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -452,6 +453,7 @@ class OrderReviewScreen extends ConsumerStatefulWidget {
 class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
   final _orchestrator = PaymentOrchestrator();
   bool _isStartingPayment = false;
+  String _selectedPaymentMethod = 'Razorpay'; // 'Razorpay' or 'COD'
 
   Future<void> _startPayment() async {
     if (_isStartingPayment) return;
@@ -474,6 +476,8 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
     }
 
     final orderId = 'ORD-${DateTime.now().millisecondsSinceEpoch}';
+    final isCod = _selectedPaymentMethod == 'COD' && kIsWeb;
+
     final orderData = {
       'id': orderId,
       'orderNumber': orderId,
@@ -483,37 +487,49 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       'customerMobile': widget.data.address.mobileNumber,
       'customerCompany': '',
       'products': widget.data.cart.map((item) => item.toJson()).toList(),
+      'subtotal': widget.data.subtotal,
+      'deliveryFee': widget.data.deliveryFee,
       'totalValue': widget.data.total,
-      'paymentStatus': 'Pending',
-      'deliveryStatus': 'Pending Payment',
+      'paymentStatus': isCod ? 'Pending' : 'Pending',
+      'deliveryStatus': isCod ? 'Processing' : 'Pending Payment',
       'assignedTo': 'Logistics',
       'createdAt': DateTime.now().toIso8601String(),
-      'paymentMethod': 'UPI',
+      'paymentMethod': isCod ? 'COD' : 'UPI',
       'shippingAddress': widget.data.address.toJson(),
     };
 
     if (!mounted) return;
     try {
-      final result = await _orchestrator.pay(
-        orderData: orderData,
-        environment: 'Live',
-        context: context,
-      );
-
-      if (!mounted) return;
-      switch (result.outcome) {
-        case PaymentOutcome.launchedExternally:
-          break;
-        case PaymentOutcome.success:
+      if (isCod) {
+        final result = await _orchestrator.payCod(orderData: orderData);
+        if (!mounted) return;
+        if (result.outcome == PaymentOutcome.success) {
           context.push('/payment-result?txnid=${result.transactionId}&payment_status=success');
-          break;
-        case PaymentOutcome.cancelled:
-          context.push('/payment-result?txnid=${result.transactionId}&payment_status=cancelled');
-          break;
-        case PaymentOutcome.failed:
-        case PaymentOutcome.initFailed:
-          context.push('/payment-result?txnid=${result.transactionId ?? ''}&payment_status=failed');
-          break;
+        } else {
+          context.push('/payment-result?txnid=${result.transactionId}&payment_status=failed');
+        }
+      } else {
+        final result = await _orchestrator.pay(
+          orderData: orderData,
+          environment: 'Live',
+          context: context,
+        );
+
+        if (!mounted) return;
+        switch (result.outcome) {
+          case PaymentOutcome.launchedExternally:
+            break;
+          case PaymentOutcome.success:
+            context.push('/payment-result?txnid=${result.transactionId}&payment_status=success');
+            break;
+          case PaymentOutcome.cancelled:
+            context.push('/payment-result?txnid=${result.transactionId}&payment_status=cancelled');
+            break;
+          case PaymentOutcome.failed:
+          case PaymentOutcome.initFailed:
+            context.push('/payment-result?txnid=${result.transactionId ?? ''}&payment_status=failed');
+            break;
+        }
       }
     } catch (error) {
       if (mounted) {
@@ -523,7 +539,7 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
           SnackBar(
             content: Text(isRoutingError
                 ? 'Payment API connection required. Please set the active backend server URL.'
-                : 'Unable to start payment: $error'),
+                : 'Unable to process order: $errorMsg'),
             action: isRoutingError
                 ? SnackBarAction(
                     label: 'Configure API',
@@ -636,7 +652,69 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
             ],
             const Divider(height: 24),
             _summaryRow('Grand Total', data.total, bold: true),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+
+            // Payment Method Selection (COD is rendered EXCLUSIVELY on Web)
+            const Text('Payment Method', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            if (kIsWeb) ...[
+              Card(
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: _selectedPaymentMethod == 'Razorpay' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'Razorpay' ? 1.5 : 1),
+                ),
+                child: RadioListTile<String>(
+                  value: 'Razorpay',
+                  groupValue: _selectedPaymentMethod,
+                  activeColor: AppColors.primaryGreen,
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedPaymentMethod = val);
+                  },
+                  title: const Text('Online Payment (Cards, Net Banking, UPI)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Secure payment processed via Razorpay'),
+                  secondary: const Icon(Icons.payment, color: AppColors.primaryGreen),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: _selectedPaymentMethod == 'COD' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'COD' ? 1.5 : 1),
+                ),
+                child: RadioListTile<String>(
+                  value: 'COD',
+                  groupValue: _selectedPaymentMethod,
+                  activeColor: AppColors.primaryGreen,
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedPaymentMethod = val);
+                  },
+                  title: const Text('Cash on Delivery (COD)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Pay with cash when your order is delivered'),
+                  secondary: const Icon(Icons.local_shipping_outlined, color: AppColors.primaryGreen),
+                ),
+              ),
+            ] else ...[
+              // On Android & iOS, COD is unavailable and hidden. Razorpay is the default payment method.
+              Card(
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: AppColors.border),
+                ),
+                child: const ListTile(
+                  leading: Icon(Icons.payment, color: AppColors.primaryGreen),
+                  title: Text('Online Payment (Cards, Net Banking, UPI)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Secure payment processed via Razorpay'),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+
             // Mandatory Checkout Policy Disclosure
             Container(
               padding: const EdgeInsets.all(12),
@@ -702,8 +780,14 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: _isStartingPayment ? null : _startPayment,
-              icon: _isStartingPayment ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.lock_outline),
-              label: Text(_isStartingPayment ? 'STARTING PAYMENT...' : 'PAY NOW'),
+              icon: _isStartingPayment
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Icon(_selectedPaymentMethod == 'COD' ? Icons.local_shipping_outlined : Icons.lock_outline),
+              label: Text(
+                _isStartingPayment
+                    ? (_selectedPaymentMethod == 'COD' ? 'PLACING COD ORDER...' : 'STARTING PAYMENT...')
+                    : (_selectedPaymentMethod == 'COD' ? 'CONFIRM COD ORDER' : 'PAY NOW'),
+              ),
             ),
           ],
         ),
@@ -758,18 +842,26 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
       final repo = ref.read(shoppingRepositoryProvider);
       final response = await repo.getPaymentStatus(widget.transactionId);
       if (!mounted) return;
+
       final fetchedStatus = response?['status']?.toString() ?? 'Failed';
-      final isSuccess = fetchedStatus == 'Success' || fetchedStatus == 'Paid' || fetchedStatus == 'PAYMENT_SUCCESS';
+      final rawStatus = response?['rawStatus']?.toString() ?? fetchedStatus;
+      final pm = (response?['paymentMethod'] ?? response?['orderPayload']?['paymentMethod'])?.toString().toUpperCase() ?? '';
+
+      final isCod = pm == 'COD' || response?['paymentGateway'] == 'COD';
+      final isCodPending = isCod && (rawStatus == 'PENDING' || rawStatus == 'Pending' || fetchedStatus == 'PENDING' || fetchedStatus == 'Pending');
+      final isSuccess = fetchedStatus == 'Success' || fetchedStatus == 'Paid' || fetchedStatus == 'PAYMENT_SUCCESS' || isCodPending;
+
       setState(() => _verifiedStatus = isSuccess ? 'Success' : fetchedStatus);
       if (isSuccess && !_cartCleared) {
         ref.read(cartProvider.notifier).clearCart();
         setState(() => _cartCleared = true);
         // Brief confirmation, then land on the same My Orders screen a successful checkout leads to.
-        Future.delayed(const Duration(milliseconds: 1200), () {
+        Future.delayed(const Duration(milliseconds: 1500), () {
           if (mounted) context.go('/orders');
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PaymentResultScreen] Error fetching payment status: $e');
       if (mounted) setState(() => _verifiedStatus = 'Failed');
     }
   }
@@ -780,7 +872,7 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
     final waiting = _verifiedStatus == null;
     final cancelled = widget.status == 'cancelled';
     return Scaffold(
-      appBar: AppBar(title: Text(waiting ? 'Checking Payment' : success ? 'Order Confirmed' : 'Payment ${cancelled ? 'Cancelled' : 'Failed'}')),
+      appBar: AppBar(title: Text(waiting ? 'Confirming Order' : success ? 'Order Confirmed' : 'Payment ${cancelled ? 'Cancelled' : 'Failed'}')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -792,10 +884,18 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
               else
                 Icon(success ? Icons.check_circle_outline : Icons.error_outline, size: 72, color: success ? AppColors.primaryGreen : AppColors.error),
               const SizedBox(height: 16),
-              Text(waiting ? 'Verifying your payment with the server...' : success ? 'Payment verified and order confirmed.' : 'Payment was not completed. Your cart has not been cleared.', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                waiting
+                    ? 'Verifying your order with the server...'
+                    : success
+                        ? 'Order confirmed successfully.'
+                        : 'Order was not completed. Your cart has not been cleared.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               if (widget.transactionId.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text('Transaction: ${widget.transactionId}', style: const TextStyle(color: AppColors.textSecondary)),
+                Text('Order ID: ${widget.transactionId}', style: const TextStyle(color: AppColors.textSecondary)),
               ],
               const SizedBox(height: 24),
               if (!waiting) ...[
