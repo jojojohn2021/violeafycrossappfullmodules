@@ -1861,6 +1861,11 @@ async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: n
   const visited = new Set<string>([buyerCustomer.authUid, buyerCustomer.id, buyerCustomer.mobileNumber].filter(Boolean));
   let sponsorIdentifier = buyerCustomer.referralcode || buyerCustomer.referralCode || buyerCustomer.sponsorAuthUid || buyerCustomer.sponsorId;
 
+  if (!sponsorIdentifier || sponsorIdentifier === 'organic') {
+    chain.push({ level: 1, customer: buyerCustomer });
+    return chain;
+  }
+
   for (let level = 1; level <= MAX_COMMISSION_LEVELS; level++) {
     if (!sponsorIdentifier || sponsorIdentifier === 'organic' || visited.has(sponsorIdentifier)) break;
     const sponsor = await findCustomerByAuthUid(sponsorIdentifier);
