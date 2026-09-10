@@ -684,9 +684,7 @@ class ShoppingRepository {
             ? customer!.mobilenumberwithcountrycode
             : (user.phoneNumber ?? '');
 
-        payload['referralCode'] = customerId;
         payload['referralcode'] = customerId;
-        payload['referralPartner'] = partnerName;
         payload['referralpartner'] = partnerName;
         payload['referralmobileno'] = referralMobileWithCode;
       }
@@ -799,7 +797,6 @@ class ShoppingRepository {
         payload['referralcode'] = lead?.referralCode;
         payload['referralpartner'] = lead?.referralPartner;
         payload['leadId'] = lead?.id;
-        payload['referralCode'] = lead?.referralCode;
 
         final indexRef = firestore!.collection('customer_mobile_index').doc(normalizedMobile);
         return firestore!.runTransaction<CustomerPerformance?>((transaction) async {

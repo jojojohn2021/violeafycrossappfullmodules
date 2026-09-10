@@ -249,7 +249,6 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
       referralcode: lead?.referralcode ?? lead?.referralCode ?? null,
       referralpartner: lead?.referralpartner ?? lead?.referralPartner ?? null,
       leadId: lead?.id || null,
-      referralCode: lead?.referralcode ?? lead?.referralCode ?? null,
     };
     transaction.set(customerRef, customer);
     transaction.set(indexRef, { customerId: customerRef.id, mobileNumber });
@@ -1087,8 +1086,6 @@ app.post("/api/auth/verify-login", async (req, res) => {
           company: leadData.company || "",
           email: leadData.email || "",
           mobileNumber: authenticatedMobile,
-          referralCode: refCode,
-          referralPartner: refPartner,
           referralcode: refCode,
           referralpartner: refPartner,
           isFromLead: true,
@@ -1131,8 +1128,6 @@ app.post("/api/auth/verify-login", async (req, res) => {
           company: "",
           email: "",
           mobileNumber: authenticatedMobile,
-          referralCode: "organic",
-          referralPartner: "organic",
           referralcode: "organic",
           referralpartner: "organic",
           isFromLead: false,
@@ -1864,7 +1859,7 @@ async function findCustomerById(customerId: string): Promise<any | null> {
 async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: number; customer: any }>> {
   const chain: Array<{ level: number; customer: any }> = [];
   const visited = new Set<string>([buyerCustomer.authUid, buyerCustomer.id, buyerCustomer.mobileNumber].filter(Boolean));
-  let sponsorIdentifier = buyerCustomer.referralCode || buyerCustomer.referralcode || buyerCustomer.sponsorAuthUid || buyerCustomer.sponsorId;
+  let sponsorIdentifier = buyerCustomer.referralcode || buyerCustomer.referralCode || buyerCustomer.sponsorAuthUid || buyerCustomer.sponsorId;
 
   for (let level = 1; level <= MAX_COMMISSION_LEVELS; level++) {
     if (!sponsorIdentifier || sponsorIdentifier === 'organic' || visited.has(sponsorIdentifier)) break;
@@ -1875,7 +1870,7 @@ async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: n
     if (sponsor.authUid) visited.add(sponsor.authUid);
     if (sponsor.id) visited.add(sponsor.id);
     if (sponsor.mobileNumber) visited.add(sponsor.mobileNumber);
-    sponsorIdentifier = sponsor.referralCode || sponsor.referralcode || sponsor.sponsorAuthUid || sponsor.sponsorId;
+    sponsorIdentifier = sponsor.referralcode || sponsor.referralCode || sponsor.sponsorAuthUid || sponsor.sponsorId;
   }
   return chain;
 }
@@ -1911,6 +1906,53 @@ function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function calculatePreGstCommissionBase(item: any): { base: number; gstExcluded: boolean; deliveryExcluded: boolean } {
+  let base = 0;
+  let gstExcluded = false;
+  let deliveryExcluded = false;
+
+  const totalTaxable = Number(item.orderPayload?.totalTaxableValue || item.totalTaxableValue || 0);
+  if (totalTaxable > 0) {
+    base = totalTaxable;
+    gstExcluded = true;
+    deliveryExcluded = true;
+  } else {
+    const products = item.orderPayload?.products || item.products;
+    if (Array.isArray(products) && products.length > 0) {
+      let productSum = 0;
+      for (const p of products) {
+        if (p.taxableValue && Number(p.taxableValue) > 0) {
+          productSum += Number(p.taxableValue);
+        } else if (p.price && p.quantity) {
+          productSum += Number(p.price) * Number(p.quantity);
+        }
+      }
+      if (productSum > 0) {
+        base = productSum;
+        gstExcluded = true;
+        deliveryExcluded = true;
+      }
+    }
+  }
+
+  if (base <= 0) {
+    const grandTotal = Number(item.amount || item.orderPayload?.totalValue || item.totalValue || item.grandTotal || item.total || 0);
+    const gst = Number(item.totalGstAmount || item.orderPayload?.totalGstAmount || item.gstAmount || 0);
+    const delivery = Number(item.deliveryFee || item.deliveryCharge || item.courierCharges || item.orderPayload?.deliveryFee || item.orderPayload?.deliveryCharge || 0);
+    
+    if (gst > 0) gstExcluded = true;
+    if (delivery > 0) deliveryExcluded = true;
+
+    base = Math.max(0, grandTotal - gst - delivery);
+  }
+
+  return {
+    base: roundCurrency(base),
+    gstExcluded,
+    deliveryExcluded,
+  };
+}
+
 // Invoked once per qualifying successful transaction from finalizeSuccessfulPayment
 // (shared by real PayU success and the PayU-disabled testing bypass). Idempotent:
 // a transaction/orderId can only ever produce one set of commission_transactions.
@@ -1930,7 +1972,8 @@ async function processOrderCommissionsAuthoritative(tx: any): Promise<void> {
     }
 
     const chain = await resolveSponsorChain(buyerCustomer);
-    const base = Number(tx.amount || tx.orderPayload?.totalValue || 0) || 0;
+    const baseCalc = calculatePreGstCommissionBase(tx);
+    const base = baseCalc.base;
     const nowIso = new Date().toISOString();
 
     for (const { level, customer: sponsor } of chain) {
@@ -2038,16 +2081,15 @@ async function authorizeCustomerAccess(req: any, customerId: string): Promise<{ 
 async function applyReferralSponsor(customer: any, sponsorAuthUid: string): Promise<{ success: boolean; error?: string; status?: number }> {
   if (!sponsorAuthUid) return { success: false, error: 'Missing referralCode', status: 400 };
   if (sponsorAuthUid === customer.authUid) return { success: false, error: 'Cannot refer yourself', status: 400 };
-  if (customer.referralCode && customer.referralCode !== 'organic') {
+  const existingRef = customer.referralcode || customer.referralCode;
+  if (existingRef && existingRef !== 'organic') {
     return { success: false, error: 'A referral/sponsor is already set for this account.', status: 400 };
   }
   const sponsor = await findCustomerByAuthUid(sponsorAuthUid);
   if (!sponsor) return { success: false, error: 'Referral code does not match an existing partner.', status: 404 };
 
   await adminDb.collection('customers').doc(customer.id).set({
-    referralCode: sponsorAuthUid,
     referralcode: sponsorAuthUid,
-    referralPartner: sponsor.name || sponsor.partnerName || '',
     referralpartner: sponsor.name || sponsor.partnerName || ''
   }, { merge: true });
   return { success: true };
@@ -3236,7 +3278,7 @@ app.get("/api/customers/:customerId/referrals", async (req, res) => {
   try {
     const auth = await authorizeCustomerAccess(req, req.params.customerId);
     if ('error' in auth) return res.status(auth.status).json({ error: auth.error });
-    const snap = await adminDb.collection('customers').where('referralCode', '==', auth.customer.authUid).get();
+    const snap = await adminDb.collection('customers').where('referralcode', '==', auth.customer.authUid).get();
     const referrals = snap.docs.map(d => {
       const data: any = d.data();
       return { id: d.id, name: data.name || '', mobileNumber: data.mobileNumber || '', createdAt: data.createdAt || '', qualified: Number(data.dealsClosed) > 0 };
@@ -3266,13 +3308,14 @@ app.get("/api/partners/referral-info", async (req, res) => {
     const customer = await findCustomerByAuthUid(authenticatedUser.uid);
     if (!customer) return res.status(404).json({ error: "Customer record not found" });
 
-    const downlineSnap = await adminDb.collection('customers').where('referralCode', '==', customer.authUid).get();
+    const downlineSnap = await adminDb.collection('customers').where('referralcode', '==', customer.authUid).get();
     const referrals = downlineSnap.docs.map(d => d.data() as any);
     const qualifiedCount = referrals.filter((r: any) => Number(r.dealsClosed) > 0).length;
 
     let sponsor: any = null;
-    if (customer.referralCode && customer.referralCode !== 'organic') {
-      const sponsorCustomer = await findCustomerByAuthUid(customer.referralCode);
+    const sponsorCode = customer.referralcode || customer.referralCode;
+    if (sponsorCode && sponsorCode !== 'organic') {
+      const sponsorCustomer = await findCustomerByAuthUid(sponsorCode);
       if (sponsorCustomer) {
         sponsor = { id: sponsorCustomer.id, name: sponsorCustomer.name || sponsorCustomer.partnerName || 'Direct Sponsor', status: 'Active' };
       }
@@ -3329,17 +3372,92 @@ app.get("/api/partners/commission-history", async (req, res) => {
 
 app.post("/api/admin/reprocess-commissions", async (req, res) => {
   try {
-    const payments = await getCollectionDocs('payments');
-    const orders = await getCollectionDocs('sales_orders');
-    let processedCount = 0;
+    const existingTxSnap = await adminDb.collection('commission_transactions').get();
+    const existingTxs = existingTxSnap.docs.map(d => ({ docId: d.id, ...d.data() as any }));
 
-    for (const payment of payments) {
-      if (payment.status === 'Success' || payment.paymentStatus === 'Paid') {
-        await processOrderCommissionsAuthoritative(payment);
-        processedCount++;
+    let totalEvaluated = 0;
+    let totalRecalculated = 0;
+    let totalChanged = 0;
+    let totalUnchanged = 0;
+    let totalFailed = 0;
+    let commissionTotalBefore = 0;
+    let commissionTotalAfter = 0;
+    let gstExcludedCount = 0;
+    let deliveryExcludedCount = 0;
+    const affectedBalances = new Set<string>();
+    const manualReviewTransactions: string[] = [];
+
+    for (const tx of existingTxs) {
+      totalEvaluated++;
+      const oldAmount = Number(tx.commissionAmount) || 0;
+      commissionTotalBefore += oldAmount;
+
+      try {
+        let orderDoc: any = null;
+        if (tx.orderId) {
+          const oSnap = await adminDb.collection('sales_orders').doc(tx.orderId).get();
+          if (oSnap.exists) orderDoc = oSnap.data();
+        }
+        if (!orderDoc && tx.transactionId) {
+          const pSnap = await adminDb.collection('payments').doc(tx.transactionId).get();
+          if (pSnap.exists) orderDoc = pSnap.data();
+        }
+
+        const itemForCalc = orderDoc || tx;
+        const baseCalc = calculatePreGstCommissionBase(itemForCalc);
+        if (baseCalc.gstExcluded) gstExcludedCount++;
+        if (baseCalc.deliveryExcluded) deliveryExcludedCount++;
+
+        const newBase = baseCalc.base;
+        const rate = Number(tx.commissionRate) || (await getEffectiveCommissionRate(Number(tx.level) || 1));
+        const newAmount = roundCurrency((newBase * rate) / 100);
+
+        commissionTotalAfter += newAmount;
+        totalRecalculated++;
+
+        const diff = roundCurrency(newAmount - oldAmount);
+        if (Math.abs(diff) > 0.001) {
+          totalChanged++;
+          const statusUpper = (tx.status || '').toString().toUpperCase();
+          if (statusUpper === 'PAID' || statusUpper === 'REVERSED') {
+            manualReviewTransactions.push(tx.id);
+          } else {
+            await adminDb.collection('commission_transactions').doc(tx.docId).set({
+              commissionBaseAmount: newBase,
+              commissionAmount: newAmount,
+              updatedAt: new Date().toISOString(),
+              recalculatedAt: new Date().toISOString()
+            }, { merge: true });
+
+            if (tx.referrerCustomerId) {
+              affectedBalances.add(tx.referrerCustomerId);
+              const customerRef = adminDb.collection('customers').doc(tx.referrerCustomerId);
+              await adminDb.runTransaction(async (transaction) => {
+                const custDoc = await transaction.get(customerRef);
+                const currentPending = Number(custDoc.data()?.commissionPending) || 0;
+                transaction.set(customerRef, {
+                  commissionPending: Math.max(0, roundCurrency(currentPending + diff))
+                }, { merge: true });
+              });
+            }
+          }
+        } else {
+          totalUnchanged++;
+        }
+      } catch (err) {
+        console.error(`Error recalculating transaction ${tx.id}:`, err);
+        totalFailed++;
       }
     }
 
+    const payments = await getCollectionDocs('payments');
+    for (const payment of payments) {
+      if (payment.status === 'Success' || payment.paymentStatus === 'Paid') {
+        await processOrderCommissionsAuthoritative(payment);
+      }
+    }
+
+    const orders = await getCollectionDocs('sales_orders');
     for (const order of orders) {
       if (order.paymentStatus === 'Paid' || order.orderStatus === 'Confirmed') {
         const syntheticTx = {
@@ -3352,11 +3470,29 @@ app.post("/api/admin/reprocess-commissions", async (req, res) => {
           orderPayload: order
         };
         await processOrderCommissionsAuthoritative(syntheticTx);
-        processedCount++;
       }
     }
 
-    return res.json({ success: true, message: `Successfully reprocessed 5-level commissions for ${processedCount} transactions/orders.` });
+    const report = {
+      totalEvaluated,
+      totalRecalculated,
+      totalChanged,
+      totalUnchanged,
+      totalFailed,
+      commissionTotalBefore: roundCurrency(commissionTotalBefore),
+      commissionTotalAfter: roundCurrency(commissionTotalAfter),
+      netCommissionDifference: roundCurrency(commissionTotalAfter - commissionTotalBefore),
+      gstExcludedCount,
+      deliveryExcludedCount,
+      affectedBalancesCount: affectedBalances.size,
+      manualReviewTransactions,
+    };
+
+    return res.json({
+      success: true,
+      message: `Historical commission recalculation completed successfully using pre-GST merchandise amounts excluding delivery charges.`,
+      report
+    });
   } catch (err: any) {
     console.error('Error reprocessing commissions:', err);
     return res.status(500).json({ error: err.message || "Failed to reprocess commissions" });

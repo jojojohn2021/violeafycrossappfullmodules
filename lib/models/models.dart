@@ -563,7 +563,6 @@ class CustomerPerformance {
     'isFromLead': isFromLead,
     'leadId': leadId,
     'leadslinkid': leadId,
-    'referralCode': referralCode,
     'referralcode': referralCode,
     'referralpartner': referralPartner ?? partnerName,
     'password': password,
