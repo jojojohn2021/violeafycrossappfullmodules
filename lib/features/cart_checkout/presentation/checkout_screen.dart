@@ -658,43 +658,45 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
             const Text('Payment Method', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             if (kIsWeb) ...[
-              Card(
-                elevation: 0,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: _selectedPaymentMethod == 'Razorpay' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'Razorpay' ? 1.5 : 1),
-                ),
-                child: RadioListTile<String>(
-                  value: 'Razorpay',
-                  groupValue: _selectedPaymentMethod,
-                  activeColor: AppColors.primaryGreen,
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedPaymentMethod = val);
-                  },
-                  title: const Text('Online Payment (Cards, Net Banking, UPI)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Secure payment processed via Razorpay'),
-                  secondary: const Icon(Icons.payment, color: AppColors.primaryGreen),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Card(
-                elevation: 0,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: _selectedPaymentMethod == 'COD' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'COD' ? 1.5 : 1),
-                ),
-                child: RadioListTile<String>(
-                  value: 'COD',
-                  groupValue: _selectedPaymentMethod,
-                  activeColor: AppColors.primaryGreen,
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedPaymentMethod = val);
-                  },
-                  title: const Text('Cash on Delivery (COD)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Pay with cash when your order is delivered'),
-                  secondary: const Icon(Icons.local_shipping_outlined, color: AppColors.primaryGreen),
+              RadioGroup<String>(
+                groupValue: _selectedPaymentMethod,
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedPaymentMethod = val);
+                },
+                child: Column(
+                  children: [
+                    Card(
+                      elevation: 0,
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: _selectedPaymentMethod == 'Razorpay' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'Razorpay' ? 1.5 : 1),
+                      ),
+                      child: RadioListTile<String>(
+                        value: 'Razorpay',
+                        activeColor: AppColors.primaryGreen,
+                        title: const Text('Online Payment (Cards, Net Banking, UPI)', style: TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: const Text('Secure payment processed via Razorpay'),
+                        secondary: const Icon(Icons.payment, color: AppColors.primaryGreen),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card(
+                      elevation: 0,
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: _selectedPaymentMethod == 'COD' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'COD' ? 1.5 : 1),
+                      ),
+                      child: RadioListTile<String>(
+                        value: 'COD',
+                        activeColor: AppColors.primaryGreen,
+                        title: const Text('Cash on Delivery (COD)', style: TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: const Text('Pay with cash when your order is delivered'),
+                        secondary: const Icon(Icons.local_shipping_outlined, color: AppColors.primaryGreen),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ] else ...[

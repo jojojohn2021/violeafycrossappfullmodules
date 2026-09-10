@@ -1854,29 +1854,63 @@ async function findCustomerById(customerId: string): Promise<any | null> {
   return findCustomerByAuthUid(customerId);
 }
 
-// Walks the sponsor chain up to MAX_COMMISSION_LEVELS via customer.referralCode
-// (sponsor's authUid / customerId / mobile). Stops on "organic"/missing/unresolvable/cyclic sponsors.
+// Walks the sponsor chain up to L6 (5 levels of upline + buyer customer = L1..L6) via customer.referralCode
+// (sponsor's authUid / customerId / mobile).
+// Buyer Customer is ALWAYS Primary & L1 for their transaction.
+// L2 is immediate upline, L3 is second upline, L4 is third, L5 is fourth, L6 is fifth (termination boundary).
+// L7 is NEVER generated. Stops on organic / missing / unresolvable / cyclic sponsors / first-child exits.
 async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: number; customer: any }>> {
   const chain: Array<{ level: number; customer: any }> = [];
-  const visited = new Set<string>([buyerCustomer.authUid, buyerCustomer.id, buyerCustomer.mobileNumber].filter(Boolean));
-  let sponsorIdentifier = buyerCustomer.referralcode || buyerCustomer.referralCode || buyerCustomer.sponsorAuthUid || buyerCustomer.sponsorId;
+  if (!buyerCustomer) return chain;
 
-  if (!sponsorIdentifier || sponsorIdentifier === 'organic') {
-    chain.push({ level: 1, customer: buyerCustomer });
+  // Transaction Customer is ALWAYS L1 and Primary for their own transaction
+  chain.push({ level: 1, customer: buyerCustomer });
+
+  const visited = new Set<string>();
+  if (buyerCustomer.authUid) visited.add(String(buyerCustomer.authUid).trim());
+  if (buyerCustomer.id) visited.add(String(buyerCustomer.id).trim());
+  if (buyerCustomer.mobileNumber) visited.add(String(buyerCustomer.mobileNumber).trim());
+  if (buyerCustomer.customerId) visited.add(String(buyerCustomer.customerId).trim());
+
+  let sponsorIdentifier = buyerCustomer.referralcode || buyerCustomer.referralCode || buyerCustomer.sponsorAuthUid || buyerCustomer.sponsorId;
+  if (!sponsorIdentifier || String(sponsorIdentifier).trim() === 'organic') {
     return chain;
   }
 
-  for (let level = 1; level <= MAX_COMMISSION_LEVELS; level++) {
-    if (!sponsorIdentifier || sponsorIdentifier === 'organic' || visited.has(sponsorIdentifier)) break;
-    const sponsor = await findCustomerByAuthUid(sponsorIdentifier);
+  // Traversal for uplines L2 through L6 (L6 is termination boundary)
+  for (let level = 2; level <= 6; level++) {
+    if (!sponsorIdentifier || String(sponsorIdentifier).trim() === 'organic') break;
+    const cleanSponsorId = String(sponsorIdentifier).trim();
+
+    if (visited.has(cleanSponsorId)) {
+      // Loop or duplicate customer detected in chain — terminate safely
+      break;
+    }
+
+    const sponsor = await findCustomerByAuthUid(cleanSponsorId);
     if (!sponsor) break;
+
+    // Check if sponsor or any identifier is already in visited
+    if (
+      (sponsor.authUid && visited.has(String(sponsor.authUid).trim())) ||
+      (sponsor.id && visited.has(String(sponsor.id).trim())) ||
+      (sponsor.mobileNumber && visited.has(String(sponsor.mobileNumber).trim())) ||
+      (sponsor.customerId && visited.has(String(sponsor.customerId).trim()))
+    ) {
+      break;
+    }
+
     chain.push({ level, customer: sponsor });
-    visited.add(sponsorIdentifier);
-    if (sponsor.authUid) visited.add(sponsor.authUid);
-    if (sponsor.id) visited.add(sponsor.id);
-    if (sponsor.mobileNumber) visited.add(sponsor.mobileNumber);
+
+    visited.add(cleanSponsorId);
+    if (sponsor.authUid) visited.add(String(sponsor.authUid).trim());
+    if (sponsor.id) visited.add(String(sponsor.id).trim());
+    if (sponsor.mobileNumber) visited.add(String(sponsor.mobileNumber).trim());
+    if (sponsor.customerId) visited.add(String(sponsor.customerId).trim());
+
     sponsorIdentifier = sponsor.referralcode || sponsor.referralCode || sponsor.sponsorAuthUid || sponsor.sponsorId;
   }
+
   return chain;
 }
 
@@ -1982,6 +2016,9 @@ async function processOrderCommissionsAuthoritative(tx: any): Promise<void> {
     const nowIso = new Date().toISOString();
 
     for (const { level, customer: sponsor } of chain) {
+      // Level 6 is the termination boundary ONLY — never generate commission payout for L6 or beyond (L7 never exists)
+      if (level > MAX_COMMISSION_LEVELS) continue;
+
       const rate = await getEffectiveCommissionRate(level);
       const commissionAmount = roundCurrency((base * rate) / 100);
       if (commissionAmount <= 0) continue;
