@@ -865,6 +865,30 @@ async function buildCustomerReferralSummary(customer: any): Promise<Record<strin
   }
 }
 
+export async function ensureInvoiceForOrder(order: any): Promise<{ invoiceId: string; invoiceDate: string; savedInvoice: any }> {
+  if (!order || !order.id) {
+    throw new Error("Invalid order payload for invoice creation");
+  }
+
+  const invoiceDocs = await getCollectionDocs('invoices');
+  let savedInvoice = invoiceDocs.find((item: any) => item.orderId === order.id || item.id === order.invoiceId);
+  const invoiceId = order.invoiceId || savedInvoice?.invoiceId || savedInvoice?.id || invoiceNumber(order.id);
+  const invoiceDate = order.invoiceDate || savedInvoice?.invoiceDate || order.createdAt || new Date().toISOString();
+
+  if (!savedInvoice) {
+    savedInvoice = { id: invoiceId, invoiceId, orderId: order.id, invoiceDate, createdAt: new Date().toISOString() };
+    await saveCollectionDoc('invoices', savedInvoice);
+  }
+
+  if (!order.invoiceId || order.invoiceId !== invoiceId) {
+    await saveCollectionDoc('sales_orders', { id: order.id, invoiceId, invoiceDate });
+    order.invoiceId = invoiceId;
+    order.invoiceDate = invoiceDate;
+  }
+
+  return { invoiceId, invoiceDate, savedInvoice };
+}
+
 app.get("/api/invoices/:invoiceId", async (req, res) => {
   try {
     const authenticatedUser = await getAuthenticatedUser(req);
@@ -888,19 +912,14 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
     }
 
     const invoiceDocs = await getCollectionDocs('invoices');
-    let savedInvoice = invoiceDocs.find((item: any) => item.orderId === order.id || item.id === order.invoiceId);
-    const invoiceId = order.invoiceId || savedInvoice?.invoiceId || savedInvoice?.id || invoiceNumber(order.id);
-    const invoiceDate = order.invoiceDate || savedInvoice?.invoiceDate || order.createdAt || new Date().toISOString();
-
-    if (!order.invoiceId) {
-      await saveCollectionDoc('sales_orders', { id: order.id, invoiceId, invoiceDate });
-      order = { ...order, invoiceId, invoiceDate };
-    }
+    let savedInvoice = invoiceDocs.find((item: any) => item.orderId === order.id || item.id === order.invoiceId || item.id === requestedId || item.invoiceId === requestedId);
 
     if (!savedInvoice) {
-      savedInvoice = { id: invoiceId, invoiceId, orderId: order.id, invoiceDate, createdAt: new Date().toISOString() };
-      await saveCollectionDoc('invoices', savedInvoice);
+      return res.status(404).json({ error: "Invoice not found for this order" });
     }
+
+    const invoiceId = savedInvoice.invoiceId || savedInvoice.id || order.invoiceId;
+    const invoiceDate = savedInvoice.invoiceDate || order.invoiceDate || order.createdAt || new Date().toISOString();
 
     const formatInvoiceDocs = await getCollectionDocs('formatinvoice');
     const format = formatInvoiceDocs[0] || {};
@@ -1195,6 +1214,13 @@ app.post("/api/data/:collectionName", async (req, res) => {
       return res.json({ success: true, item: lead });
     }
     await saveCollectionDoc(collectionName, item);
+    if (collectionName === 'sales_orders') {
+      try {
+        await ensureInvoiceForOrder(item);
+      } catch (invErr) {
+        console.error('[SalesOrders API] Error auto-generating invoice for order:', invErr);
+      }
+    }
     return res.json({ success: true, item });
   } catch (err: any) {
     console.error(`[VIO-FIRESTORE] Error saving record to ${collectionName}:`, err);
@@ -2184,6 +2210,14 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
     }
   }
 
+  if (order) {
+    try {
+      await ensureInvoiceForOrder(order);
+    } catch (invErr) {
+      console.error('[Finalize Payment] Error auto-generating invoice:', invErr);
+    }
+  }
+
   await processOrderCommissionsAuthoritative(tx);
 
   triggerAllNotifications('Success', tx).catch(err => console.error(err));
@@ -2971,6 +3005,11 @@ async function handleCreateCodOrder(req: any, res: any) {
       }
 
       await processOrderCommissionsAuthoritative(tx);
+      try {
+        await ensureInvoiceForOrder(order);
+      } catch (invErr) {
+        console.error('[COD Order] Error auto-generating invoice:', invErr);
+      }
       triggerAllNotifications('Success', tx).catch(err => console.error(err));
     }
 

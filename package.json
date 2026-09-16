@@ -12,7 +12,8 @@
     "build:web": "flutter build web",
     "build": "flutter build web && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
-    "clean": "rm -rf dist server.js build/web"
+    "clean": "rm -rf dist server.js build/web",
+    "recover:invoices": "tsx scripts/recover-missing-invoices.ts"
   },
   "dependencies": {
     "@google-cloud/secret-manager": "^7.0.0",
