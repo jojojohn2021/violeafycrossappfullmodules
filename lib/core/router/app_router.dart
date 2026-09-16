@@ -207,7 +207,7 @@ final appRouter = GoRouter(
         redirectTo: state.uri.queryParameters['redirect'] ?? '/',
       ),
     ),
-    // Mandatory Customer Policy Routes
+    // Mandatory Customer Policy Routes & Aliases
     GoRoute(
       path: '/privacy-policy',
       parentNavigatorKey: _rootNavigatorKey,
@@ -215,6 +215,11 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/terms-and-conditions',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const TermsAndConditionsScreen(),
+    ),
+    GoRoute(
+      path: '/terms-of-use',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const TermsAndConditionsScreen(),
     ),
@@ -229,7 +234,17 @@ final appRouter = GoRouter(
       builder: (context, state) => const ShippingPolicyScreen(),
     ),
     GoRoute(
+      path: '/shipping',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ShippingPolicyScreen(),
+    ),
+    GoRoute(
       path: '/cancellation-policy',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const CancellationPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/cancellation',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const CancellationPolicyScreen(),
     ),
@@ -247,6 +262,21 @@ final appRouter = GoRouter(
       path: '/contact-us',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const ContactUsScreen(),
+    ),
+    GoRoute(
+      path: '/grievance-redressal',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const ContactUsScreen(),
+    ),
+    GoRoute(
+      path: '/faq',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const FaqScreen(),
+    ),
+    GoRoute(
+      path: '/track-orders',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const OrdersScreen(),
     ),
   ],
 );

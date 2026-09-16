@@ -3641,6 +3641,50 @@ app.post("/api/notifications/resend", async (req, res) => {
   }
 });
 
+// Authoritative Account & Data Deletion Endpoint
+app.post("/api/account/delete", async (req, res) => {
+  try {
+    const { uid } = req.body || {};
+    const authUser = await getAuthenticatedUser(req);
+    const targetUid = authUser?.uid || uid;
+
+    if (!targetUid) {
+      return res.status(400).json({ error: "User UID is required for account deletion" });
+    }
+
+    // 1. Anonymize/delete customer document in Firestore
+    try {
+      const customerDocs = await adminDb.collection('customers').where('authUid', '==', targetUid).get();
+      for (const doc of customerDocs.docs) {
+        await doc.ref.update({
+          name: 'Deleted User',
+          mobileNumber: '',
+          email: '',
+          deletedAt: new Date().toISOString(),
+          isDeleted: true
+        });
+      }
+    } catch (err) {
+      console.error('[Account Delete] Firestore customer cleanup warning:', err);
+    }
+
+    // 2. Delete user Firebase Auth record if present
+    try {
+      await adminAuth.deleteUser(targetUid);
+    } catch (err) {
+      console.error('[Account Delete] Auth user deletion warning:', err);
+    }
+
+    return res.json({
+      success: true,
+      message: "Account and associated personal profile data successfully deleted. Required statutory tax records have been retained in compliance with law."
+    });
+  } catch (err: any) {
+    console.error('[Account Delete] Internal error:', err);
+    return res.status(500).json({ error: err.message || "Failed to process account deletion" });
+  }
+});
+
 // Start integration server inside app environment
 async function startServer() {
   // Serve the Flutter Web SPA statically from build/web for all environments

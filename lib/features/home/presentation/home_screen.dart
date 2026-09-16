@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../../providers/app_providers.dart';
 import '../../../shared/widgets/firestore_image_widget.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/shimmer_loaders.dart';
+import '../../../shared/widgets/leafy_web_footer.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -510,6 +512,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  if (kIsWeb) const LeafyWebFooter(),
                 ],
               ),
             ),
