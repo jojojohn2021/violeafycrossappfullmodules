@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/config/compliance_config.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/leafy_web_footer.dart';
@@ -7,9 +8,15 @@ import '../../../shared/widgets/leafy_web_footer.dart';
 class _PolicyLayout extends StatelessWidget {
   final String title;
   final String? webTitle;
+  final String? canonicalUrl;
   final List<Widget> children;
 
-  const _PolicyLayout({required this.title, this.webTitle, required this.children});
+  const _PolicyLayout({
+    required this.title,
+    this.webTitle,
+    this.canonicalUrl,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +28,23 @@ class _PolicyLayout extends StatelessWidget {
         appBar: AppBar(
           title: Text(title),
           elevation: 0,
+          actions: [
+            if (canonicalUrl != null)
+              IconButton(
+                icon: const Icon(Icons.open_in_browser),
+                tooltip: 'Open Web Page',
+                onPressed: () async {
+                  try {
+                    final uri = Uri.parse(canonicalUrl!);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  } catch (e) {
+                    debugPrint('Error launching canonical URL: $e');
+                  }
+                },
+              ),
+          ],
         ),
         body: SingleChildScrollView(
           child: Column(
@@ -39,7 +63,38 @@ class _PolicyLayout extends StatelessWidget {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: children,
+                        children: [
+                          if (canonicalUrl != null) ...[
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  try {
+                                    final uri = Uri.parse(canonicalUrl!);
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    }
+                                  } catch (e) {
+                                    debugPrint('Error launching canonical URL: $e');
+                                  }
+                                },
+                                icon: const Icon(Icons.open_in_browser, color: AppColors.primaryGreen, size: 18),
+                                label: Text(
+                                  'Open Public Web Page ($canonicalUrl)',
+                                  style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold, fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: AppColors.primaryGreen),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 16),
+                          ],
+                          ...children,
+                        ],
                       ),
                     ),
                   ),
@@ -114,15 +169,16 @@ class PrivacyPolicyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PolicyLayout(
       title: 'Privacy Policy',
+      canonicalUrl: ComplianceConfig.privacyPolicyUrl,
       children: [
         Text(
           'Privacy Policy for Leafyearth',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Production Domain: https://www.vamjo.com | Authoritative Developer: VAMJO',
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+        Text(
+          'Production Domain: ${ComplianceConfig.websiteUrl} | Authoritative Developer: ${ComplianceConfig.businessLegalName}',
+          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 2),
         const Text(
@@ -131,13 +187,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
         ),
         const Divider(height: 24),
         _paragraph(
-            'Leafyearth ("we", "us", or "our"), developed and operated by VAMJO, is committed to safeguarding your privacy and personal data. This Privacy Policy governs the Leafyearth application across Android, iOS, and Web platforms (https://www.vamjo.com). It provides a complete and transparent explanation of how your information is collected, used, stored, processed, and protected.'),
+            '${ComplianceConfig.businessDisplayName} ("we", "us", or "our"), developed and operated by ${ComplianceConfig.businessLegalName}, is committed to safeguarding your privacy and personal data. This Privacy Policy governs the Leafyearth application across Android, iOS, and Web platforms (${ComplianceConfig.websiteUrl}). It provides a complete and transparent explanation of how your information is collected, used, stored, processed, and protected.'),
 
         _sectionHeader('1. Application & Developer Identification'),
-        _bullet('Application Name', 'Leafyearth'),
-        _bullet('Developer & Operating Entity', 'VAMJO'),
-        _bullet('Official Web Domain', 'https://www.vamjo.com'),
-        _bullet('Authoritative Privacy Policy URL', 'https://www.vamjo.com/privacy-policy'),
+        _bullet('Application Name', ComplianceConfig.businessDisplayName),
+        _bullet('Developer & Operating Entity', ComplianceConfig.businessLegalName),
+        _bullet('Official Web Domain', ComplianceConfig.websiteUrl),
+        _bullet('Authoritative Privacy Policy URL', ComplianceConfig.privacyPolicyUrl),
 
         _sectionHeader('2. Personal & Sensitive Data We Collect'),
         _paragraph(
@@ -150,7 +206,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
         _sectionHeader('3. Payment Credentials & Financial Security'),
         _paragraph(
-            'All payment transactions (UPI, Credit/Debit Cards, Net Banking) are securely authorized and processed through our PCI-DSS compliant payment gateway partner, Razorpay. Leafyearth does not capture, store, or transmit sensitive financial credentials (such as card numbers, CVVs, or UPI PINs) on our servers.'),
+            'All payment transactions (UPI, Credit/Debit Cards, Net Banking) are securely authorized and processed through our PCI-DSS compliant payment gateway partner, Razorpay. ${ComplianceConfig.businessDisplayName} does not capture, store, or transmit sensitive financial credentials (such as card numbers, CVVs, or UPI PINs) on our servers.'),
 
         _sectionHeader('4. Purpose of Data Collection'),
         _paragraph('Your personal information is collected and processed exclusively for legitimate business purposes:'),
@@ -171,7 +227,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
         _sectionHeader('6. Security Measures'),
         _paragraph(
-            'Leafyearth implements industry-standard technical and organizational security controls:'),
+            '${ComplianceConfig.businessDisplayName} implements industry-standard technical and organizational security controls:'),
         _bullet('HTTPS / TLS 1.3 Encryption', 'All communication between your device and our web server is encrypted in transit.'),
         _bullet('Access Control & Authentication', 'Strict role-based administrative access and server-verified authorization checks.'),
         _bullet('Secure Credential Management', 'API keys and secret credentials managed via Google Cloud Secret Manager.'),
@@ -183,18 +239,18 @@ class PrivacyPolicyScreen extends StatelessWidget {
         _sectionHeader('8. Account Deletion & Associated Data Removal'),
         _paragraph(
             'You have the right to request the complete deletion of your account and personal data at any time:'),
-        _bullet('In-App Account Deletion', 'Navigate to Profile > Request Account & Data Deletion in the mobile app or web platform (https://www.vamjo.com). Selecting this option immediately invalidates login sessions and permanently deletes profile data, saved addresses, and user preferences.'),
-        _bullet('Email Deletion Request', 'Alternatively, send an email to info@vamjo.com or sales@vamjo.com with the subject "Account Deletion Request" from your registered email address.'),
+        _bullet('In-App Account Deletion', 'Navigate to Profile > Request Account & Data Deletion in the mobile app or web platform (${ComplianceConfig.websiteUrl}). Selecting this option immediately invalidates login sessions and permanently deletes profile data, saved addresses, and user preferences.'),
+        _bullet('Email Deletion Request', 'Alternatively, send an email to ${ComplianceConfig.privacyEmail} or ${ComplianceConfig.supportEmail} with the subject "Account Deletion Request" from your registered email address.'),
         _paragraph(
             'Upon processing, your profile and personal data will be deleted. Statutorily mandated tax invoices and order audit logs will be retained securely for regulatory compliance.'),
 
         _sectionHeader('9. Privacy Contact Information'),
         _paragraph('For any questions, concerns, or requests regarding this Privacy Policy, please contact our privacy officer:'),
-        _bullet('Operating Entity', 'VAMJO'),
-        _bullet('Privacy Email', 'info@vamjo.com'),
-        _bullet('Customer Support Email', 'sales@vamjo.com'),
-        _bullet('Support Phone', '+91 8547927539'),
-        _bullet('Registered Address', '3/286 Panamkoodan Commerial Corner, kallettumkara, Thrissur, Kerala, 680683'),
+        _bullet('Operating Entity', ComplianceConfig.businessLegalName),
+        _bullet('Privacy Email', ComplianceConfig.privacyEmail),
+        _bullet('Customer Support Email', ComplianceConfig.supportEmail),
+        _bullet('Support Phone', ComplianceConfig.supportPhone),
+        _bullet('Registered Address', ComplianceConfig.businessAddress),
       ],
     );
   }
@@ -209,17 +265,18 @@ class TermsAndConditionsScreen extends StatelessWidget {
     return _PolicyLayout(
       title: 'Terms & Conditions',
       webTitle: 'Terms of Use',
+      canonicalUrl: ComplianceConfig.termsAndConditionsUrl,
       children: [
         Text(
           'Terms & Conditions',
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 4),
-        const Text('Operating Entity: VAMJO | Platform: Leafyearth (https://www.vamjo.com)',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        Text('Operating Entity: ${ComplianceConfig.businessLegalName} | Platform: ${ComplianceConfig.businessDisplayName} (${ComplianceConfig.websiteUrl})',
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         const Divider(height: 24),
         _paragraph(
-            'Welcome to Leafyearth. By accessing our web application (https://www.vamjo.com) or installing our mobile applications, you agree to be bound by these Terms and Conditions.'),
+            'Welcome to ${ComplianceConfig.businessDisplayName}. By accessing our web application (${ComplianceConfig.websiteUrl}) or installing our mobile applications, you agree to be bound by these Terms and Conditions.'),
         _sectionHeader('1. User Account & Responsibilities'),
         _paragraph(
             'You are responsible for maintaining the confidentiality of your mobile OTP login credentials. You agree to provide accurate recipient contact and delivery details for order execution.'),
@@ -228,9 +285,9 @@ class TermsAndConditionsScreen extends StatelessWidget {
             'All product prices include applicable Goods and Services Tax (GST). Prices and availability are subject to change without notice. Orders are confirmed upon payment authorization and server validation.'),
         _sectionHeader('3. Payment Processing via Razorpay'),
         _paragraph(
-            'Payments on Leafyearth are authorized and processed securely through Razorpay using server-verified signatures.'),
+            'Payments on ${ComplianceConfig.businessDisplayName} are authorized and processed securely through Razorpay using server-verified signatures.'),
         _sectionHeader('4. Contact Details'),
-        _paragraph('For terms inquiries, contact sales@vamjo.com or visit our Contact Us page.'),
+        _paragraph('For terms inquiries, contact ${ComplianceConfig.supportEmail} or visit our Contact Us page.'),
       ],
     );
   }
@@ -245,25 +302,26 @@ class ShippingPolicyScreen extends StatelessWidget {
     return _PolicyLayout(
       title: 'Shipping & Delivery Policy',
       webTitle: 'Shipping Policy',
+      canonicalUrl: ComplianceConfig.shippingPolicyUrl,
       children: [
         Text(
           'Shipping & Delivery Policy',
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 4),
-        const Text('Leafyearth Logistics Rules | Domain: https://www.vamjo.com',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        Text('${ComplianceConfig.businessDisplayName} Logistics Rules | Domain: ${ComplianceConfig.websiteUrl}',
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         const Divider(height: 24),
         _sectionHeader('1. Delivery Coverage & PIN Codes'),
         _paragraph(
-            'Leafyearth ships products across supported PIN codes in India. Delivery availability and delivery charges are calculated dynamically based on your destination PIN code.'),
+            '${ComplianceConfig.businessDisplayName} ships products across supported PIN codes in India. Delivery availability and delivery charges are calculated dynamically based on your destination PIN code.'),
         _sectionHeader('2. Delivery Timelines'),
         _paragraph(
             'Orders are typically processed within 24 to 48 hours following order confirmation. Estimated delivery times range from 2 to 7 business days.'),
         _sectionHeader('3. Order Tracking'),
         _paragraph('Once dispatched, tracking updates are accessible under "My Orders".'),
         _sectionHeader('4. Delivery Support'),
-        _paragraph('For shipping queries, contact sales@vamjo.com or call +91 8547927539.'),
+        _paragraph('For shipping queries, contact ${ComplianceConfig.supportEmail} or call ${ComplianceConfig.supportPhone}.'),
       ],
     );
   }
@@ -277,6 +335,7 @@ class CancellationPolicyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PolicyLayout(
       title: 'Cancellation Policy',
+      canonicalUrl: ComplianceConfig.cancellationPolicyUrl,
       children: [
         Text(
           'Cancellation Policy',
@@ -302,6 +361,7 @@ class ReturnRefundPolicyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PolicyLayout(
       title: 'Return & Refund Policy',
+      canonicalUrl: ComplianceConfig.returnRefundPolicyUrl,
       children: [
         Text(
           'Return & Refund Policy',
@@ -328,13 +388,14 @@ class ContactUsScreen extends StatelessWidget {
     return _PolicyLayout(
       title: 'Contact Us',
       webTitle: 'Contact Us & Grievance Redressal',
+      canonicalUrl: ComplianceConfig.contactUsUrl,
       children: [
         Text(
           'Customer Support & Contact Info',
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 4),
-        const Text('Operating Entity: VAMJO | Platform: Leafyearth', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        Text('Operating Entity: ${ComplianceConfig.businessLegalName} | Platform: ${ComplianceConfig.businessDisplayName}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         const Divider(height: 24),
         _bullet('Operating Entity', ComplianceConfig.businessLegalName),
         _bullet('Brand Name', ComplianceConfig.businessDisplayName),
@@ -364,13 +425,14 @@ class FaqScreen extends StatelessWidget {
     return _PolicyLayout(
       title: 'Frequently Asked Questions',
       webTitle: 'FAQ',
+      canonicalUrl: ComplianceConfig.faqUrl,
       children: [
         Text(
           'Frequently Asked Questions (FAQ)',
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 4),
-        const Text('Leafyearth Customer Support Center', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        Text('${ComplianceConfig.businessDisplayName} Customer Support Center', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         const Divider(height: 24),
         _sectionHeader('Q: How do I place an order on Leafyearth?'),
         _paragraph('Browse products, add your desired items to the cart, enter your delivery address PIN code, and proceed to checkout using Razorpay UPI, card, or net banking.'),
@@ -379,7 +441,7 @@ class FaqScreen extends StatelessWidget {
         _sectionHeader('Q: How do I track my order?'),
         _paragraph('Navigate to "My Orders" in the application to view real-time delivery status and tracking details.'),
         _sectionHeader('Q: How can I request account deletion?'),
-        _paragraph('Go to Profile > Request Account & Data Deletion in the mobile app or web platform (https://www.vamjo.com), or email info@vamjo.com.'),
+        _paragraph('Go to Profile > Request Account & Data Deletion in the mobile app or web platform (${ComplianceConfig.websiteUrl}), or email ${ComplianceConfig.privacyEmail}.'),
       ],
     );
   }

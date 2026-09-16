@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/config/compliance_config.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../providers/app_providers.dart';
 
@@ -199,11 +201,28 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
                         : const Text('VERIFY & CONTINUE'),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
                 Center(
-                  child: TextButton(
-                    onPressed: () => ref.read(otpLoginProvider.notifier).reset(),
-                    child: const Text('Change Phone Number'),
+                  child: RichText(
+                    textAlign: TextAlign.center,
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+                      children: [
+                        const TextSpan(text: 'By continuing, you agree to our '),
+                        TextSpan(
+                          text: 'Terms & Conditions',
+                          style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                          recognizer: TapGestureRecognizer()..onTap = () => context.push(ComplianceConfig.termsPath),
+                        ),
+                        const TextSpan(text: ' and '),
+                        TextSpan(
+                          text: 'Privacy Policy',
+                          style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                          recognizer: TapGestureRecognizer()..onTap = () => context.push(ComplianceConfig.privacyPolicyPath),
+                        ),
+                        const TextSpan(text: '.'),
+                      ],
+                    ),
                   ),
                 ),
               ],

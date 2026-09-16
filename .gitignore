@@ -11,3 +11,13 @@ coverage/
 .firebase/
 serviceAccountKey.json
 
+# Android Signing & Keystore Credentials Security
+key.properties
+keystore properties.txt
+*.jks
+*.keystore
+*.pem
+
+# Scratch directory
+scratch/
+
