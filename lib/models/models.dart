@@ -281,6 +281,7 @@ class ProductPerformance {
   final String? flipkartWeblink;
   final String? meeshoWeblink;
   final String? category;
+  final List<String>? categories;
   final String? brand;
   final String? brandOwner;
   final List<String>? images;
@@ -325,6 +326,7 @@ class ProductPerformance {
     this.flipkartWeblink,
     this.meeshoWeblink,
     this.category,
+    this.categories,
     this.brand,
     this.brandOwner,
     this.images,
@@ -399,7 +401,8 @@ class ProductPerformance {
     amazonWeblink: json['amazonWeblink']?.toString(),
     flipkartWeblink: json['flipkartWeblink']?.toString(),
     meeshoWeblink: json['meeshoWeblink']?.toString(),
-    category: json['category']?.toString(),
+    category: _parseCategory(json['categories'] ?? json['category']),
+    categories: _parseCategories(json['categories'] ?? json['category']),
     brand: json['brand']?.toString(),
     brandOwner: json['brandOwner']?.toString(),
     images: json['images'] is List ? (json['images'] as List).map((e) => EnvConfig.normalizeUrl(e.toString())).toList() : null,
@@ -445,6 +448,7 @@ class ProductPerformance {
     'flipkartWeblink': flipkartWeblink,
     'meeshoWeblink': meeshoWeblink,
     'category': category,
+    'categories': categories ?? (category != null ? [category!] : []),
     'brand': brand,
     'brandOwner': brandOwner,
     'images': images,
@@ -460,6 +464,39 @@ class ProductPerformance {
     'reviewsCount': reviewsCount,
     'videos': videos,
   };
+
+  static String? _parseCategory(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is List) {
+      final list = raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      return list.isNotEmpty ? list.join(', ') : null;
+    }
+    final str = raw.toString().trim();
+    return str.isNotEmpty ? str : null;
+  }
+
+  static List<String>? _parseCategories(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is List) {
+      final list = raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      return list.isNotEmpty ? list : null;
+    }
+    final str = raw.toString().trim();
+    if (str.isEmpty) return null;
+    if (str.contains(',')) {
+      final list = str.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      return list.isNotEmpty ? list : [str];
+    }
+    return [str];
+  }
+
+  bool matchesCategory(String selectedCategory) {
+    if (selectedCategory == 'All') return true;
+    final selLower = selectedCategory.trim().toLowerCase();
+    if (category != null && category!.toLowerCase().contains(selLower)) return true;
+    if (categories != null && categories!.any((c) => c.toLowerCase() == selLower)) return true;
+    return false;
+  }
 }
 
 // --- CUSTOMERS ---
@@ -614,6 +651,7 @@ class SalesProduct {
   final double? gstAmount;
   final double? gstInclusiveAmount;
   final String? category;
+  final List<String>? categories;
   final String? brand;
   final String? brandOwner;
 
@@ -629,6 +667,7 @@ class SalesProduct {
     this.gstAmount,
     this.gstInclusiveAmount,
     this.category,
+    this.categories,
     this.brand,
     this.brandOwner,
   });
@@ -644,7 +683,8 @@ class SalesProduct {
     taxableValue: json['taxableValue'] != null ? (json['taxableValue']).toDouble() : null,
     gstAmount: json['gstAmount'] != null ? (json['gstAmount']).toDouble() : null,
     gstInclusiveAmount: json['gstInclusiveAmount'] != null ? (json['gstInclusiveAmount']).toDouble() : null,
-    category: json['category'],
+    category: ProductPerformance._parseCategory(json['categories'] ?? json['category']),
+    categories: ProductPerformance._parseCategories(json['categories'] ?? json['category']),
     brand: json['brand'],
     brandOwner: json['brandOwner'],
   );
@@ -661,6 +701,7 @@ class SalesProduct {
     'gstAmount': gstAmount,
     'gstInclusiveAmount': gstInclusiveAmount,
     'category': category,
+    'categories': categories ?? (category != null ? [category!] : []),
     'brand': brand,
     'brandOwner': brandOwner,
   };

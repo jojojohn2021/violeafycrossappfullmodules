@@ -17,7 +17,7 @@ dotenv.config();
 async function getProducts(req: any, res: any) {
   try {
     const snapshot = await adminDb.collection("products").get();
-    const products = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    const products = snapshot.docs.map((doc: any) => normalizeProduct({ id: doc.id, ...doc.data() }));
     res.status(200).json(products);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -44,7 +44,7 @@ app.get("/api/products", getProducts);
 app.get("/api/data", async (req: any, res: any) => {
   try {
     const snapshot = await adminDb.collection("products").get();
-    const products = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    const products = snapshot.docs.map((doc: any) => normalizeProduct({ id: doc.id, ...doc.data() }));
     res.status(200).json({ status: "success", databaseId: "violeafydb", count: products.length, data: products });
   } catch (error: any) {
     res.status(500).json({ status: "error", error: error.message });
@@ -140,12 +140,40 @@ function normalizePaymentTransaction(tx: any) {
   };
 }
 
+function normalizeProduct(prod: any) {
+  if (!prod || typeof prod !== 'object') return prod;
+
+  let categories: string[] = [];
+  if (Array.isArray(prod.categories)) {
+    categories = prod.categories.map((c: any) => String(c).trim()).filter(Boolean);
+  } else if (typeof prod.categories === 'string' && prod.categories.trim()) {
+    categories = prod.categories.split(',').map((c: any) => c.trim()).filter(Boolean);
+  } else if (Array.isArray(prod.category)) {
+    categories = prod.category.map((c: any) => String(c).trim()).filter(Boolean);
+  } else if (typeof prod.category === 'string' && prod.category.trim()) {
+    categories = prod.category.split(',').map((c: any) => c.trim()).filter(Boolean);
+  }
+
+  const categoryStr = categories.length > 0 
+    ? categories.join(', ') 
+    : (typeof prod.category === 'string' ? prod.category : (typeof prod.categories === 'string' ? prod.categories : ''));
+
+  return {
+    ...prod,
+    categories: categories.length > 0 ? categories : (prod.categories || (prod.category ? [prod.category] : [])),
+    category: prod.category || categoryStr || ''
+  };
+}
+
 async function getCollectionDocs(col: string): Promise<any[]> {
   try {
     const snapshot = await adminDb.collection(col).get();
     const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     if (col === 'payments') {
       return docs.map(tx => normalizePaymentTransaction(tx));
+    }
+    if (col === 'products') {
+      return docs.map(prod => normalizeProduct(prod));
     }
     return docs;
   } catch (err: any) {
@@ -156,8 +184,11 @@ async function getCollectionDocs(col: string): Promise<any[]> {
 
 async function saveCollectionDoc(col: string, item: any): Promise<void> {
   try {
-    const cleanItem = { ...item };
+    let cleanItem = { ...item };
     delete cleanItem._id;
+    if (col === 'products') {
+      cleanItem = normalizeProduct(cleanItem);
+    }
     await adminDb.collection(col).doc(String(item.id)).set(cleanItem, { merge: true });
   } catch (err: any) {
     console.error(`[VIO-FIRESTORE] saveCollectionDoc error on collection '${col}':`, err);
@@ -739,7 +770,22 @@ app.get(["/api/categories", "/api/product-categories"], async (req, res) => {
     if (!docs || docs.length === 0) {
       // Fallback: derive categories from products database table
       const products = await getCollectionDocs("products");
-      const categoryNames = Array.from(new Set(products.map((p: any) => p.category).filter(Boolean)));
+      const categoryNames = Array.from(
+        new Set(
+          products.flatMap((p: any) => {
+            if (Array.isArray(p.categories) && p.categories.length > 0) {
+              return p.categories.map((c: any) => String(c).trim()).filter(Boolean);
+            }
+            if (typeof p.categories === "string" && p.categories.trim()) {
+              return p.categories.split(",").map((c: any) => c.trim()).filter(Boolean);
+            }
+            if (typeof p.category === "string" && p.category.trim()) {
+              return p.category.split(",").map((c: any) => c.trim()).filter(Boolean);
+            }
+            return p.category ? [String(p.category).trim()] : [];
+          })
+        )
+      );
       docs = categoryNames.map((cat, idx) => ({
         id: `cat_${idx + 1}`,
         name: cat,

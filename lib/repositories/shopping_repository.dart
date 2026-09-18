@@ -173,8 +173,14 @@ class ShoppingRepository {
       final products = await getProducts();
       final categorySet = <String>{};
       for (final p in products) {
-        if (p.category != null && p.category!.trim().isNotEmpty) {
-          categorySet.add(p.category!.trim());
+        if (p.categories != null && p.categories!.isNotEmpty) {
+          for (final cat in p.categories!) {
+            if (cat.trim().isNotEmpty) categorySet.add(cat.trim());
+          }
+        } else if (p.category != null && p.category!.trim().isNotEmpty) {
+          for (final cat in p.category!.split(',')) {
+            if (cat.trim().isNotEmpty) categorySet.add(cat.trim());
+          }
         }
       }
       if (categorySet.isNotEmpty) {
@@ -437,6 +443,7 @@ class ShoppingRepository {
         gstPercentage: existing.gstPercentage,
         hsnCode: existing.hsnCode,
         category: existing.category,
+        categories: existing.categories,
         brand: existing.brand,
       );
     } else {
@@ -449,6 +456,7 @@ class ShoppingRepository {
         gstPercentage: product.gstPercentage,
         hsnCode: product.hsnCode,
         category: product.category,
+        categories: product.categories,
         brand: product.brand,
       ));
     }
@@ -510,6 +518,7 @@ class ShoppingRepository {
         gstPercentage: item.gstPercentage,
         hsnCode: item.hsnCode,
         category: item.category,
+        categories: item.categories,
         brand: item.brand,
       );
     }

@@ -137,8 +137,7 @@ final filteredProductsProvider = Provider<List<ProductPerformance>>((ref) {
   return productsAsync.maybeWhen(
     data: (products) {
       return products.where((p) {
-        final matchesCategory = (category == 'All') ||
-            (p.category?.toLowerCase() == category.toLowerCase());
+        final matchesCategory = p.matchesCategory(category);
         final matchesQuery = query.isEmpty ||
             p.name.toLowerCase().contains(query) ||
             p.sku.toLowerCase().contains(query) ||
