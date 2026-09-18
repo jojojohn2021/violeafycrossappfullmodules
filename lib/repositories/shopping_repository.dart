@@ -125,6 +125,50 @@ class ShoppingRepository {
     }
   }
 
+  // Fetch Product Story Video from Server API with Firestore fallback probe
+  Future<Map<String, dynamic>?> getProductStoryVideo(String productId) async {
+    try {
+      debugPrint('[ShoppingRepository] Fetching product story video from Server API for product $productId...');
+      final response = await _apiClient.get('/api/products/$productId/story');
+      if (response != null && response is Map) {
+        final map = Map<String, dynamic>.from(response);
+        if (map['videoUrl'] != null && map['videoUrl'].toString().isNotEmpty) {
+          return map;
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Server API error for product story video: $e');
+    }
+
+    // Direct Firestore probe fallback if server endpoint unreachable
+    try {
+      if (firestore != null) {
+        final doc = await firestore!.collection('products').doc(productId).get().timeout(const Duration(seconds: 4));
+        if (doc.exists) {
+          final data = doc.data() ?? {};
+          final videoUrl = data['productStoryUrl'] ??
+              data['productStoryVideoUrl'] ??
+              data['linkedInVideoUrl'] ??
+              data['storyVideoUrl'] ??
+              data['productStory'] ??
+              data['videoUrl'] ??
+              (data['videos'] is List && (data['videos'] as List).isNotEmpty ? data['videos'][0] : null);
+          if (videoUrl != null && videoUrl.toString().isNotEmpty) {
+            return {
+              'productId': productId,
+              'title': data['name'] ?? 'Product Story',
+              'videoUrl': videoUrl.toString(),
+              'hasStory': true,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Firestore fallback error for story video: $e');
+    }
+    return null;
+  }
+
   // Authoritative Category Data Retrieval from Server-Side API
   Future<List<ProductCategory>> getCategoryModels() async {
     try {

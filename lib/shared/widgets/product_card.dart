@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/models.dart';
 import '../../providers/app_providers.dart';
+import 'product_story_dialog.dart';
 
 class ProductCard extends ConsumerWidget {
   final ProductPerformance product;
@@ -195,27 +196,94 @@ class ProductCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 6),
 
-                  // Price Row
+                  // Price Row & Product Story button
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        '₹${price.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: AppColors.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            '₹${price.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          if (hasDiscount)
+                            Text(
+                              '₹${mrp.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                decoration: TextDecoration.lineThrough,
+                                fontSize: 11,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      if (hasDiscount)
-                        Text(
-                          '₹${mrp.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            decoration: TextDecoration.lineThrough,
-                            fontSize: 11,
-                            color: AppColors.textMuted,
+                      // Short Product Story Button placed in right corner just above ADD button
+                      InkWell(
+                        onTap: () async {
+                          if (product.productStoryUrl != null && product.productStoryUrl!.isNotEmpty) {
+                            ProductStoryDialog.show(
+                              context,
+                              title: product.name,
+                              videoUrl: product.productStoryUrl!,
+                            );
+                            return;
+                          }
+
+                          // Server-side API call to get product story video from Firestore tables
+                          final repo = ref.read(shoppingRepositoryProvider);
+                          final storyData = await repo.getProductStoryVideo(product.id);
+                          if (storyData != null && storyData['videoUrl'] != null && storyData['videoUrl'].toString().isNotEmpty) {
+                            if (context.mounted) {
+                              ProductStoryDialog.show(
+                                context,
+                                title: storyData['title'] ?? product.name,
+                                videoUrl: storyData['videoUrl'],
+                              );
+                            }
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('No product story video available for this item'),
+                                  duration: Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.primaryGreen, width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.play_circle_fill, size: 10, color: AppColors.primaryGreen),
+                              SizedBox(width: 3),
+                              Text(
+                                'Product Story',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryGreen,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),

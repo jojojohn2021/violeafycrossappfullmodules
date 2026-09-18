@@ -74,10 +74,10 @@ class LeafyWebFooter extends ConsumerWidget {
                             child: _buildMobileAppSection(context),
                           ),
                           const SizedBox(width: 20),
-                          // 4. LEARYAYUR
+                          // 4. LEAFYAYUR
                           Expanded(
                             flex: 3,
-                            child: _buildLearyayurSection(context),
+                            child: _buildLeafyayurSection(context),
                           ),
                         ],
                       );
@@ -92,7 +92,7 @@ class LeafyWebFooter extends ConsumerWidget {
                           const SizedBox(height: 28),
                           _buildMobileAppSection(context),
                           const SizedBox(height: 28),
-                          _buildLearyayurSection(context),
+                          _buildLeafyayurSection(context),
                         ],
                       );
                     }
@@ -324,22 +324,22 @@ class LeafyWebFooter extends ConsumerWidget {
     );
   }
 
-  // Section 4: LEARYAYUR
-  Widget _buildLearyayurSection(BuildContext context) {
+  // Section 4: LEAFYAYUR
+  Widget _buildLeafyayurSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('LEARYAYUR'),
+        _buildSectionHeader('LEAFYAYUR'),
         const SizedBox(height: 4),
         const Text(
-          'Discover authentic Ayurvedic products, organic wellness solutions & natural living with Learyayur by Leafyearth.',
+          'Discover authentic Ayurvedic products, organic wellness solutions & natural living with Leafyayur by Leafyearth.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
         ),
         const SizedBox(height: 14),
         MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
-            onTap: () => _launchExternalUrl('https://www.vamjo.com/learyayur'),
+            onTap: () => _launchExternalUrl('https://www.vamjo.com/leafyayur'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -353,7 +353,7 @@ class LeafyWebFooter extends ConsumerWidget {
                   Icon(Icons.eco, color: AppColors.primaryGreen, size: 20),
                   SizedBox(width: 8),
                   Text(
-                    'Explore Learyayur',
+                    'Explore Leafyayur',
                     style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   SizedBox(width: 4),

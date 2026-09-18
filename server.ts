@@ -24,6 +24,49 @@ async function getProducts(req: any, res: any) {
   }
 }
 
+async function getProductStory(req: any, res: any) {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: "Product ID is required" });
+    }
+
+    const productDoc = await adminDb.collection("products").doc(id).get();
+    let videoUrl: string | null = null;
+    let title: string = "Product Story";
+
+    if (productDoc.exists) {
+      const data = productDoc.data() || {};
+      title = data.name || data.title || title;
+      videoUrl = data.productStoryUrl ||
+        data.productStoryVideoUrl ||
+        data.linkedInVideoUrl ||
+        data.storyVideoUrl ||
+        data.productStory ||
+        data.videoUrl ||
+        (Array.isArray(data.videos) && data.videos.length > 0 ? data.videos[0] : null);
+    }
+
+    if (!videoUrl) {
+      const storyDoc = await adminDb.collection("product_stories").doc(id).get();
+      if (storyDoc.exists) {
+        const storyData = storyDoc.data() || {};
+        videoUrl = storyData.videoUrl || storyData.linkedInVideoUrl || storyData.url || null;
+        if (storyData.title) title = storyData.title;
+      }
+    }
+
+    res.status(200).json({
+      productId: id,
+      title,
+      videoUrl,
+      hasStory: !!videoUrl,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 const app = express();
 export const api = onRequest({ cors: true }, app);
 app.use(express.json({ limit: "50mb" }));
@@ -41,6 +84,7 @@ app.use((req, res, next) => {
 });
 
 app.get("/api/products", getProducts);
+app.get("/api/products/:id/story", getProductStory);
 app.get("/api/data", async (req: any, res: any) => {
   try {
     const snapshot = await adminDb.collection("products").get();

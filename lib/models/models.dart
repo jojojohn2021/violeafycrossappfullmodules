@@ -296,6 +296,7 @@ class ProductPerformance {
   final double? rating;
   final int? reviewsCount;
   final List<String>? videos;
+  final String? productStoryUrl;
 
   ProductPerformance({
     required this.id,
@@ -341,6 +342,7 @@ class ProductPerformance {
     this.rating,
     this.reviewsCount,
     this.videos,
+    this.productStoryUrl,
   });
 
   static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -417,6 +419,7 @@ class ProductPerformance {
     rating: _toDoubleNullable(json['rating']),
     reviewsCount: _toIntNullable(json['reviewsCount']),
     videos: json['videos'] is List ? List<String>.from((json['videos'] as List).map((e) => e.toString())) : null,
+    productStoryUrl: (json['productStoryUrl'] ?? json['productStoryVideoUrl'] ?? json['linkedInVideoUrl'] ?? json['storyVideoUrl'] ?? json['productStory'] ?? json['videoUrl'])?.toString() ?? (json['videos'] is List && (json['videos'] as List).isNotEmpty ? (json['videos'] as List).first.toString() : null),
   );
 
   Map<String, dynamic> toJson() => {
@@ -463,6 +466,7 @@ class ProductPerformance {
     'rating': rating,
     'reviewsCount': reviewsCount,
     'videos': videos,
+    'productStoryUrl': productStoryUrl,
   };
 
   static String? _parseCategory(dynamic raw) {
