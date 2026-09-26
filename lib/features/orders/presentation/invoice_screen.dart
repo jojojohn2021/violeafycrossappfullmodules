@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -57,6 +58,24 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
     final gstByHsn = (invoice['gstByHsn'] as List? ?? const []).map((item) => Map<String, dynamic>.from(item as Map)).toList();
     String amount(dynamic value) => 'Rs.${((value as num?)?.toDouble() ?? 0).toStringAsFixed(2)}';
 
+    pw.Widget logoWidget;
+    try {
+      final logoUrl = header['companyLogo']?.toString() ?? '';
+      if (logoUrl.isNotEmpty) {
+        final logoResp = await http.get(Uri.parse(logoUrl)).timeout(const Duration(seconds: 4));
+        if (logoResp.statusCode == 200) {
+          final logoImage = pw.MemoryImage(logoResp.bodyBytes);
+          logoWidget = pw.Image(logoImage, height: 45);
+        } else {
+          logoWidget = pw.Text(header['companyName']?.toString() ?? 'VAMJO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold));
+        }
+      } else {
+        logoWidget = pw.Text(header['companyName']?.toString() ?? 'VAMJO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold));
+      }
+    } catch (_) {
+      logoWidget = pw.Text(header['companyName']?.toString() ?? 'VAMJO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold));
+    }
+
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -65,11 +84,28 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
           children: [
             pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
               pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                pw.Text(header['companyName']?.toString() ?? '', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-                for (final value in (header['addresses'] as List? ?? const [])) pw.Text(value.toString()),
-                for (final value in (header['mobileNumbers'] as List? ?? const [])) pw.Text(value.toString()),
-                pw.Text('Customer Care: ${header['customerCareMobile'] ?? ''}'),
-                pw.Text(header['customerCareEmail']?.toString() ?? ''),
+                // Line 1: companyLogo
+                logoWidget,
+                pw.SizedBox(height: 4),
+                // Line 2: addressess
+                if ((header['addressess']?.toString() ?? '').isNotEmpty) pw.Text(header['addressess'].toString(), style: const pw.TextStyle(fontSize: 9)),
+                if ((header['addressess1']?.toString() ?? '').isNotEmpty) pw.Text(header['addressess1'].toString(), style: const pw.TextStyle(fontSize: 9)),
+                if ((header['addressess']?.toString() ?? '').isEmpty && (header['addresses'] as List? ?? const []).isNotEmpty)
+                  for (final value in (header['addresses'] as List? ?? const [])) pw.Text(value.toString(), style: const pw.TextStyle(fontSize: 9)),
+                pw.SizedBox(height: 2),
+                // Line 3: customerCareEmail , Customer care : customerCareNumber
+                pw.Text(
+                  '${header['customerCareEmail'] ?? 'sales@vamjo.com'} , Customer care : ${header['customerCareNumber'] ?? header['customerCareMobile'] ?? ''}',
+                  style: const pw.TextStyle(fontSize: 9),
+                ),
+                pw.SizedBox(height: 2),
+                // Line 4: gstno
+                if ((header['gstNo']?.toString() ?? header['gstno']?.toString() ?? '').isNotEmpty)
+                  pw.Text('GSTIN: ${header['gstNo'] ?? header['gstno']}', style: const pw.TextStyle(fontSize: 9)),
+                pw.SizedBox(height: 2),
+                // Line 5: webAddress
+                if ((header['webAddress']?.toString() ?? '').isNotEmpty)
+                  pw.Text(header['webAddress'].toString(), style: const pw.TextStyle(fontSize: 9)),
               ]),
               pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
                 pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: 'INVOICE:$invoiceId', width: 72, height: 72),
@@ -240,12 +276,64 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(header['companyName']?.toString() ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              for (final address in (header['addresses'] as List? ?? const [])) Text(address.toString()),
-              for (final mobile in (header['mobileNumbers'] as List? ?? const [])) Text(mobile.toString()),
-              Text('Customer Care: ${header['customerCareMobile'] ?? ''}'),
-              Text(header['customerCareEmail']?.toString() ?? ''),
-              const Divider(),
+              // Line 1: companyLogo
+              if ((header['companyLogo']?.toString() ?? '').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Image.network(
+                    header['companyLogo'].toString(),
+                    height: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Text(
+                      header['companyName']?.toString() ?? 'VAMJO',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  header['companyName']?.toString() ?? 'VAMJO',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+
+              const SizedBox(height: 4),
+
+              // Line 2: addressess
+              if ((header['addressess']?.toString() ?? '').isNotEmpty)
+                Text(header['addressess'].toString(), style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              if ((header['addressess1']?.toString() ?? '').isNotEmpty)
+                Text(header['addressess1'].toString(), style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              if ((header['addressess']?.toString() ?? '').isEmpty && (header['addresses'] as List? ?? const []).isNotEmpty)
+                for (final address in (header['addresses'] as List? ?? const []))
+                  Text(address.toString(), style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+
+              const SizedBox(height: 2),
+
+              // Line 3: customerCareEmail , Customer care : customerCareNumber
+              Text(
+                '${header['customerCareEmail'] ?? 'sales@vamjo.com'} , Customer care : ${header['customerCareNumber'] ?? header['customerCareMobile'] ?? ''}',
+                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+
+              const SizedBox(height: 2),
+
+              // Line 4: gstno
+              if ((header['gstNo']?.toString() ?? header['gstno']?.toString() ?? '').isNotEmpty)
+                Text(
+                  'GSTIN: ${header['gstNo'] ?? header['gstno']}',
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                ),
+
+              const SizedBox(height: 2),
+
+              // Line 5: webAddress
+              if ((header['webAddress']?.toString() ?? '').isNotEmpty)
+                Text(
+                  header['webAddress'].toString(),
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+
+              const Divider(height: 24),
               Text('Invoice ID: ${_invoiceData['invoiceId'] ?? widget.order.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
               Text('Invoice Date: ${_invoiceData['invoiceDate'] ?? ''}'),
             ],

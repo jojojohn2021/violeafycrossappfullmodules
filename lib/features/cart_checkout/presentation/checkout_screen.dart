@@ -484,7 +484,7 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       'customerId': user.uid,
       'customerName': widget.data.address.name,
       'customerEmail': customerEmail,
-      'customerMobile': widget.data.address.mobileNumber,
+      'customerMobile': sanitizeMobileNumber(widget.data.address.mobileNumber),
       'customerCompany': '',
       'products': widget.data.cart.map((item) => item.toJson()).toList(),
       'subtotal': widget.data.subtotal,

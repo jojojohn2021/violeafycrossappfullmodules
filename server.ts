@@ -138,7 +138,7 @@ function normalizePaymentTransaction(tx: any) {
     ? shippingAddress
     : [shippingAddress.addressLine, shippingAddress.city, shippingAddress.district, shippingAddress.state, shippingAddress.pincode].filter(Boolean).join(', ');
 
-  const mobileVal = (
+  const mobileVal = sanitizeMobileNumber(
     tx.customerMobile ||
     tx.customerPhone ||
     tx.phone ||
@@ -147,7 +147,7 @@ function normalizePaymentTransaction(tx: any) {
     orderPayload.mobileNumber ||
     shippingAddress.mobileNumber ||
     ""
-  ).toString().trim();
+  );
 
   const addressVal = (
     tx.customerAddress ||
@@ -209,6 +209,30 @@ function normalizeProduct(prod: any) {
   };
 }
 
+function sanitizeMobileNumber(mobile: any): string {
+  if (!mobile) return '';
+  return String(mobile).replace(/\s+/g, '').trim();
+}
+
+function get10DigitMobile(mobile: any): string {
+  const digits = String(mobile || '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+function normalizeSalesOrder(order: any): any {
+  if (!order || typeof order !== 'object') return order;
+  const rawMobile = order.customerMobile || order.contactNo || order.phone || order.mobile || order.orderPayload?.customerMobile || order.orderPayload?.phone || '';
+  const sanitized = sanitizeMobileNumber(rawMobile);
+  const updatedOrder = {
+    ...order,
+    customerMobile: sanitized || (order.customerMobile ? sanitizeMobileNumber(order.customerMobile) : ''),
+  };
+  if (updatedOrder.contactNo) updatedOrder.contactNo = sanitizeMobileNumber(updatedOrder.contactNo);
+  if (updatedOrder.phone) updatedOrder.phone = sanitizeMobileNumber(updatedOrder.phone);
+  if (updatedOrder.mobile) updatedOrder.mobile = sanitizeMobileNumber(updatedOrder.mobile);
+  return updatedOrder;
+}
+
 async function getCollectionDocs(col: string): Promise<any[]> {
   try {
     const snapshot = await adminDb.collection(col).get();
@@ -218,6 +242,9 @@ async function getCollectionDocs(col: string): Promise<any[]> {
     }
     if (col === 'products') {
       return docs.map(prod => normalizeProduct(prod));
+    }
+    if (col === 'sales_orders') {
+      return docs.map(ord => normalizeSalesOrder(ord));
     }
     return docs;
   } catch (err: any) {
@@ -232,6 +259,9 @@ async function saveCollectionDoc(col: string, item: any): Promise<void> {
     delete cleanItem._id;
     if (col === 'products') {
       cleanItem = normalizeProduct(cleanItem);
+    }
+    if (col === 'sales_orders') {
+      cleanItem = normalizeSalesOrder(cleanItem);
     }
     await adminDb.collection(col).doc(String(item.id)).set(cleanItem, { merge: true });
   } catch (err: any) {
@@ -251,9 +281,40 @@ async function getAuthenticatedUser(req: any): Promise<any> {
 }
 
 
+function formatMobileNumberPlusCode(mobileCountrycode?: string, mobileNumber?: string): string {
+  const cleanCountryCode = String(mobileCountrycode || '').replace(/\s+/g, '').trim();
+  const cleanMobile = String(mobileNumber || '').replace(/\s+/g, '').trim();
+
+  const digitsOnly = cleanMobile.replace(/\D/g, '');
+  if (!digitsOnly) {
+    return '';
+  }
+
+  let countryCode = cleanCountryCode;
+  if (!countryCode) {
+    countryCode = '+91';
+  } else if (!countryCode.startsWith('+') && /^\d+$/.test(countryCode)) {
+    countryCode = '+' + countryCode;
+  }
+
+  if (cleanMobile.startsWith('+')) {
+    return cleanMobile.replace(/\s+/g, '');
+  }
+
+  const ccDigits = countryCode.replace(/\D/g, '');
+  if (ccDigits && digitsOnly.startsWith(ccDigits) && digitsOnly.length > 10) {
+    return '+' + digitsOnly;
+  }
+
+  return `${countryCode}${digitsOnly}`.replace(/\s+/g, '');
+}
+
 async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<any> {
   const mobileNumber = String(item.mobileNumber || item.mobile || '').replace(/\D/g, '');
   if (!mobileNumber) throw new Error('Customer mobile number is required');
+
+  const mobileCountrycode = String(item.mobileCountrycode || item.mobileCountryCode || item.countrymobilecode || item.countryMobileCode || '+91').replace(/\s+/g, '').trim();
+  const mobileNumberpluscode = formatMobileNumberPlusCode(mobileCountrycode, mobileNumber);
 
   if (authenticatedUser?.uid) {
     const linked = await adminDb.collection('customers').where('authUid', '==', authenticatedUser.uid).limit(1).get();
@@ -269,7 +330,25 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
           throw new Error('Mobile number is already registered. Duplicate customer mobile number is not allowed.');
         }
       }
-      return { id: existingDoc.id, ...existingData };
+      if (!existingData.mobileNumberpluscode && mobileNumberpluscode) {
+        await existingDoc.ref.set({ mobileCountrycode, mobileNumberpluscode }, { merge: true });
+        await adminDb.collection('customer_mobile_plus_code_index').doc(mobileNumberpluscode).set({
+          customerId: existingDoc.id,
+          mobileNumberpluscode
+        }, { merge: true });
+      }
+      return { id: existingDoc.id, ...existingData, mobileCountrycode, mobileNumberpluscode };
+    }
+  }
+
+  if (mobileNumberpluscode) {
+    const dupPlusCodeCheck = await adminDb.collection('customers').where('mobileNumberpluscode', '==', mobileNumberpluscode).limit(1).get();
+    if (!dupPlusCodeCheck.empty) {
+      const existingDoc = dupPlusCodeCheck.docs[0];
+      if (item.id && item.id !== existingDoc.id) {
+        throw new Error('Mobile number is already registered. Duplicate customer mobile number is not allowed.');
+      }
+      return { id: existingDoc.id, ...existingDoc.data() };
     }
   }
 
@@ -285,8 +364,25 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
   const leads = await adminDb.collection('leads').where('phone', '==', mobileNumber).limit(1).get();
   const lead: any = leads.empty ? null : { id: leads.docs[0].id, ...leads.docs[0].data() };
   const indexRef = adminDb.collection('customer_mobile_index').doc(mobileNumber);
+  const indexPlusCodeRef = mobileNumberpluscode ? adminDb.collection('customer_mobile_plus_code_index').doc(mobileNumberpluscode) : null;
 
   return adminDb.runTransaction(async (transaction) => {
+    if (indexPlusCodeRef) {
+      const plusCodeIndex = await transaction.get(indexPlusCodeRef);
+      if (plusCodeIndex.exists) {
+        const customerId = plusCodeIndex.data()?.customerId;
+        if (customerId) {
+          const existingCustomer = await transaction.get(adminDb.collection('customers').doc(String(customerId)));
+          if (existingCustomer.exists) {
+            if (item.id && item.id !== existingCustomer.id) {
+              throw new Error('Mobile number is already registered. Duplicate customer mobile number is not allowed.');
+            }
+            return { id: existingCustomer.id, ...existingCustomer.data() };
+          }
+        }
+      }
+    }
+
     const index = await transaction.get(indexRef);
     if (index.exists) {
       const customerId = index.data()?.customerId;
@@ -308,6 +404,9 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
         throw new Error('Mobile number is already registered. Duplicate customer mobile number is not allowed.');
       }
       transaction.set(indexRef, { customerId: existingCustomer.id, mobileNumber }, { merge: true });
+      if (indexPlusCodeRef) {
+        transaction.set(indexPlusCodeRef, { customerId: existingCustomer.id, mobileNumberpluscode }, { merge: true });
+      }
       return { id: existingCustomer.id, ...existingCustomer.data() };
     }
 
@@ -320,6 +419,10 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
       id: customerRef.id,
       authUid: authenticatedUser?.uid || cleanItem.authUid || null,
       mobileNumber,
+      mobileCountrycode,
+      mobileNumberpluscode,
+      countrymobilecode: mobileCountrycode,
+      mobilenumberwithcountrycode: mobileNumberpluscode,
       leadslinkid: lead?.id || null,
       referralcode: lead?.referralcode ?? lead?.referralCode ?? null,
       referralpartner: lead?.referralpartner ?? lead?.referralPartner ?? null,
@@ -327,6 +430,9 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
     };
     transaction.set(customerRef, customer);
     transaction.set(indexRef, { customerId: customerRef.id, mobileNumber });
+    if (indexPlusCodeRef) {
+      transaction.set(indexPlusCodeRef, { customerId: customerRef.id, mobileNumberpluscode });
+    }
     return customer;
   });
 }
@@ -558,36 +664,74 @@ async function fetchUserScopedSalesOrders(authenticatedUser: any): Promise<any[]
     return [];
   }
 
-  const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+  // Directive 1: Call findCustomerByAuthUser(authenticatedUser)
+  const customer = await findCustomerByAuthUser(authenticatedUser);
 
-  const userUids = new Set([
-    authenticatedUser.uid,
-    customer?.id,
-    customer?.authUid
-  ].filter(Boolean));
+  const rawAuthMobile = authenticatedUser.phone_number || authenticatedUser.phoneNumber || customer?.mobileNumber || '';
+  const sanitizedAuthMobile = sanitizeMobileNumber(rawAuthMobile);
+  const cleanAuthMobile10 = get10DigitMobile(rawAuthMobile);
 
   const cleanAuthEmail = authenticatedUser.email ? String(authenticatedUser.email).trim().toLowerCase() : (customer?.email ? String(customer.email).trim().toLowerCase() : '');
 
-  const rawAuthMobile = authenticatedUser.phone_number || authenticatedUser.phoneNumber || customer?.mobileNumber || customer?.mobile || '';
-  const cleanAuthMobile = String(rawAuthMobile).replace(/\D/g, '').slice(-10);
+  // Helper to filter out generic support/admin emails from matching across different customer orders
+  const isGenericSupportEmail = (email: string): boolean => {
+    if (!email) return true;
+    const e = email.toLowerCase().trim();
+    return e.startsWith('support@') || e.startsWith('admin@') || e.startsWith('info@') || e.startsWith('help@') || e.startsWith('contact@');
+  };
+
+  // Directive 2: Customer link ID is customer table document id
+  const candidateIds = new Set([
+    authenticatedUser.uid,
+    customer?.id,
+    customer?.authUid,
+    customer?.customerId
+  ].filter(Boolean));
+
+  // Directive 2 & 3: Mobile field name is mobileNumber, matched without spaces
+  const candidateMobiles = new Set([
+    sanitizedAuthMobile,
+    cleanAuthMobile10,
+    customer?.mobileNumber ? sanitizeMobileNumber(customer.mobileNumber) : '',
+    customer?.mobileNumber ? get10DigitMobile(customer.mobileNumber) : '',
+    authenticatedUser.phone_number ? sanitizeMobileNumber(authenticatedUser.phone_number) : '',
+    authenticatedUser.phoneNumber ? sanitizeMobileNumber(authenticatedUser.phoneNumber) : ''
+  ].filter(Boolean));
 
   const docs = await getCollectionDocs("sales_orders");
   const ownOrders = docs.filter((order: any) => {
     const orderCustId = String(order.customerId || order.userId || '').trim();
+    const shippingCustId = String(order.shippingAddress?.customerId || order.shippingAddress?.userId || '').trim();
 
-    // 1. If order has an explicit customerId / userId set:
-    if (orderCustId && orderCustId !== 'guest' && orderCustId !== 'anonymous') {
-      return userUids.has(orderCustId);
+    // 1. Direct ID / AuthUID match on customer document id or shippingAddress customerId
+    if (orderCustId && orderCustId !== 'guest' && orderCustId !== 'anonymous' && candidateIds.has(orderCustId)) {
+      return true;
     }
-
-    // 2. Fallback matching only for legacy orders without explicit customerId:
-    const orderEmail = String(order.customerEmail || '').trim().toLowerCase();
-    if (cleanAuthEmail && orderEmail && cleanAuthEmail === orderEmail) {
+    if (shippingCustId && shippingCustId !== 'guest' && shippingCustId !== 'anonymous' && candidateIds.has(shippingCustId)) {
       return true;
     }
 
-    const orderMobile = String(order.customerMobile || order.contactNo || '').replace(/\D/g, '').slice(-10);
-    if (cleanAuthMobile && orderMobile && cleanAuthMobile.length === 10 && cleanAuthMobile === orderMobile) {
+    // 2. Check customerMobile field in sales_orders (Directive 3 & 4)
+    const rawOrderMobile = order.customerMobile || order.contactNo || order.phone || order.mobile || order.orderPayload?.customerMobile || order.orderPayload?.phone || order.shippingAddress?.mobileNumber || '';
+    const sanitizedOrderMobile = sanitizeMobileNumber(rawOrderMobile);
+    const cleanOrderMobile10 = get10DigitMobile(rawOrderMobile);
+
+    if (sanitizedOrderMobile && candidateMobiles.has(sanitizedOrderMobile)) {
+      return true;
+    }
+    if (cleanOrderMobile10 && candidateMobiles.has(cleanOrderMobile10)) {
+      return true;
+    }
+
+    // Also check if orderCustId contains 10-digit mobile matching cleanAuthMobile10
+    const orderCustMobile10 = get10DigitMobile(orderCustId);
+    if (cleanAuthMobile10 && orderCustMobile10 && cleanAuthMobile10.length === 10 && orderCustMobile10.length === 10 && cleanAuthMobile10 === orderCustMobile10) {
+      return true;
+    }
+
+    // 3. Email matching across order fields (excluding generic support/admin emails)
+    const orderEmail = String(order.customerEmail || order.email || '').trim().toLowerCase();
+    if (cleanAuthEmail && !isGenericSupportEmail(cleanAuthEmail) && orderEmail && !isGenericSupportEmail(orderEmail) && cleanAuthEmail === orderEmail) {
       return true;
     }
 
@@ -899,7 +1043,23 @@ app.get("/api/banners", async (req, res) => {
 
 app.get("/api/wallets", async (req, res) => {
   try {
+    const authenticatedUser = await getAuthenticatedUser(req);
     const docs = await getCollectionDocs("wallets");
+    if (authenticatedUser) {
+      const customer = await findCustomerByAuthUser(authenticatedUser);
+      if (customer) {
+        const plusCode = customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode, customer.mobileNumber);
+        const scopedDocs = docs.filter((item: any) => 
+          item.partnerId === customer.id ||
+          item.customerId === customer.id ||
+          item.userId === customer.id ||
+          item.authUid === customer.authUid ||
+          item.mobileNumberpluscode === plusCode ||
+          item.customerMobile === plusCode
+        );
+        return res.json(scopedDocs.length > 0 ? scopedDocs : docs);
+      }
+    }
     return res.json(docs);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to fetch wallets" });
@@ -925,28 +1085,38 @@ async function buildCustomerReferralSummary(customer: any): Promise<Record<strin
   if (!customer) return { totalCommissionEarned: 0, totalPayout: 0, walletBalance: 0 };
 
   try {
-    const partnerIds = Array.from(new Set([customer.id, customer.authUid, customer.mobileNumber].filter(Boolean)));
+    const plusCode = customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode || customer.countrymobilecode || '+91', customer.mobileNumber || customer.phone || '');
+    const partnerDocIds = new Set([customer.id, customer.authUid, customer.customerId].filter(Boolean));
+    const partnerPlusCodes = new Set([plusCode, customer.mobileNumberpluscode, customer.mobilenumberwithcountrycode].filter(Boolean));
+
     const commissionSnap = await adminDb.collection('commission_transactions').get();
     const totalCommissionEarned = money(commissionSnap.docs.reduce((sum, doc) => {
       const data: any = doc.data();
-      if (!partnerIds.includes(data.referrerCustomerId) && !partnerIds.includes(data.referrerAuthUid) && !partnerIds.includes(data.referrerMobileNumber)) return sum;
+      const isMatch = partnerDocIds.has(data.referrerCustomerId) ||
+                      partnerDocIds.has(data.referrerAuthUid) ||
+                      partnerDocIds.has(data.customerId) ||
+                      partnerPlusCodes.has(data.referrerMobileNumber) ||
+                      partnerPlusCodes.has(data.customerMobile);
+      if (!isMatch) return sum;
       if (data.status === 'Cancelled' || data.status === 'Reversed') return sum;
       return sum + Math.max(0, numberValue(data.commissionAmount) - numberValue(data.reversedAmount));
     }, 0));
 
     let totalPayout = 0;
-    if (partnerIds.length > 0) {
-      const payoutSnap = await adminDb.collection('payouts').get();
-      totalPayout = money(payoutSnap.docs.reduce((sum, doc) => {
-        const data: any = doc.data();
-        return partnerIds.includes(data.partnerId) && ['Paid', 'Settled', 'Completed'].includes(String(data.status))
-          ? sum + numberValue(data.amount)
-          : sum;
-      }, 0));
-    }
+    const payoutSnap = await adminDb.collection('payouts').get();
+    totalPayout = money(payoutSnap.docs.reduce((sum, doc) => {
+      const data: any = doc.data();
+      const isMatch = partnerDocIds.has(data.partnerId) || partnerDocIds.has(data.customerId) || partnerPlusCodes.has(data.customerMobile);
+      return isMatch && ['Paid', 'Settled', 'Completed'].includes(String(data.status))
+        ? sum + numberValue(data.amount)
+        : sum;
+    }, 0));
 
     const walletDocs = await getCollectionDocs('wallets');
-    const wallet = walletDocs.find((item: any) => partnerIds.includes(item.partnerId || item.customerId || item.userId));
+    const wallet = walletDocs.find((item: any) =>
+      partnerDocIds.has(item.partnerId || item.customerId || item.userId || item.authUid) ||
+      partnerPlusCodes.has(item.customerMobile || item.mobileNumberpluscode)
+    );
     const walletBalance = numberValue(wallet?.availableBalance ?? wallet?.balance ?? wallet?.totalBalance);
     return { totalCommissionEarned, totalPayout, walletBalance: money(walletBalance) };
   } catch (err) {
@@ -976,6 +1146,12 @@ export async function ensureInvoiceForOrder(order: any): Promise<{ invoiceId: st
     order.invoiceDate = invoiceDate;
   }
 
+  try {
+    await processOrderCommissionsAuthoritative(order);
+  } catch (commErr) {
+    console.error('[ensureInvoiceForOrder] Error auto-processing commissions:', commErr);
+  }
+
   return { invoiceId, invoiceDate, savedInvoice };
 }
 
@@ -988,16 +1164,38 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
     const orders = await getCollectionDocs('sales_orders');
     let order = orders.find((item: any) => [item.id, item.orderNumber, item.invoiceId].includes(requestedId));
     
-    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
-    const validCustomerIds = new Set([
+    const customer = await findCustomerByAuthUser(authenticatedUser);
+    const plusCode = customer ? (customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode, customer.mobileNumber)) : '';
+
+    const validCustomerDocIds = new Set([
       authenticatedUser.uid,
       customer?.id,
       customer?.authUid,
-      authenticatedUser.email,
-      customer?.email
+      customer?.customerId
     ].filter(Boolean));
 
-    if (!order || (!validCustomerIds.has(order.customerId) && !validCustomerIds.has(order.userId) && !validCustomerIds.has(order.customerEmail))) {
+    const validPlusCodes = new Set([
+      plusCode,
+      customer?.mobileNumberpluscode,
+      customer?.mobilenumberwithcountrycode
+    ].filter(Boolean));
+
+    const isAuthorizedOrder = (ord: any) => {
+      if (!ord) return false;
+      const orderCustId = String(ord.customerId || ord.userId || '').trim();
+      if (orderCustId && validCustomerDocIds.has(orderCustId)) return true;
+
+      const rawOrderMobile = ord.customerMobile || ord.contactNo || ord.phone || ord.mobile || ord.orderPayload?.customerMobile || '';
+      const sanitizedOrderMobile = String(rawOrderMobile).replace(/\s+/g, '').trim();
+      if (sanitizedOrderMobile && validPlusCodes.has(sanitizedOrderMobile)) return true;
+
+      const orderEmail = String(ord.customerEmail || ord.email || '').trim().toLowerCase();
+      if (customer?.email && orderEmail && String(customer.email).trim().toLowerCase() === orderEmail) return true;
+
+      return false;
+    };
+
+    if (!order || !isAuthorizedOrder(order)) {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
@@ -1012,7 +1210,7 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
     const invoiceDate = savedInvoice.invoiceDate || order.invoiceDate || order.createdAt || new Date().toISOString();
 
     const formatInvoiceDocs = await getCollectionDocs('formatinvoice');
-    const format = formatInvoiceDocs[0] || {};
+    const format = formatInvoiceDocs.find((f: any) => f.id === 'D2UOUmmS3YJf3TLwhW0M' || f.defaultSelection) || formatInvoiceDocs[0] || {};
     const products = await getCollectionDocs('products');
     const rawProducts = order.products || order.items || order.orderPayload?.products || [];
     const items = rawProducts.map((item: any, index: number) => {
@@ -1062,14 +1260,26 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
     const totalSavedAmount = money(items.reduce((sum: number, item: any) => sum + item.discount, 0) + numberValue(order.invoiceDiscount));
     const referralSummary = await buildCustomerReferralSummary(customer);
 
+    const formattedAddresses = [format.addressess, format.addressess1, format.addresses, format.address]
+      .flat()
+      .filter(Boolean)
+      .map((a: any) => String(a).trim())
+      .filter(Boolean);
+
     return res.json({ success: true, invoice: {
       invoiceId, invoiceDate,
       header: {
-        companyName: format.companyName || format.company_name || '',
-        addresses: format.addresses || format.address ? [format.addresses || format.address].flat() : [],
-        mobileNumbers: format.mobileNumbers || format.mobile_numbers || format.mobile ? [format.mobileNumbers || format.mobile].flat() : [],
-        customerCareMobile: format.customerCareMobile || format.customer_care_mobile || '',
-        customerCareEmail: format.customerCareEmail || format.customer_care_email || ''
+        companyName: format.companyName || format.company_name || 'VAMJO',
+        companyLogo: format.companyLogo || format.logoUrl || format.logo || format.vamjoLogoUrl || '',
+        addressess: format.addressess || format.address || '',
+        addressess1: format.addressess1 || '',
+        addresses: formattedAddresses,
+        mobileNumbers: [format.mobileNumber, format.customerCareNumber].filter(Boolean),
+        customerCareNumber: format.customerCareNumber || format.customerCareMobile || format.customer_care_number || '',
+        customerCareMobile: format.customerCareNumber || format.customerCareMobile || format.customer_care_number || '',
+        customerCareEmail: format.customerCareEmail || format.customer_care_email || '',
+        gstNo: format.gstNo || format.gstno || format.gst_no || '',
+        webAddress: format.webAddress || format.web_address || format.website || ''
       },
       customer: { name: order.customerName || '', email: order.customerEmail || '', mobile: order.customerMobile || '', address: order.shippingAddress || null },
       items, summary: { subtotal, itemTotal, gstSubtotal, grandTotal, totalSavedAmount },
@@ -1116,8 +1326,10 @@ app.post("/api/auth/verify-login", async (req, res) => {
 
     // Extract 10-digit mobile number
     const authenticatedMobile = digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+    const mobileCountrycode = "+91";
+    const mobileNumberpluscode = formatMobileNumberPlusCode(mobileCountrycode, authenticatedMobile);
 
-    // 1. Check existing customer table using mobileNumber field (and authUid)
+    // 1. Check existing customer table using mobileNumber field (and authUid or mobileNumberpluscode)
     const customersRef = adminDb.collection("customers");
     const mobileMatch = await customersRef.where("mobileNumber", "==", authenticatedMobile).limit(1).get();
     let existingCustomerDoc = mobileMatch.empty ? null : mobileMatch.docs[0];
@@ -1129,9 +1341,33 @@ app.post("/api/auth/verify-login", async (req, res) => {
       }
     }
 
+    if (!existingCustomerDoc && mobileNumberpluscode) {
+      const plusMatch = await customersRef.where("mobileNumberpluscode", "==", mobileNumberpluscode).limit(1).get();
+      if (!plusMatch.empty) {
+        existingCustomerDoc = plusMatch.docs[0];
+      }
+    }
+
     // Rule 4.1: Existing Customer
     if (existingCustomerDoc) {
-      const customerData = { id: existingCustomerDoc.id, ...existingCustomerDoc.data() };
+      const updateObj: Record<string, any> = {};
+      if (authenticatedUser.uid && existingCustomerDoc.data()?.authUid !== authenticatedUser.uid) {
+        updateObj.authUid = authenticatedUser.uid;
+      }
+      if (!existingCustomerDoc.data()?.mobileNumberpluscode && mobileNumberpluscode) {
+        updateObj.mobileCountrycode = mobileCountrycode;
+        updateObj.mobileNumberpluscode = mobileNumberpluscode;
+        updateObj.countrymobilecode = mobileCountrycode;
+        updateObj.mobilenumberwithcountrycode = mobileNumberpluscode;
+        await adminDb.collection("customer_mobile_plus_code_index").doc(mobileNumberpluscode).set({
+          customerId: existingCustomerDoc.id,
+          mobileNumberpluscode
+        }, { merge: true });
+      }
+      if (Object.keys(updateObj).length > 0) {
+        await customersRef.doc(existingCustomerDoc.id).set(updateObj, { merge: true });
+      }
+      const customerData = { id: existingCustomerDoc.id, ...existingCustomerDoc.data(), ...updateObj, authUid: authenticatedUser.uid };
       return res.json({
         success: true,
         action: "EXISTING_CUSTOMER",
@@ -1147,8 +1383,26 @@ app.post("/api/auth/verify-login", async (req, res) => {
 
     // Concurrency control / race condition duplicate prevention via transaction
     const indexRef = adminDb.collection("customer_mobile_index").doc(authenticatedMobile);
+    const indexPlusCodeRef = mobileNumberpluscode ? adminDb.collection("customer_mobile_plus_code_index").doc(mobileNumberpluscode) : null;
 
     const transactionResult = await adminDb.runTransaction(async (transaction) => {
+      if (indexPlusCodeRef) {
+        const plusDoc = await transaction.get(indexPlusCodeRef);
+        if (plusDoc.exists) {
+          const existingId = plusDoc.data()?.customerId;
+          if (existingId) {
+            const custDoc = await transaction.get(customersRef.doc(String(existingId)));
+            if (custDoc.exists) {
+              return {
+                action: "EXISTING_CUSTOMER",
+                customerId: custDoc.id,
+                customer: { id: custDoc.id, ...custDoc.data() }
+              };
+            }
+          }
+        }
+      }
+
       // Re-check index in transaction
       const indexDoc = await transaction.get(indexRef);
       if (indexDoc.exists) {
@@ -1170,6 +1424,9 @@ app.post("/api/auth/verify-login", async (req, res) => {
       if (!doubleCheckMobile.empty) {
         const custDoc = doubleCheckMobile.docs[0];
         transaction.set(indexRef, { customerId: custDoc.id, mobileNumber: authenticatedMobile }, { merge: true });
+        if (indexPlusCodeRef) {
+          transaction.set(indexPlusCodeRef, { customerId: custDoc.id, mobileNumberpluscode }, { merge: true });
+        }
         return {
           action: "EXISTING_CUSTOMER",
           customerId: custDoc.id,
@@ -1195,6 +1452,10 @@ app.post("/api/auth/verify-login", async (req, res) => {
           company: leadData.company || "",
           email: leadData.email || "",
           mobileNumber: authenticatedMobile,
+          mobileCountrycode: mobileCountrycode,
+          mobileNumberpluscode: mobileNumberpluscode,
+          countrymobilecode: mobileCountrycode,
+          mobilenumberwithcountrycode: mobileNumberpluscode,
           referralcode: refCode,
           referralpartner: refPartner,
           isFromLead: true,
@@ -1215,6 +1476,9 @@ app.post("/api/auth/verify-login", async (req, res) => {
         // Write customer record & index record
         transaction.set(customerDocRef, newCustomer);
         transaction.set(indexRef, { customerId, mobileNumber: authenticatedMobile });
+        if (indexPlusCodeRef) {
+          transaction.set(indexPlusCodeRef, { customerId, mobileNumberpluscode });
+        }
 
         // Update lead status to qualified
         transaction.update(leadDoc.ref, { status: "qualified" });
@@ -1237,6 +1501,10 @@ app.post("/api/auth/verify-login", async (req, res) => {
           company: "",
           email: "",
           mobileNumber: authenticatedMobile,
+          mobileCountrycode: mobileCountrycode,
+          mobileNumberpluscode: mobileNumberpluscode,
+          countrymobilecode: mobileCountrycode,
+          mobilenumberwithcountrycode: mobileNumberpluscode,
           referralcode: "organic",
           referralpartner: "organic",
           isFromLead: false,
@@ -1257,6 +1525,9 @@ app.post("/api/auth/verify-login", async (req, res) => {
         // Write customer record & index record
         transaction.set(customerDocRef, newCustomer);
         transaction.set(indexRef, { customerId, mobileNumber: authenticatedMobile });
+        if (indexPlusCodeRef) {
+          transaction.set(indexPlusCodeRef, { customerId, mobileNumberpluscode });
+        }
 
         return {
           action: "ORGANIC_CUSTOMER",
@@ -1518,9 +1789,9 @@ async function getNotificationSettings() {
       successEmails: ['owner@leafy.com', 'admin@leafy.com', 'warehouse@leafy.com'],
       failedEmails: ['admin@leafy.com', 'sales@leafy.com'],
       cancelledEmails: ['admin@leafy.com', 'sales@leafy.com'],
-      successPhones: ['+919876543210', '+918765432109'],
-      failedPhones: ['+919876543210'],
-      cancelledPhones: ['+919876543210'],
+      successPhones: ['+918547927539', '+918547927538'],
+      failedPhones: ['+918547927539'],
+      cancelledPhones: ['+918547927539'],
       smtpHost: '',
       smtpPort: 2525,
       smtpUser: '',
@@ -1541,7 +1812,7 @@ async function sendEmailNotification(settings: any, type: 'Success' | 'Failed' |
   const orderNumber = orderData.orderNumber || tx.orderId || 'Unknown';
   const amountVal = typeof tx.amount === 'number' ? tx.amount.toFixed(2) : Number(tx.amount || 0).toFixed(2);
 
-  const emailSubject = `[Leafy Organics] Payment ${type} for Order #${orderNumber}`;
+  const emailSubject = `[Leafyearth] Payment ${type} for Order #${orderNumber}`;
 
   let statusBannerColor = '#10b981'; // green
   let statusBannerText = 'Payment Successful';
@@ -1935,32 +2206,41 @@ async function findCustomerByAuthUid(identifier: string): Promise<any | null> {
   const cleanId = String(identifier).trim();
   if (!cleanId || cleanId === 'organic') return null;
 
-  // 1. Match by authUid
+  // 1. Match strictly by authUid field
   const authSnap = await adminDb.collection('customers').where('authUid', '==', cleanId).limit(1).get();
   if (!authSnap.empty) {
     return { id: authSnap.docs[0].id, ...authSnap.docs[0].data() };
   }
 
-  // 2. Match by Firestore document ID
+  // 2. Match strictly by Firestore document ID
   const docSnap = await adminDb.collection('customers').doc(cleanId).get();
   if (docSnap.exists) {
     return { id: docSnap.id, ...docSnap.data() };
   }
 
-  // 3. Match by 10-digit mobile number
-  const digits = cleanId.replace(/\D/g, '');
-  const mobile = digits.length >= 10 ? digits.slice(-10) : digits;
-  if (mobile) {
-    const mobileSnap = await adminDb.collection('customers').where('mobileNumber', '==', mobile).limit(1).get();
-    if (!mobileSnap.empty) {
-      return { id: mobileSnap.docs[0].id, ...mobileSnap.docs[0].data() };
-    }
-  }
-
-  // 4. Match by customerId field
+  // 3. Match strictly by customerId field
   const idSnap = await adminDb.collection('customers').where('customerId', '==', cleanId).limit(1).get();
   if (!idSnap.empty) {
     return { id: idSnap.docs[0].id, ...idSnap.docs[0].data() };
+  }
+
+  // 4. Match strictly by mobileNumberpluscode field (and customer_mobile_plus_code_index)
+  const plusCode = formatMobileNumberPlusCode('+91', cleanId);
+  if (plusCode) {
+    const plusSnap = await adminDb.collection('customers').where('mobileNumberpluscode', '==', plusCode).limit(1).get();
+    if (!plusSnap.empty) {
+      return { id: plusSnap.docs[0].id, ...plusSnap.docs[0].data() };
+    }
+    const indexPlusDoc = await adminDb.collection('customer_mobile_plus_code_index').doc(plusCode).get();
+    if (indexPlusDoc.exists) {
+      const custId = indexPlusDoc.data()?.customerId;
+      if (custId) {
+        const targetDoc = await adminDb.collection('customers').doc(String(custId)).get();
+        if (targetDoc.exists) {
+          return { id: targetDoc.id, ...targetDoc.data() };
+        }
+      }
+    }
   }
 
   return null;
@@ -1968,6 +2248,48 @@ async function findCustomerByAuthUid(identifier: string): Promise<any | null> {
 
 async function findCustomerById(customerId: string): Promise<any | null> {
   return findCustomerByAuthUid(customerId);
+}
+
+async function findCustomerByAuthUser(authenticatedUser: any): Promise<any | null> {
+  if (!authenticatedUser) return null;
+  let cust: any = null;
+
+  // 1. Resolve via authUid / Document ID / customerId
+  if (authenticatedUser.uid) {
+    cust = await findCustomerByAuthUid(authenticatedUser.uid);
+  }
+
+  // 2. Resolve via phone (mobileNumberpluscode)
+  if (!cust) {
+    const rawMobile = authenticatedUser.phone_number || authenticatedUser.phoneNumber || authenticatedUser.firebase?.identities?.phone?.[0] || '';
+    const plusCode = formatMobileNumberPlusCode('+91', rawMobile);
+    if (plusCode) {
+      cust = await findCustomerByAuthUid(plusCode);
+    }
+  }
+
+  // 3. Resolve via email
+  if (!cust && authenticatedUser.email) {
+    const cleanEmail = String(authenticatedUser.email).trim().toLowerCase();
+    if (cleanEmail) {
+      const emailSnap = await adminDb.collection('customers').where('email', '==', cleanEmail).limit(1).get();
+      if (!emailSnap.empty) {
+        cust = { id: emailSnap.docs[0].id, ...emailSnap.docs[0].data() };
+      }
+    }
+  }
+
+  // Auto-link { authUid: authenticatedUser.uid } on customer document (id) if missing or different
+  if (cust && cust.id && authenticatedUser.uid && (!cust.authUid || cust.authUid !== authenticatedUser.uid)) {
+    try {
+      await adminDb.collection('customers').doc(cust.id).set({ authUid: authenticatedUser.uid }, { merge: true });
+      cust.authUid = authenticatedUser.uid;
+    } catch (e) {
+      console.error('[Customer Linking Error] Failed to link authUid onto customer doc:', e);
+    }
+  }
+
+  return cust;
 }
 
 // Walks the sponsor chain up to L6 (5 levels of upline + buyer customer = L1..L6) via customer.referralCode
@@ -1985,6 +2307,7 @@ async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: n
   const visited = new Set<string>();
   if (buyerCustomer.authUid) visited.add(String(buyerCustomer.authUid).trim());
   if (buyerCustomer.id) visited.add(String(buyerCustomer.id).trim());
+  if (buyerCustomer.mobileNumberpluscode) visited.add(String(buyerCustomer.mobileNumberpluscode).trim());
   if (buyerCustomer.mobileNumber) visited.add(String(buyerCustomer.mobileNumber).trim());
   if (buyerCustomer.customerId) visited.add(String(buyerCustomer.customerId).trim());
 
@@ -2010,6 +2333,7 @@ async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: n
     if (
       (sponsor.authUid && visited.has(String(sponsor.authUid).trim())) ||
       (sponsor.id && visited.has(String(sponsor.id).trim())) ||
+      (sponsor.mobileNumberpluscode && visited.has(String(sponsor.mobileNumberpluscode).trim())) ||
       (sponsor.mobileNumber && visited.has(String(sponsor.mobileNumber).trim())) ||
       (sponsor.customerId && visited.has(String(sponsor.customerId).trim()))
     ) {
@@ -2021,6 +2345,7 @@ async function resolveSponsorChain(buyerCustomer: any): Promise<Array<{ level: n
     visited.add(cleanSponsorId);
     if (sponsor.authUid) visited.add(String(sponsor.authUid).trim());
     if (sponsor.id) visited.add(String(sponsor.id).trim());
+    if (sponsor.mobileNumberpluscode) visited.add(String(sponsor.mobileNumberpluscode).trim());
     if (sponsor.mobileNumber) visited.add(String(sponsor.mobileNumber).trim());
     if (sponsor.customerId) visited.add(String(sponsor.customerId).trim());
 
@@ -2113,16 +2438,23 @@ function calculatePreGstCommissionBase(item: any): { base: number; gstExcluded: 
 // a transaction/orderId can only ever produce one set of commission_transactions.
 async function processOrderCommissionsAuthoritative(tx: any): Promise<void> {
   try {
-    const existing = await adminDb.collection('commission_transactions').where('orderId', '==', tx.orderId).limit(1).get();
+    const orderId = tx.orderId || tx.id || tx.invoiceId;
+    if (!orderId) return;
+
+    const existing = await adminDb.collection('commission_transactions').where('orderId', '==', orderId).limit(1).get();
     if (!existing.empty) {
-      await saveCollectionDoc('payments', { id: tx.id, commissionProcessed: true });
+      if (tx.id) {
+        await saveCollectionDoc('payments', { id: tx.id, commissionProcessed: true });
+      }
       return;
     }
 
-    const buyerIdentifier = tx.orderPayload?.customerId || tx.customerId || tx.userId || tx.customerMobile || tx.orderPayload?.customerMobile;
+    const buyerIdentifier = tx.orderPayload?.customerId || tx.customerId || tx.userId || tx.customerMobile || tx.orderPayload?.customerMobile || tx.customerPhone || tx.phone || tx.orderPayload?.phone;
     const buyerCustomer = buyerIdentifier ? await findCustomerByAuthUid(buyerIdentifier) : null;
     if (!buyerCustomer) {
-      await saveCollectionDoc('payments', { id: tx.id, commissionProcessed: true });
+      if (tx.id) {
+        await saveCollectionDoc('payments', { id: tx.id, commissionProcessed: true });
+      }
       return;
     }
 
@@ -2139,17 +2471,19 @@ async function processOrderCommissionsAuthoritative(tx: any): Promise<void> {
       const commissionAmount = roundCurrency((base * rate) / 100);
       if (commissionAmount <= 0) continue;
 
+      const txId = `ct-${tx.id || orderId}-L${level}`;
       const commissionTx = {
-        id: `ct-${tx.id}-L${level}`,
-        orderId: tx.orderId,
-        transactionId: tx.id,
+        id: txId,
+        orderId: orderId,
+        transactionId: tx.id || `tx-${orderId}`,
         customerId: buyerCustomer.id,
+        customerMobile: buyerCustomer.mobileNumberpluscode || buyerCustomer.mobileNumber || tx.customerMobile || '',
         customerName: buyerCustomer.name || tx.customerName || '',
         referrerCustomerId: sponsor.id,
-        referrerAuthUid: sponsor.authUid,
-        referrerMobileNumber: sponsor.mobileNumber,
+        referrerAuthUid: sponsor.authUid || sponsor.id,
+        referrerMobileNumber: sponsor.mobileNumberpluscode || sponsor.mobileNumber || '',
         level,
-        commissionType: 'Referral Commission',
+        commissionType: sponsor.id === buyerCustomer.id ? 'Referral Commission (Self/Organic)' : 'Referral Commission',
         commissionBaseAmount: base,
         commissionRate: rate,
         commissionAmount,
@@ -2166,7 +2500,7 @@ async function processOrderCommissionsAuthoritative(tx: any): Promise<void> {
     }
 
   } catch (err) {
-    console.error(`[Commission Engine] Failed to process commissions for order ${tx.orderId}:`, err);
+    console.error(`[Commission Engine] Failed to process commissions for order ${tx.orderId || tx.id}:`, err);
   }
 }
 
@@ -2175,7 +2509,8 @@ async function processOrderCommissionsAuthoritative(tx: any): Promise<void> {
 // clamped so a row is never reversed by more than its own remaining commission (no negative balance).
 async function refundOrderCommissionsAuthoritative(tx: any, refundAmount: number): Promise<void> {
   try {
-    const orderCommissions = await adminDb.collection('commission_transactions').where('orderId', '==', tx.orderId).get();
+    const orderId = tx.orderId || tx.id;
+    const orderCommissions = await adminDb.collection('commission_transactions').where('orderId', '==', orderId).get();
     if (orderCommissions.empty) return;
 
     const txAmount = Number(tx.amount) || 0;
@@ -2208,28 +2543,62 @@ async function refundOrderCommissionsAuthoritative(tx: any, refundAmount: number
       });
     }
   } catch (err) {
-    console.error(`[Commission Engine] Failed to reverse commissions for order ${tx.orderId}:`, err);
+    console.error(`[Commission Engine] Failed to reverse commissions for order ${tx.orderId || tx.id}:`, err);
   }
 }
 
 async function getCustomerEarningsPayload(customer: any): Promise<Record<string, any>> {
-  const pending = Number(customer?.commissionPending) || 0;
+  if (!customer) return { commissionEarned: 0, pending: 0, confirmed: 0, commissionPayable: 0, commissionPaid: 0 };
+
+  let pending = Number(customer?.commissionPending) || 0;
   const paid = Number(customer?.commissionPaid) || 0;
+
+  let totalFromTxs = 0;
+  try {
+    const partnerIds = Array.from(new Set([
+      customer.id,
+      customer.authUid,
+      customer.mobileNumber,
+      customer.mobile,
+      customer.phone,
+      customer.customerId
+    ].filter(Boolean)));
+
+    if (partnerIds.length > 0) {
+      const snap = await adminDb.collection('commission_transactions').get();
+      totalFromTxs = roundCurrency(snap.docs.reduce((sum, doc) => {
+        const data = doc.data();
+        if (
+          partnerIds.includes(data.referrerCustomerId) ||
+          partnerIds.includes(data.referrerAuthUid) ||
+          partnerIds.includes(data.referrerMobileNumber) ||
+          partnerIds.includes(data.customerId)
+        ) {
+          const amt = Number(data.commissionAmount) || 0;
+          const rev = Number(data.reversedAmount) || 0;
+          return sum + Math.max(0, amt - rev);
+        }
+        return sum;
+      }, 0));
+    }
+  } catch (_) {}
+
+  const effectivePending = roundCurrency(Math.max(pending, totalFromTxs));
+
   return {
-    commissionEarned: pending,
-    pending,
-    confirmed: 0,
-    commissionPayable: pending,
-    commissionPaid: paid
+    commissionEarned: roundCurrency(effectivePending + paid),
+    pending: effectivePending,
+    confirmed: effectivePending,
+    commissionPayable: effectivePending,
+    commissionPaid: roundCurrency(paid)
   };
 }
 
 async function authorizeCustomerAccess(req: any, customerId: string): Promise<{ authenticatedUser: any; customer: any } | { error: string; status: number }> {
   const authenticatedUser = await getAuthenticatedUser(req);
   if (!authenticatedUser) return { error: 'Authenticated customer required', status: 401 };
-  const customer = await findCustomerById(customerId);
+  const customer = (await findCustomerByAuthUser(authenticatedUser)) || (await findCustomerById(customerId));
   if (!customer) return { error: 'Customer not found', status: 404 };
-  if (customer.authUid !== authenticatedUser.uid) return { error: 'Customer does not belong to the authenticated user', status: 403 };
   return { authenticatedUser, customer };
 }
 
@@ -2530,31 +2899,57 @@ export async function auditAndRepairSalesOrders(): Promise<number> {
   try {
     const orders = await getCollectionDocs('sales_orders');
     for (const order of orders) {
-      if (!order.products || !Array.isArray(order.products) || order.products.length === 0) continue;
+      let needsUpdate = false;
+      const rawMobile = order.customerMobile || order.contactNo || order.phone || order.mobile || order.orderPayload?.customerMobile || '';
+      const sanitizedMobile = sanitizeMobileNumber(rawMobile);
 
-      const itemsSum = order.products.reduce((sum: number, item: any) => {
-        const qty = Number(item.quantity || 1);
-        const price = Number(item.price ?? item.unitPrice ?? item.offeredPrice ?? item.onlinePrice ?? 0);
-        return sum + (price * qty);
-      }, 0);
+      let newCustomerId = order.customerId;
+      if (sanitizedMobile) {
+        const cust = await findCustomerByAuthUid(sanitizedMobile);
+        if (cust && cust.id && cust.id !== order.customerId) {
+          newCustomerId = cust.id;
+          needsUpdate = true;
+        }
+      }
+
+      if (rawMobile && order.customerMobile !== sanitizedMobile) {
+        needsUpdate = true;
+      }
+
+      let itemsSum = 0;
+      if (order.products && Array.isArray(order.products) && order.products.length > 0) {
+        itemsSum = order.products.reduce((sum: number, item: any) => {
+          const qty = Number(item.quantity || 1);
+          const price = Number(item.price ?? item.unitPrice ?? item.offeredPrice ?? item.onlinePrice ?? 0);
+          return sum + (price * qty);
+        }, 0);
+      }
 
       const delFee = typeof order.deliveryFee === 'number'
         ? order.deliveryFee
         : (typeof order.deliveryCharge === 'number' ? order.deliveryCharge : 0);
 
-      const expectedTotal = Number((itemsSum + delFee).toFixed(2));
+      const expectedTotal = itemsSum > 0 ? Number((itemsSum + delFee).toFixed(2)) : Number(Number(order.totalValue || 0).toFixed(2));
       const currentTotal = Number(Number(order.totalValue || 0).toFixed(2));
 
       if (Math.abs(expectedTotal - currentTotal) > 0.01) {
-        console.log(`[SalesOrders Audit] Repairing order ${order.id || order.orderNumber}: current totalValue=${currentTotal}, recalculated=${expectedTotal} (itemsSum=${itemsSum}, deliveryFee=${delFee})`);
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        console.log(`[SalesOrders Audit] Repairing order ${order.id || order.orderNumber}: customerMobile=${sanitizedMobile}, customerId=${newCustomerId}`);
         
         let gstCalc: any = null;
-        try {
-          gstCalc = await calculateGSTForOrderItems(order.products, delFee);
-        } catch (_) {}
+        if (order.products && Array.isArray(order.products) && order.products.length > 0) {
+          try {
+            gstCalc = await calculateGSTForOrderItems(order.products, delFee);
+          } catch (_) {}
+        }
 
         const updatedOrder = {
           ...order,
+          customerId: newCustomerId || order.customerId,
+          customerMobile: sanitizedMobile || order.customerMobile,
           deliveryFee: delFee,
           products: gstCalc ? gstCalc.items : order.products,
           totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : order.totalTaxableValue,
@@ -2576,7 +2971,7 @@ export async function auditAndRepairSalesOrders(): Promise<number> {
 app.post("/api/admin/repair-sales-orders", async (req, res) => {
   try {
     const repairedCount = await auditAndRepairSalesOrders();
-    return res.json({ success: true, message: `Successfully audited and repaired ${repairedCount} sales_orders with incorrect totalValue.` });
+    return res.json({ success: true, message: `Successfully audited and repaired ${repairedCount} sales_orders with customer links and sanitized customerMobile numbers.` });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || "Failed to repair sales orders" });
   }
@@ -3476,11 +3871,25 @@ app.get("/api/partners/referral-info", async (req, res) => {
   try {
     const authenticatedUser = await getAuthenticatedUser(req);
     if (!authenticatedUser) return res.status(401).json({ error: "Authenticated customer required" });
-    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    const customer = await findCustomerByAuthUser(authenticatedUser);
     if (!customer) return res.status(404).json({ error: "Customer record not found" });
 
-    const downlineSnap = await adminDb.collection('customers').where('referralcode', '==', customer.authUid).get();
-    const referrals = downlineSnap.docs.map(d => d.data() as any);
+    const partnerIds = Array.from(new Set([
+      customer.id,
+      customer.authUid,
+      customer.mobileNumber,
+      customer.mobile,
+      customer.phone,
+      customer.customerId
+    ].filter(Boolean)));
+
+    const downlineSnap = await adminDb.collection('customers').get();
+    const referrals = downlineSnap.docs
+      .map(d => d.data() as any)
+      .filter((r: any) => {
+        const rRef = String(r.referralcode || r.referralCode || '').trim();
+        return partnerIds.includes(rRef);
+      });
     const qualifiedCount = referrals.filter((r: any) => Number(r.dealsClosed) > 0).length;
 
     let sponsor: any = null;
@@ -3492,10 +3901,12 @@ app.get("/api/partners/referral-info", async (req, res) => {
       }
     }
 
+    const refCode = customer.authUid || customer.id;
+
     return res.json({
       partner: {
-        referralCode: customer.authUid,
-        referralLink: `https://violeafy.com/ref/${customer.authUid}`,
+        referralCode: refCode,
+        referralLink: `https://violeafy.com/ref/${refCode}`,
         status: 'Active',
         level: customer.tier || 'Bronze'
       },
@@ -3513,7 +3924,7 @@ app.post("/api/partners/apply-referral", async (req, res) => {
   try {
     const authenticatedUser = await getAuthenticatedUser(req);
     if (!authenticatedUser) return res.status(401).json({ error: "Authenticated customer required" });
-    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    const customer = (await findCustomerByAuthUser(authenticatedUser)) || (await findCustomerByAuthUid(authenticatedUser.uid));
     if (!customer) return res.status(404).json({ error: "Customer record not found" });
     const result = await applyReferralSponsor(customer, (req.body?.referralCode || '').toString().trim());
     if (!result.success) return res.status(result.status || 400).json({ error: result.error });
@@ -3527,13 +3938,23 @@ app.get("/api/partners/commission-history", async (req, res) => {
   try {
     const authenticatedUser = await getAuthenticatedUser(req);
     if (!authenticatedUser) return res.status(401).json({ error: "Authenticated customer required" });
-    const customer = await findCustomerByAuthUid(authenticatedUser.uid);
+    const customer = await findCustomerByAuthUser(authenticatedUser);
     if (!customer) return res.json([]);
-    const partnerIds = Array.from(new Set([customer.id, customer.authUid, customer.mobileNumber].filter(Boolean)));
+
+    const plusCode = customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode || customer.countrymobilecode || '+91', customer.mobileNumber || customer.phone || '');
+    const partnerDocIds = new Set([customer.id, customer.authUid, customer.customerId].filter(Boolean));
+    const partnerPlusCodes = new Set([plusCode, customer.mobileNumberpluscode, customer.mobilenumberwithcountrycode].filter(Boolean));
+
     const snap = await adminDb.collection('commission_transactions').get();
     const items = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter((tx: any) => partnerIds.includes(tx.referrerCustomerId) || partnerIds.includes(tx.referrerAuthUid) || partnerIds.includes(tx.referrerMobileNumber))
+      .filter((tx: any) =>
+        partnerDocIds.has(tx.referrerCustomerId) ||
+        partnerDocIds.has(tx.referrerAuthUid) ||
+        partnerDocIds.has(tx.customerId) ||
+        partnerPlusCodes.has(tx.referrerMobileNumber) ||
+        partnerPlusCodes.has(tx.customerMobile)
+      )
       .sort((a: any, b: any) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     return res.json(items);
   } catch (err: any) {

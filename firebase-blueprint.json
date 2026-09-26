@@ -154,6 +154,8 @@
         "company": { "type": "string" },
         "email": { "type": "string" },
         "mobileNumber": { "type": "string" },
+        "mobileCountrycode": { "type": "string", "default": "+91" },
+        "mobileNumberpluscode": { "type": "string" },
         "countrymobilecode": { "type": "string", "default": "+91" },
         "mobilenumberwithcountrycode": { "type": "string" },
         "address": { "type": "string" },

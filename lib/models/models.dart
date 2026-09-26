@@ -1,5 +1,10 @@
 import '../core/config/env_config.dart';
 
+String sanitizeMobileNumber(dynamic mobile) {
+  if (mobile == null) return '';
+  return mobile.toString().replaceAll(RegExp(r'\s+'), '').trim();
+}
+
 // --- USER & PERMISSIONS ---
 class User {
   final String id;
@@ -511,6 +516,8 @@ class CustomerPerformance {
   final String company;
   final String email;
   final String mobileNumber;
+  final String mobileCountrycode;
+  final String mobileNumberpluscode;
   final String countrymobilecode;
   final String mobilenumberwithcountrycode;
   final String address;
@@ -536,6 +543,8 @@ class CustomerPerformance {
     required this.company,
     required this.email,
     required this.mobileNumber,
+    this.mobileCountrycode = '+91',
+    this.mobileNumberpluscode = '',
     this.countrymobilecode = '+91',
     this.mobilenumberwithcountrycode = '',
     required this.address,
@@ -555,31 +564,42 @@ class CustomerPerformance {
     this.password,
   });
 
-  factory CustomerPerformance.fromJson(Map<String, dynamic> json) => CustomerPerformance(
-    id: json['customerId'] ?? json['id'] ?? '',
-    authUid: json['authUid'],
-    name: json['name'] ?? '',
-    company: json['company'] ?? '',
-    email: json['email'] ?? '',
-    mobileNumber: json['mobileNumber'] ?? '',
-    countrymobilecode: json['countrymobilecode'] ?? json['countryMobileCode'] ?? '+91',
-    mobilenumberwithcountrycode: json['mobilenumberwithcountrycode'] ?? json['mobileNumberWithCountryCode'] ?? (json['mobileNumber'] != null && json['mobileNumber'].toString().isNotEmpty ? (json['mobileNumber'].toString().startsWith('+') ? json['mobileNumber'] : '${json['countrymobilecode'] ?? json['countryMobileCode'] ?? '+91'}${json['mobileNumber']}') : ''),
-    address: json['address'] ?? '',
-    state: json['state'] ?? '',
-    district: json['district'] ?? '',
-    pincode: json['pincode'],
-    totalSpent: (json['totalSpent'] ?? 0).toDouble(),
-    dealsClosed: (json['dealsClosed'] ?? 0).toInt(),
-    satisfactionScore: (json['satisfactionScore'] ?? 0).toDouble(),
-    lastOrderDate: json['lastOrderDate'] ?? '',
-    tier: json['tier'] ?? 'Bronze',
-    partnerName: json['partnerName'],
-    isFromLead: json['isFromLead'],
-    leadId: json['leadId'],
-    referralCode: json['referralcode'] ?? json['referralCode'],
-    referralPartner: json['referralpartner'] ?? json['referralPartner'],
-    password: json['password'],
-  );
+  factory CustomerPerformance.fromJson(Map<String, dynamic> json) {
+    final cc = json['mobileCountrycode'] ?? json['countrymobilecode'] ?? json['countryMobileCode'] ?? '+91';
+    final mob = json['mobileNumber'] ?? '';
+    final computedPlusCode = json['mobileNumberpluscode'] ??
+        (json['mobilenumberwithcountrycode'] != null && json['mobilenumberwithcountrycode'].toString().isNotEmpty
+            ? json['mobilenumberwithcountrycode'].toString().replaceAll(RegExp(r'\s+'), '')
+            : (mob.toString().startsWith('+') ? mob.toString().replaceAll(RegExp(r'\s+'), '') : '$cc$mob'.replaceAll(RegExp(r'\s+'), '')));
+
+    return CustomerPerformance(
+      id: json['customerId'] ?? json['id'] ?? '',
+      authUid: json['authUid'],
+      name: json['name'] ?? '',
+      company: json['company'] ?? '',
+      email: json['email'] ?? '',
+      mobileNumber: mob,
+      mobileCountrycode: cc,
+      mobileNumberpluscode: computedPlusCode,
+      countrymobilecode: cc,
+      mobilenumberwithcountrycode: computedPlusCode,
+      address: json['address'] ?? '',
+      state: json['state'] ?? '',
+      district: json['district'] ?? '',
+      pincode: json['pincode'],
+      totalSpent: (json['totalSpent'] ?? 0).toDouble(),
+      dealsClosed: (json['dealsClosed'] ?? 0).toInt(),
+      satisfactionScore: (json['satisfactionScore'] ?? 0).toDouble(),
+      lastOrderDate: json['lastOrderDate'] ?? '',
+      tier: json['tier'] ?? 'Bronze',
+      partnerName: json['partnerName'],
+      isFromLead: json['isFromLead'],
+      leadId: json['leadId'],
+      referralCode: json['referralcode'] ?? json['referralCode'],
+      referralPartner: json['referralpartner'] ?? json['referralPartner'],
+      password: json['password'],
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -589,6 +609,10 @@ class CustomerPerformance {
     'company': company,
     'email': email,
     'mobileNumber': mobileNumber,
+    'mobileCountrycode': mobileCountrycode,
+    'mobileNumberpluscode': mobileNumberpluscode.isNotEmpty
+        ? mobileNumberpluscode.replaceAll(RegExp(r'\s+'), '')
+        : '$mobileCountrycode$mobileNumber'.replaceAll(RegExp(r'\s+'), ''),
     'countrymobilecode': countrymobilecode,
     'mobilenumberwithcountrycode': mobilenumberwithcountrycode.isNotEmpty ? mobilenumberwithcountrycode : (mobileNumber.startsWith('+') ? mobileNumber : '$countrymobilecode$mobileNumber'),
     'address': address,
@@ -799,12 +823,12 @@ class SalesOrder {
     deliveryFee: json['deliveryFee'] != null 
       ? (json['deliveryFee']).toDouble() 
       : (json['deliveryCharge'] != null ? (json['deliveryCharge']).toDouble() : null),
-    contactNo: json['contactNo'],
+    contactNo: json['contactNo'] != null ? sanitizeMobileNumber(json['contactNo']) : null,
     referralCode: json['referralCode'],
     orderType: json['orderType'],
     salesChannel: json['salesChannel'],
     customerEmail: json['customerEmail'],
-    customerMobile: json['customerMobile'],
+    customerMobile: json['customerMobile'] != null ? sanitizeMobileNumber(json['customerMobile']) : (json['contactNo'] != null ? sanitizeMobileNumber(json['contactNo']) : null),
     shippingAddress: json['shippingAddress'] is Map
       ? CustomerDeliveryAddress.fromJson(Map<String, dynamic>.from(json['shippingAddress']))
       : null,
@@ -836,7 +860,7 @@ class SalesOrder {
     'orderType': orderType,
     'salesChannel': salesChannel,
     'customerEmail': customerEmail,
-    'customerMobile': customerMobile,
+    'customerMobile': customerMobile != null ? sanitizeMobileNumber(customerMobile) : null,
     'shippingAddress': shippingAddress?.toJson(),
   };
 }
@@ -1352,7 +1376,7 @@ class PaymentTransaction {
       gateway: gatewayVal,
       paymentGateway: gatewayVal,
       paymentAggregator: gatewayVal,
-      customerMobile: mobileVal.toString(),
+      customerMobile: sanitizeMobileNumber(mobileVal),
       customerAddress: addressVal.toString(),
       customerName: nameVal.toString(),
       customerEmail: emailVal.toString(),
@@ -1585,10 +1609,14 @@ class CommissionSummary {
     final pend = _numToDouble(json['pending']);
     final conf = _numToDouble(json['confirmed']);
 
+    final effectivePending = pend > 0 ? pend : (pay > 0 ? pay : earned);
+    final effectiveConfirmed = conf > 0 ? conf : (earned > 0 ? earned : effectivePending);
+    final effectivePayable = pay > 0 ? pay : (pend > 0 ? pend : earned);
+
     return CommissionSummary(
-      pending: pend,
-      confirmed: conf > 0 ? conf : earned,
-      payable: pay,
+      pending: effectivePending,
+      confirmed: effectiveConfirmed,
+      payable: effectivePayable,
       paid: p,
     );
   }

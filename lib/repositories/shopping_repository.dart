@@ -616,20 +616,80 @@ class ShoppingRepository {
     }
   }
 
-  // Fetch Sales Orders from backend
+  // Fetch Sales Orders from backend with direct Firestore probe fallback
   Future<List<SalesOrder>> getSalesOrders() async {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      return [];
+    }
+
+    // 1. Attempt Server API retrieval
     try {
-      final user = firebase_auth.FirebaseAuth.instance.currentUser;
-      if (user == null || user.isAnonymous) {
-        return [];
-      }
       final response = await _apiClient.get('/api/sales-orders');
-      if (response != null && response is List) {
-        return response.map((item) => SalesOrder.fromJson(item)).toList();
+      if (response != null && response is List && response.isNotEmpty) {
+        final orders = <SalesOrder>[];
+        for (final item in response) {
+          try {
+            if (item is Map<String, dynamic>) {
+              orders.add(SalesOrder.fromJson(item));
+            } else if (item is Map) {
+              orders.add(SalesOrder.fromJson(Map<String, dynamic>.from(item)));
+            }
+          } catch (itemErr) {
+            debugPrint('[ShoppingRepository] Skipping unparseable sales order item: $itemErr');
+          }
+        }
+        if (orders.isNotEmpty) return orders;
       }
     } catch (e) {
-      debugPrint('[ShoppingRepository] Error fetching sales orders: $e');
+      debugPrint('[ShoppingRepository] Warning fetching sales orders from API: $e');
     }
+
+    // 2. Direct Firestore fallback query if API call is unreachable or returns no data
+    try {
+      if (firestore != null) {
+        final authUid = user.uid;
+        final rawPhone = user.phoneNumber ?? '';
+        final cleanPhone10 = rawPhone.replaceAll(RegExp(r'\D'), '');
+
+        // Query sales_orders snapshot
+        final snapshot = await firestore!
+            .collection('sales_orders')
+            .get()
+            .timeout(const Duration(seconds: 5));
+
+        if (snapshot.docs.isNotEmpty) {
+          final fallbackOrders = <SalesOrder>[];
+          for (final doc in snapshot.docs) {
+            try {
+              final data = doc.data();
+              final ordId = doc.id;
+              final map = {...data, 'id': ordId};
+
+              final custId = (data['customerId'] ?? data['userId'] ?? '').toString().trim();
+              final shippingCustId = (data['shippingAddress']?['customerId'] ?? data['shippingAddress']?['userId'] ?? '').toString().trim();
+              final rawMob = (data['customerMobile'] ?? data['contactNo'] ?? data['phone'] ?? data['mobile'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+
+              final isUserMatch = (authUid.isNotEmpty && (custId == authUid || shippingCustId == authUid)) ||
+                  (cleanPhone10.length >= 10 && rawMob.endsWith(cleanPhone10.substring(cleanPhone10.length - 10)));
+
+              if (isUserMatch) {
+                fallbackOrders.add(SalesOrder.fromJson(map));
+              }
+            } catch (err) {
+              debugPrint('[ShoppingRepository] Error parsing fallback order document: $err');
+            }
+          }
+          if (fallbackOrders.isNotEmpty) {
+            fallbackOrders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return fallbackOrders;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Firestore fallback error for sales orders: $e');
+    }
+
     return [];
   }
 
@@ -839,12 +899,17 @@ class ShoppingRepository {
 
         final existing = await _findCustomerByMobile(normalizedMobile);
         if (existing != null) return existing;
-        final lead = await _findLeadByMobile(normalizedMobile);
         final payload = draft?.toJson() ?? <String, dynamic>{};
-        final countryCode = draft?.countrymobilecode.isNotEmpty == true ? draft!.countrymobilecode : '+91';
+        final lead = await _findLeadByMobile(normalizedMobile);
+        final countryCode = draft?.mobileCountrycode.isNotEmpty == true 
+            ? draft!.mobileCountrycode 
+            : (draft?.countrymobilecode.isNotEmpty == true ? draft!.countrymobilecode : '+91');
+        final rawPlusCode = '$countryCode$normalizedMobile'.replaceAll(RegExp(r'\s+'), '');
         payload['mobileNumber'] = normalizedMobile;
+        payload['mobileCountrycode'] = countryCode;
         payload['countrymobilecode'] = countryCode;
-        payload['mobilenumberwithcountrycode'] = normalizedMobile.startsWith('+') ? normalizedMobile : '$countryCode$normalizedMobile';
+        payload['mobileNumberpluscode'] = rawPlusCode;
+        payload['mobilenumberwithcountrycode'] = rawPlusCode;
         payload['authUid'] = user?.uid;
         payload['leadslinkid'] = lead?.id;
         payload['referralcode'] = lead?.referralCode;
@@ -852,7 +917,21 @@ class ShoppingRepository {
         payload['leadId'] = lead?.id;
 
         final indexRef = firestore!.collection('customer_mobile_index').doc(normalizedMobile);
+        final indexPlusCodeRef = firestore!.collection('customer_mobile_plus_code_index').doc(rawPlusCode);
+
         return firestore!.runTransaction<CustomerPerformance?>((transaction) async {
+          if (rawPlusCode.isNotEmpty) {
+            final indexPlus = await transaction.get(indexPlusCodeRef);
+            if (indexPlus.exists) {
+              final customerId = indexPlus.data()?['customerId'];
+              if (customerId is String && customerId.isNotEmpty) {
+                final existingDoc = await transaction.get(firestore!.collection('customers').doc(customerId));
+                if (existingDoc.exists) {
+                  return CustomerPerformance.fromJson({...existingDoc.data()!, 'id': existingDoc.id});
+                }
+              }
+            }
+          }
           final index = await transaction.get(indexRef);
           if (index.exists) {
             final customerId = index.data()?['customerId'];
@@ -867,6 +946,9 @@ class ShoppingRepository {
           payload['id'] = customerRef.id;
           transaction.set(customerRef, payload);
           transaction.set(indexRef, {'customerId': customerRef.id, 'mobileNumber': normalizedMobile});
+          if (rawPlusCode.isNotEmpty) {
+            transaction.set(indexPlusCodeRef, {'customerId': customerRef.id, 'mobileNumberpluscode': rawPlusCode});
+          }
           return CustomerPerformance.fromJson(payload);
         }).timeout(const Duration(seconds: 10));
       }
@@ -1362,7 +1444,7 @@ class ShoppingRepository {
       final code = customer?.referralCode ?? customerId;
       combinedPayload['partner'] = {
         'referralCode': code,
-        'referralLink': 'https://violeafy.com/ref/$code',
+        'referralLink': 'https://leafyearth.in/ref/$code',
         'status': 'Active',
         'level': customer?.tier ?? 'Bronze',
       };

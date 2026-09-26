@@ -40,23 +40,40 @@ class OrdersScreen extends ConsumerWidget {
       backgroundColor: AppColors.secondaryBackground,
       appBar: AppBar(
         title: const Text('My Orders', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            onPressed: () => ref.invalidate(salesOrdersProvider),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh Orders',
+          ),
+        ],
       ),
-      body: ordersAsync.when(
-        data: (orders) {
-          if (orders.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.receipt_long_outlined, size: 56, color: AppColors.textMuted),
-                  SizedBox(height: 12),
-                  Text('No past orders placed yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                  SizedBox(height: 4),
-                  Text('Your order history will appear here.', style: TextStyle(color: AppColors.textSecondary)),
+      body: RefreshIndicator(
+        color: AppColors.primaryGreen,
+        onRefresh: () async => ref.invalidate(salesOrdersProvider),
+        child: ordersAsync.when(
+          data: (orders) {
+            if (orders.isEmpty) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(32),
+                children: const [
+                  SizedBox(height: 120),
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.receipt_long_outlined, size: 56, color: AppColors.textMuted),
+                        SizedBox(height: 12),
+                        Text('No past orders placed yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        SizedBox(height: 4),
+                        Text('Your order history will appear here.', style: TextStyle(color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
                 ],
-              ),
-            );
-          }
+              );
+            }
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -141,6 +158,7 @@ class OrdersScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primaryGreen)),
         error: (err, _) => Center(child: Text('Error loading orders: $err')),
       ),
-    );
-  }
+    ),
+  );
+}
 }
