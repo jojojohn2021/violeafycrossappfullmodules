@@ -3239,7 +3239,13 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
     }
 
     // Authoritative amount calculation from database / product catalog
-    const products = await getCollectionDocs('products');
+    let products: any[] = [];
+    try {
+      products = await getCollectionDocs('products');
+    } catch (dbErr: any) {
+      console.warn("[Razorpay API] Products collection read warning, using payload product prices:", dbErr?.message || dbErr);
+    }
+
     const secureSubtotal = (orderData.products || []).reduce((sum: number, item: any) => {
       const product = products.find((candidate: any) => candidate.id === (item.productId || item.id));
       const unitPrice = product && typeof product.offeredPrice === 'number'
@@ -3376,7 +3382,12 @@ async function handleCreateCodOrder(req: any, res: any) {
     }
 
     // 3. Authoritative Amount & Stock Validation
-    const products = await getCollectionDocs('products');
+    let products: any[] = [];
+    try {
+      products = await getCollectionDocs('products');
+    } catch (dbErr: any) {
+      console.warn("[COD Security] Products collection read warning, using payload fallback:", dbErr?.message || dbErr);
+    }
     let secureSubtotal = 0;
     const validatedProducts: any[] = [];
 
