@@ -92,9 +92,9 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
       "currency": "${widget.currency}",
       "name": "VioleafyCross",
       "description": "Order Payment ${widget.transactionId}",
-      "image": "https://violeafy.com/assets/logo.png",
+      "image": "https://www.vamjo.com/assets/logo.png",
       "order_id": "${widget.orderId}",
-      "callback_url": "https://violeafy.local/payment_callback?txnid=${widget.transactionId}",
+      "callback_url": "https://www.vamjo.com/payment_callback?txnid=${widget.transactionId}",
       "prefill": {
         "name": "${widget.customerName}",
         "email": "${widget.customerEmail}",
@@ -104,20 +104,20 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
         "color": "#2D6A4F"
       },
       "handler": function (response) {
-        window.location.href = "https://violeafy.local/payment_callback?status=success" +
+        window.location.href = "https://www.vamjo.com/payment_callback?status=success" +
           "&razorpay_payment_id=" + encodeURIComponent(response.razorpay_payment_id) +
           "&razorpay_order_id=" + encodeURIComponent(response.razorpay_order_id) +
           "&razorpay_signature=" + encodeURIComponent(response.razorpay_signature);
       },
       "modal": {
         "ondismiss": function() {
-          window.location.href = "https://violeafy.local/payment_callback?status=cancelled";
+          window.location.href = "https://www.vamjo.com/payment_callback?status=cancelled";
         }
       }
     };
     var rzp1 = new Razorpay(options);
     rzp1.on('payment.failed', function (response){
-      window.location.href = "https://violeafy.local/payment_callback?status=failed" +
+      window.location.href = "https://www.vamjo.com/payment_callback?status=failed" +
         "&code=" + encodeURIComponent(response.error.code) +
         "&description=" + encodeURIComponent(response.error.description);
     });
@@ -138,7 +138,7 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
             if (mounted) setState(() => _isLoading = false);
           },
           onNavigationRequest: (request) {
-            if (request.url.startsWith('https://violeafy.local/payment_callback')) {
+            if (request.url.contains('/payment_callback') || request.url.startsWith('https://www.vamjo.com/payment_callback')) {
               final uri = Uri.parse(request.url);
               final status = uri.queryParameters['status'];
               final rzpPaymentId = uri.queryParameters['razorpay_payment_id'];

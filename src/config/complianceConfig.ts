@@ -5,22 +5,22 @@
 
 export const complianceConfig = {
   business: {
-    legalName: "Violeafy Cross Private Limited",
-    displayName: "VioleafyCross",
-    address: "Plot 102, Green Tech Park, Electronic City, Bengaluru, Karnataka 560100, India",
+    legalName: "VAMJO",
+    displayName: "Leafyearth",
+    address: "Kallettumkara,Thrissur,Kerala-680683",
     country: "India",
-    supportEmail: "support@violeafy.com",
-    supportPhone: "+91 80 4567 8900",
-    privacyEmail: "privacy@violeafy.com",
+    supportEmail: "info@vamjo.com.com",
+    supportPhone: "+918547927539",
+    privacyEmail: "info@vamjo.com",
     grievanceContact: {
       role: "Grievance Officer",
       name: "Compliance & Safety Cell",
-      email: "grievance@violeafy.com",
-      phone: "+91 80 4567 8901",
+      email: "sales@vamjo.com",
+      phone: "+918547927539",
     },
   },
   urls: {
-    website: "https://violeafy.com",
+    website: "https://vamjo.com",
     privacyPolicy: "/privacy-policy",
     termsAndConditions: "/terms-and-conditions",
     shippingPolicy: "/shipping-and-delivery-policy",
