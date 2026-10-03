@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -328,6 +329,7 @@ class OtpState {
   final bool isLoading;
   final String? errorMessage;
   final int? resendToken;
+  final int resendCountdown;
 
   const OtpState({
     this.phone = '',
@@ -336,6 +338,7 @@ class OtpState {
     this.isLoading = false,
     this.errorMessage,
     this.resendToken,
+    this.resendCountdown = 0,
   });
 
   OtpState copyWith({
@@ -345,6 +348,7 @@ class OtpState {
     bool? isLoading,
     String? errorMessage,
     int? resendToken,
+    int? resendCountdown,
   }) {
     return OtpState(
       phone: phone ?? this.phone,
@@ -353,13 +357,36 @@ class OtpState {
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
       resendToken: resendToken ?? this.resendToken,
+      resendCountdown: resendCountdown ?? this.resendCountdown,
     );
   }
 }
 
 class OtpNotifier extends StateNotifier<OtpState> {
+  Timer? _resendTimer;
+
   OtpNotifier() : super(const OtpState()) {
     debugPrint('[OtpNotifier] Initialized');
+  }
+
+  @override
+  void dispose() {
+    _resendTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startResendTimer([int seconds = 60]) {
+    _resendTimer?.cancel();
+    state = state.copyWith(resendCountdown: seconds);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (state.resendCountdown > 1) {
+        state = state.copyWith(resendCountdown: state.resendCountdown - 1);
+      } else {
+        timer.cancel();
+        _resendTimer = null;
+        state = state.copyWith(resendCountdown: 0);
+      }
+    });
   }
 
   void setPhone(String phone) {
@@ -369,10 +396,18 @@ class OtpNotifier extends StateNotifier<OtpState> {
 
   void reset() {
     debugPrint('[OtpNotifier] reset called');
+    _resendTimer?.cancel();
+    _resendTimer = null;
     state = const OtpState();
   }
 
   Future<void> sendOtp(String phone) async {
+    // Prevent repeated OTP calls while request is processing or while resend countdown is active
+    if (state.isLoading || state.resendCountdown > 0) {
+      debugPrint('[OtpNotifier] sendOtp ignored because request is processing or countdown is active');
+      return;
+    }
+
     final digits = phone.replaceAll(RegExp(r'\D'), '');
     final cleanPhone = digits.length > 10 ? digits.substring(digits.length - 10) : digits;
     debugPrint('[OtpNotifier] sendOtp called for: $cleanPhone');
@@ -382,6 +417,7 @@ class OtpNotifier extends StateNotifier<OtpState> {
     }
 
     state = state.copyWith(phone: cleanPhone, isLoading: true, errorMessage: null);
+    _startResendTimer(60);
 
     try {
       debugPrint('[OtpNotifier] triggering verifyPhoneNumber with 60s timeout');

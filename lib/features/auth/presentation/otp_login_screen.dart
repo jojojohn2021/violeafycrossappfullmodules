@@ -43,9 +43,24 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
       }
     });
 
-    // Listen to auth state to navigate when signed in
+    // Listen to state changes for error messages and success notifications
     ref.listenManual(otpLoginProvider, (previous, next) {
-      // Handle success navigation via global auth state or local success flag
+      if (next.errorMessage != null && next.errorMessage != previous?.errorMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.errorMessage!),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else if (next.codeSent && (previous?.codeSent != true)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('OTP code sent successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     });
   }
 
@@ -95,6 +110,7 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final otpState = ref.watch(otpLoginProvider);
+    final bool canSendOtp = !otpState.isLoading && otpState.resendCountdown == 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -175,16 +191,25 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: otpState.isLoading ? null : _verifyPhone,
+                    onPressed: canSendOtp ? _verifyPhone : null,
                     child: otpState.isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('SEND OTP'),
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                          )
+                        : Text(
+                            otpState.resendCountdown > 0
+                                ? 'SEND OTP (${otpState.resendCountdown}s)'
+                                : 'SEND OTP',
+                          ),
                   ),
                 ),
               ] else ...[
                 TextField(
                   controller: _otpController,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
                   decoration: const InputDecoration(
                     labelText: 'Enter 6-Digit OTP',
                     prefixIcon: Icon(Icons.lock_clock_outlined, color: AppColors.primaryGreen),
@@ -197,9 +222,43 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
                   child: ElevatedButton(
                     onPressed: otpState.isLoading ? null : _signInWithOTP,
                     child: otpState.isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                          )
                         : const Text('VERIFY & CONTINUE'),
                   ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: otpState.isLoading
+                          ? null
+                          : () {
+                              ref.read(otpLoginProvider.notifier).reset();
+                            },
+                      child: const Text(
+                        'Change Number',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: canSendOtp ? _verifyPhone : null,
+                      child: Text(
+                        otpState.resendCountdown > 0
+                            ? 'Resend OTP in ${otpState.resendCountdown}s'
+                            : 'Resend OTP',
+                        style: TextStyle(
+                          color: canSendOtp ? AppColors.primaryGreen : AppColors.textSecondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
                 Center(

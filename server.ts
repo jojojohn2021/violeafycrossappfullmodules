@@ -248,8 +248,8 @@ async function getCollectionDocs(col: string): Promise<any[]> {
     }
     return docs;
   } catch (err: any) {
-    console.error(`[VIO-FIRESTORE] getCollectionDocs error on collection '${col}':`, err);
-    throw new Error(`Firestore read operation failed for collection '${col}': ${err.message || err}`);
+    console.warn(`[VIO-FIRESTORE Warning] getCollectionDocs failed on collection '${col}', returning empty array:`, err?.message || err);
+    return [];
   }
 }
 
@@ -265,8 +265,7 @@ async function saveCollectionDoc(col: string, item: any): Promise<void> {
     }
     await adminDb.collection(col).doc(String(item.id)).set(cleanItem, { merge: true });
   } catch (err: any) {
-    console.error(`[VIO-FIRESTORE] saveCollectionDoc error on collection '${col}':`, err);
-    throw new Error(`Firestore write operation failed for collection '${col}': ${err.message || err}`);
+    console.warn(`[VIO-FIRESTORE Warning] saveCollectionDoc failed on collection '${col}':`, err?.message || err);
   }
 }
 

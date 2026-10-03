@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../domain/payment_types.dart';
@@ -82,7 +83,7 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
 </head>
 <body style="background-color: #F4F6F8; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif;">
   <div style="text-align: center;">
-    <h3 style="color: #2D6A4F;">Initializing Razorpay Payment...</h3>
+    <h3 style="color: #2D6A4F;">Processing Payment & Confirming Order...</h3>
     <p style="color: #6C757D;">Please do not close this window.</p>
   </div>
   <script>
@@ -94,7 +95,13 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
       "description": "Order Payment ${widget.transactionId}",
       "image": "https://www.vamjo.com/assets/logo.png",
       "order_id": "${widget.orderId}",
-      "callback_url": "https://www.vamjo.com/payment_callback?txnid=${widget.transactionId}",
+      "method": {
+        "upi": true,
+        "card": true,
+        "netbanking": true,
+        "wallet": true,
+        "emi": true
+      },
       "prefill": {
         "name": "${widget.customerName}",
         "email": "${widget.customerEmail}",
@@ -132,14 +139,17 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFFF4F6F8))
+      ..setUserAgent("Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
             if (mounted) setState(() => _isLoading = false);
           },
           onNavigationRequest: (request) {
-            if (request.url.contains('/payment_callback') || request.url.startsWith('https://www.vamjo.com/payment_callback')) {
-              final uri = Uri.parse(request.url);
+            final url = request.url;
+            if (url.contains('/payment_callback') || url.startsWith('https://www.vamjo.com/payment_callback')) {
+              if (mounted) setState(() => _isLoading = true);
+              final uri = Uri.parse(url);
               final status = uri.queryParameters['status'];
               final rzpPaymentId = uri.queryParameters['razorpay_payment_id'];
               final rzpOrderId = uri.queryParameters['razorpay_order_id'];
@@ -159,6 +169,20 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
               }
               return NavigationDecision.prevent;
             }
+
+            // Handle UPI and external app intent schemes (upi://, intent://, gpay://, phonepe://, etc.)
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+              try {
+                launchUrl(
+                  Uri.parse(url),
+                  mode: LaunchMode.externalApplication,
+                );
+              } catch (e) {
+                debugPrint('[RazorpayCheckout] Error launching external scheme $url: $e');
+              }
+              return NavigationDecision.prevent;
+            }
+
             return NavigationDecision.navigate;
           },
         ),
