@@ -18,6 +18,7 @@ class ApiClient {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'X-Client-Platform': platformHeader,
+      'X-Sales-Platform': kIsWeb ? 'webleafyearth' : 'mobleafyearth',
     };
 
     try {

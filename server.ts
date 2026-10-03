@@ -219,12 +219,37 @@ function get10DigitMobile(mobile: any): string {
   return digits.length >= 10 ? digits.slice(-10) : digits;
 }
 
+function determineSalesPlatform(payload?: any, req?: any): 'webleafyearth' | 'mobleafyearth' {
+  if (payload?.salesPlatform === 'webleafyearth' || payload?.salesPlatform === 'mobleafyearth') {
+    return payload.salesPlatform;
+  }
+  if (payload?.orderPayload?.salesPlatform === 'webleafyearth' || payload?.orderPayload?.salesPlatform === 'mobleafyearth') {
+    return payload.orderPayload.salesPlatform;
+  }
+  if (req) {
+    const hdr = (req.headers?.['x-sales-platform'] || req.headers?.['x-client-platform'] || req.headers?.['x-platform'] || '').toString().toUpperCase();
+    if (hdr === 'WEBLEAFYEARTH' || hdr === 'WEB') return 'webleafyearth';
+    if (hdr === 'MOBLEAFYEARTH' || hdr === 'MOBILE' || hdr === 'APP' || hdr === 'IOS' || hdr === 'ANDROID') return 'mobleafyearth';
+
+    const ua = (req.headers?.['user-agent'] || '').toString().toLowerCase();
+    if (ua.includes('dart') || ua.includes('flutter') || ua.includes('okhttp') || ua.includes('cfnetwork') || ua.includes('violeafyapp')) {
+      return 'mobleafyearth';
+    }
+    if (ua.includes('mozilla') || ua.includes('chrome') || ua.includes('safari') || ua.includes('firefox') || ua.includes('edge')) {
+      return 'webleafyearth';
+    }
+  }
+  return 'mobleafyearth';
+}
+
 function normalizeSalesOrder(order: any): any {
   if (!order || typeof order !== 'object') return order;
   const rawMobile = order.customerMobile || order.contactNo || order.phone || order.mobile || order.orderPayload?.customerMobile || order.orderPayload?.phone || '';
   const sanitized = sanitizeMobileNumber(rawMobile);
+  const salesPlatform = determineSalesPlatform(order);
   const updatedOrder = {
     ...order,
+    salesPlatform: salesPlatform,
     customerMobile: sanitized || (order.customerMobile ? sanitizeMobileNumber(order.customerMobile) : ''),
   };
   if (updatedOrder.contactNo) updatedOrder.contactNo = sanitizeMobileNumber(updatedOrder.contactNo);
@@ -1573,6 +1598,9 @@ app.post("/api/data/:collectionName", async (req, res) => {
       const lead = await saveLeadRecord(item);
       return res.json({ success: true, item: lead });
     }
+    if (collectionName === 'sales_orders') {
+      item.salesPlatform = determineSalesPlatform(item, req);
+    }
     await saveCollectionDoc(collectionName, item);
     if (collectionName === 'sales_orders') {
       try {
@@ -2628,6 +2656,8 @@ async function applyReferralSponsor(customer: any, sponsorAuthUid: string): Prom
 async function finalizeSuccessfulPayment(tx: any): Promise<void> {
   const salesOrders = await getCollectionDocs('sales_orders');
   let order = salesOrders.find((o: any) => o.id === tx.orderId);
+  const salesPlatform = determineSalesPlatform(tx);
+
   if (!order && tx.orderPayload) {
     const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
     const deliveryFee = typeof tx.orderPayload?.deliveryFee === 'number'
@@ -2652,6 +2682,7 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
       paymentStatus: 'Paid',
       orderStatus: 'Confirmed',
       deliveryStatus: 'Processing',
+      salesPlatform: salesPlatform,
       createdAt: new Date().toISOString()
     };
     await saveCollectionDoc('sales_orders', order);
@@ -2665,6 +2696,19 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
         prod.revenue = (prod.revenue || 0) + (item.price * item.quantity);
         await saveCollectionDoc('products', prod);
       }
+    }
+  } else if (order) {
+    let updated = false;
+    if (order.paymentStatus !== 'Paid') {
+      order.paymentStatus = 'Paid';
+      updated = true;
+    }
+    if (!order.salesPlatform || order.salesPlatform !== salesPlatform) {
+      order.salesPlatform = salesPlatform;
+      updated = true;
+    }
+    if (updated) {
+      await saveCollectionDoc('sales_orders', order);
     }
   }
 
@@ -3303,11 +3347,15 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
       return res.status(500).json({ error: `Razorpay API connection error: ${rzpErr.message}` });
     }
 
+    const salesPlatform = determineSalesPlatform(orderData, req);
+    orderData.salesPlatform = salesPlatform;
+
     const tx = {
       id: transactionId,
       txnid: transactionId,
       orderId: transactionId,
       orderPayload: orderData,
+      salesPlatform: salesPlatform,
       amount: finalAmount,
       amountPaise: amountInPaise,
       currency: "INR",
@@ -3468,6 +3516,7 @@ async function handleCreateCodOrder(req: any, res: any) {
         gstCalc = await calculateGSTForOrderItems(validatedProducts, deliveryFee);
       } catch (_) { }
 
+      const salesPlatform = determineSalesPlatform(orderData, req);
       order = {
         ...orderData,
         id: transactionId,
@@ -3484,6 +3533,7 @@ async function handleCreateCodOrder(req: any, res: any) {
         paymentStatus: 'PENDING',
         orderStatus: 'Confirmed',
         deliveryStatus: 'Processing',
+        salesPlatform: salesPlatform,
         createdAt: new Date().toISOString()
       };
       await saveCollectionDoc('sales_orders', order);

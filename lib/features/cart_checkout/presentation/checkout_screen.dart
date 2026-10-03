@@ -495,6 +495,7 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       'assignedTo': 'Logistics',
       'createdAt': DateTime.now().toIso8601String(),
       'paymentMethod': isCod ? 'COD' : 'UPI',
+      'salesPlatform': kIsWeb ? 'webleafyearth' : 'mobleafyearth',
       'shippingAddress': widget.data.address.toJson(),
     };
 

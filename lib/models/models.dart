@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../core/config/env_config.dart';
 
 String sanitizeMobileNumber(dynamic mobile) {
@@ -762,6 +763,7 @@ class SalesOrder {
   final String? salesChannel;
   final String? customerEmail;
   final String? customerMobile;
+  final String? salesPlatform; // 'webleafyearth' | 'mobleafyearth'
   final CustomerDeliveryAddress? shippingAddress;
 
   SalesOrder({
@@ -791,6 +793,7 @@ class SalesOrder {
     this.salesChannel,
     this.customerEmail,
     this.customerMobile,
+    this.salesPlatform,
     this.shippingAddress,
   });
 
@@ -829,6 +832,7 @@ class SalesOrder {
     salesChannel: json['salesChannel'],
     customerEmail: json['customerEmail'],
     customerMobile: json['customerMobile'] != null ? sanitizeMobileNumber(json['customerMobile']) : (json['contactNo'] != null ? sanitizeMobileNumber(json['contactNo']) : null),
+    salesPlatform: json['salesPlatform'],
     shippingAddress: json['shippingAddress'] is Map
       ? CustomerDeliveryAddress.fromJson(Map<String, dynamic>.from(json['shippingAddress']))
       : null,
@@ -861,6 +865,7 @@ class SalesOrder {
     'salesChannel': salesChannel,
     'customerEmail': customerEmail,
     'customerMobile': customerMobile != null ? sanitizeMobileNumber(customerMobile) : null,
+    'salesPlatform': salesPlatform ?? (kIsWeb ? 'webleafyearth' : 'mobleafyearth'),
     'shippingAddress': shippingAddress?.toJson(),
   };
 }
