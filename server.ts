@@ -1600,6 +1600,9 @@ app.post("/api/data/:collectionName", async (req, res) => {
     }
     if (collectionName === 'sales_orders') {
       item.salesPlatform = determineSalesPlatform(item, req);
+      if (Array.isArray(item.products)) {
+        item.products = await enrichOrderProductsFromMaster(item.products);
+      }
     }
     await saveCollectionDoc(collectionName, item);
     if (collectionName === 'sales_orders') {
@@ -2668,11 +2671,14 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
       gstCalc = await calculateGSTForOrderItems(tx.orderPayload?.products || [], deliveryFee);
     } catch (_) { }
 
+    let productsList = gstCalc ? gstCalc.items : (tx.orderPayload?.products || []);
+    productsList = await enrichOrderProductsFromMaster(productsList);
+
     order = {
       ...tx.orderPayload,
       id: tx.orderId,
       orderNumber: orderNum,
-      products: gstCalc ? gstCalc.items : (tx.orderPayload?.products || []),
+      products: productsList,
       totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : undefined,
       totalGstAmount: gstCalc ? gstCalc.totalGstAmount : undefined,
       hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : undefined,
@@ -2825,6 +2831,36 @@ export async function getRazorpayCredentials(environment?: string): Promise<{ ke
 }
 
 
+export async function enrichOrderProductsFromMaster(rawProducts: any[]): Promise<any[]> {
+  if (!Array.isArray(rawProducts) || rawProducts.length === 0) return rawProducts || [];
+  try {
+    const products = await getCollectionDocs('products');
+    return rawProducts.map((item: any) => {
+      const targetId = String(item.productId || item.id || '').trim();
+      const product = products.find((candidate: any) =>
+        String(candidate.id || '').trim() === targetId ||
+        String(candidate.productId || '').trim() === targetId
+      ) || {};
+
+      const brandOwner = String(item.brandOwner || product.brandOwner || product.brandOwnerName || product.brand_owner || product.owner_name || '').trim();
+      const unit = String(item.unit || product.unit || product.packingSize || product.unitOfMeasure || '').trim();
+      const packingSize = String(item.packingSize || product.packingSize || product.packing_size || product.packSize || '').trim();
+
+      return {
+        ...item,
+        productId: targetId || item.id || '',
+        productName: item.productName || product.name || product.productName || item.name || '',
+        brandOwner,
+        unit,
+        packingSize,
+      };
+    });
+  } catch (err) {
+    console.warn('[Enrich Products] Failed to enrich products from master:', err);
+    return rawProducts;
+  }
+}
+
 // Server-side Authoritative GST Calculation Helper
 export async function calculateGSTForOrderItems(rawItems: any[], deliveryFeeOverride?: number): Promise<{
   items: any[];
@@ -2851,6 +2887,9 @@ export async function calculateGSTForOrderItems(rawItems: any[], deliveryFeeOver
     const unitPrice = Number(product.offerPrice ?? product.onlinePrice ?? item.price ?? 0);
     const gstRate = Number(product.gstPercentage ?? item.gstPercentage ?? 18.0);
     const hsnCode = String(product.hsnCode || product.hsn || item.hsnCode || '1234').trim();
+    const brandOwner = String(item.brandOwner || product.brandOwner || product.brandOwnerName || product.brand_owner || product.owner_name || '').trim();
+    const unit = String(item.unit || product.unit || product.packingSize || product.unitOfMeasure || '').trim();
+    const packingSize = String(item.packingSize || product.packingSize || product.packing_size || product.packSize || '').trim();
 
     const gstInclusiveAmount = Number((unitPrice * quantity).toFixed(2));
     const taxableValue = Number((gstInclusiveAmount / (1 + gstRate / 100)).toFixed(2));
@@ -2882,6 +2921,9 @@ export async function calculateGSTForOrderItems(rawItems: any[], deliveryFeeOver
       quantity,
       price: unitPrice,
       unitPrice,
+      brandOwner,
+      unit,
+      packingSize,
       gstPercentage: gstRate,
       hsnCode,
       taxableValue,
@@ -2989,12 +3031,17 @@ export async function auditAndRepairSalesOrders(): Promise<number> {
           } catch (_) {}
         }
 
+        let productsList = gstCalc ? gstCalc.items : order.products;
+        if (Array.isArray(productsList)) {
+          productsList = await enrichOrderProductsFromMaster(productsList);
+        }
+
         const updatedOrder = {
           ...order,
           customerId: newCustomerId || order.customerId,
           customerMobile: sanitizedMobile || order.customerMobile,
           deliveryFee: delFee,
-          products: gstCalc ? gstCalc.items : order.products,
+          products: productsList,
           totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : order.totalTaxableValue,
           totalGstAmount: gstCalc ? gstCalc.totalGstAmount : order.totalGstAmount,
           hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : order.hsnGstSummary,
@@ -3459,11 +3506,18 @@ async function handleCreateCodOrder(req: any, res: any) {
         ? product.offeredPrice
         : (product && typeof product.onlinePrice === 'number' ? product.onlinePrice : (item.price || 0));
 
+      const brandOwner = String(item.brandOwner || product?.brandOwner || product?.brandOwnerName || product?.brand_owner || product?.owner_name || '').trim();
+      const unit = String(item.unit || product?.unit || product?.packingSize || product?.unitOfMeasure || '').trim();
+      const packingSize = String(item.packingSize || product?.packingSize || product?.packing_size || product?.packSize || '').trim();
+
       secureSubtotal += unitPrice * requestedQty;
       validatedProducts.push({
         ...item,
         price: unitPrice,
-        quantity: requestedQty
+        quantity: requestedQty,
+        brandOwner,
+        unit,
+        packingSize
       });
     }
 
@@ -3516,13 +3570,16 @@ async function handleCreateCodOrder(req: any, res: any) {
         gstCalc = await calculateGSTForOrderItems(validatedProducts, deliveryFee);
       } catch (_) { }
 
+      let productsList = gstCalc ? gstCalc.items : validatedProducts;
+      productsList = await enrichOrderProductsFromMaster(productsList);
+
       const salesPlatform = determineSalesPlatform(orderData, req);
       order = {
         ...orderData,
         id: transactionId,
         orderNumber: orderNum,
         customerId: authenticatedUser.uid || orderData.customerId,
-        products: gstCalc ? gstCalc.items : validatedProducts,
+        products: productsList,
         totalTaxableValue: gstCalc ? gstCalc.totalTaxableValue : undefined,
         totalGstAmount: gstCalc ? gstCalc.totalGstAmount : undefined,
         hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : undefined,

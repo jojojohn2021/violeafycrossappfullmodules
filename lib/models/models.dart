@@ -683,6 +683,8 @@ class SalesProduct {
   final List<String>? categories;
   final String? brand;
   final String? brandOwner;
+  final String? unit;
+  final String? packingSize;
 
   SalesProduct({
     required this.productId,
@@ -699,6 +701,8 @@ class SalesProduct {
     this.categories,
     this.brand,
     this.brandOwner,
+    this.unit,
+    this.packingSize,
   });
 
   factory SalesProduct.fromJson(Map<String, dynamic> json) => SalesProduct(
@@ -714,8 +718,10 @@ class SalesProduct {
     gstInclusiveAmount: json['gstInclusiveAmount'] != null ? (json['gstInclusiveAmount']).toDouble() : null,
     category: ProductPerformance._parseCategory(json['categories'] ?? json['category']),
     categories: ProductPerformance._parseCategories(json['categories'] ?? json['category']),
-    brand: json['brand'],
-    brandOwner: json['brandOwner'],
+    brand: json['brand']?.toString(),
+    brandOwner: json['brandOwner']?.toString(),
+    unit: json['unit']?.toString(),
+    packingSize: json['packingSize']?.toString() ?? json['packing_size']?.toString(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -733,6 +739,8 @@ class SalesProduct {
     'categories': categories ?? (category != null ? [category!] : []),
     'brand': brand,
     'brandOwner': brandOwner,
+    'unit': unit,
+    'packingSize': packingSize,
   };
 }
 

@@ -489,6 +489,9 @@ class ShoppingRepository {
         category: existing.category,
         categories: existing.categories,
         brand: existing.brand,
+        brandOwner: existing.brandOwner ?? product.brandOwner,
+        unit: (existing.unit != null && existing.unit!.isNotEmpty) ? existing.unit : product.unit,
+        packingSize: (existing.packingSize != null && existing.packingSize!.isNotEmpty) ? existing.packingSize : product.packingSize,
       );
     } else {
       _cartItems.add(SalesProduct(
@@ -502,6 +505,9 @@ class ShoppingRepository {
         category: product.category,
         categories: product.categories,
         brand: product.brand,
+        brandOwner: product.brandOwner,
+        unit: product.unit,
+        packingSize: product.packingSize,
       ));
     }
     _syncCartToBackend();
@@ -521,6 +527,9 @@ class ShoppingRepository {
         price: (item['rate'] as num?)?.toDouble() ?? 0,
         gstPercentage: (item['gstRate'] as num?)?.toDouble(),
         hsnCode: item['hsnCode']?.toString(),
+        brandOwner: item['brandOwner']?.toString(),
+        unit: item['unit']?.toString(),
+        packingSize: item['packingSize']?.toString() ?? item['packing_size']?.toString(),
       );
       if (index >= 0) {
         final existing = _cartItems[index];
@@ -532,6 +541,9 @@ class ShoppingRepository {
           price: existing.price,
           gstPercentage: existing.gstPercentage,
           hsnCode: existing.hsnCode ?? product.hsnCode,
+          brandOwner: existing.brandOwner ?? product.brandOwner,
+          unit: existing.unit ?? product.unit,
+          packingSize: existing.packingSize ?? product.packingSize,
         );
       } else {
         _cartItems.add(product);
@@ -564,6 +576,9 @@ class ShoppingRepository {
         category: item.category,
         categories: item.categories,
         brand: item.brand,
+        brandOwner: item.brandOwner,
+        unit: item.unit,
+        packingSize: item.packingSize,
       );
     }
     _syncCartToBackend();
