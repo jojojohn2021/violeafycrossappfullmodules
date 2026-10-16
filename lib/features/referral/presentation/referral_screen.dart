@@ -236,7 +236,8 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
           ),
           const SizedBox(height: 16),
 
-          // Referral Code & Link Box
+          // Referral Code & Link Box (hidden)
+          /*
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -278,6 +279,7 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
           ),
 
           const SizedBox(height: 14),
+          */
 
           // Summary Stats
           Row(
@@ -545,10 +547,6 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
                 ),
                 const SizedBox(width: 12),
                 Text('Base: ₹${item.commissionBaseAmount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                if (item.commissionRate > 0) ...[
-                  const SizedBox(width: 12),
-                  Text('Rate: ${item.commissionRate}%', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                ],
               ],
             ),
             const Divider(height: 16),
@@ -587,6 +585,7 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
     }
   }
 
+  // ignore: unused_element
   void _shareReferralLink(String link, String code) async {
     final text = 'Join VioLeafy using my referral code $code to enjoy authentic farm produce and exclusive offers!\n$link';
     Clipboard.setData(ClipboardData(text: text));

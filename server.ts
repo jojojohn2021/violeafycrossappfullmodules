@@ -10,6 +10,7 @@ import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import { adminApp, adminAuth, adminDb, adminStorage } from "./firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { complianceConfig } from "./src/config/complianceConfig";
+import { sendOrderPlacedNotification, sendPaymentOutcomeNotification, resendTemplateLog, sendLeadAddedNotification } from "./whatsapp-notifier";
 
 dotenv.config();
 
@@ -198,8 +199,8 @@ function normalizeProduct(prod: any) {
     categories = prod.category.split(',').map((c: any) => c.trim()).filter(Boolean);
   }
 
-  const categoryStr = categories.length > 0 
-    ? categories.join(', ') 
+  const categoryStr = categories.length > 0
+    ? categories.join(', ')
     : (typeof prod.category === 'string' ? prod.category : (typeof prod.categories === 'string' ? prod.categories : ''));
 
   return {
@@ -247,11 +248,15 @@ function normalizeSalesOrder(order: any): any {
   const rawMobile = order.customerMobile || order.contactNo || order.phone || order.mobile || order.orderPayload?.customerMobile || order.orderPayload?.phone || '';
   const sanitized = sanitizeMobileNumber(rawMobile);
   const salesPlatform = determineSalesPlatform(order);
-  const updatedOrder = {
+  const updatedOrder: any = {
     ...order,
-    salesPlatform: salesPlatform,
-    customerMobile: sanitized || (order.customerMobile ? sanitizeMobileNumber(order.customerMobile) : ''),
   };
+  // Partial merge-updates without platform info must not reset salesPlatform to the default.
+  if (order.salesPlatform || order.orderPayload || order.products) updatedOrder.salesPlatform = salesPlatform;
+  // Only write customerMobile when a value exists; partial merge-updates (e.g. invoice
+  // linking) must not overwrite the stored number with ''.
+  const finalMobile = sanitized || (order.customerMobile ? sanitizeMobileNumber(order.customerMobile) : '');
+  if (finalMobile) updatedOrder.customerMobile = finalMobile;
   if (updatedOrder.contactNo) updatedOrder.contactNo = sanitizeMobileNumber(updatedOrder.contactNo);
   if (updatedOrder.phone) updatedOrder.phone = sanitizeMobileNumber(updatedOrder.phone);
   if (updatedOrder.mobile) updatedOrder.mobile = sanitizeMobileNumber(updatedOrder.mobile);
@@ -461,7 +466,7 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
   });
 }
 
-async function saveLeadRecord(item: any): Promise<any> {
+async function saveLeadRecord(item: any): Promise<{ payload: any; isNew: boolean }> {
   const phone = String(item.phone || '').replace(/\D/g, '');
   if (phone.length !== 10) throw new Error('WhatsApp mobile number must be exactly 10 digits');
   const reservationRef = adminDb.collection('lead_mobile_index').doc(phone);
@@ -486,7 +491,7 @@ async function saveLeadRecord(item: any): Promise<any> {
     delete payload.company;
     transaction.set(leadRef, payload, { merge: true });
     transaction.set(reservationRef, { leadId: String(item.id), phone }, { merge: true });
-    return payload;
+    return { payload, isNew: !existing.exists };
   });
 }
 
@@ -796,10 +801,10 @@ export async function getDeliveryChargeDetailsForPincode(pincode: string): Promi
       const match = deliveryDocs.find((doc: any) => {
         const docPincode = String(doc.pincode ?? doc.pin_code ?? doc.pinCode ?? doc.zipcode ?? '').trim();
         if (docPincode.toLowerCase() === 'default') return false;
-        
+
         const status = String(doc.status ?? doc.state ?? 'Active').toLowerCase();
         const isActive = doc.isActive !== false && status !== 'inactive' && status !== 'disabled';
-        
+
         return isActive && docPincode === cleanPincode;
       });
 
@@ -1073,7 +1078,7 @@ app.get("/api/wallets", async (req, res) => {
       const customer = await findCustomerByAuthUser(authenticatedUser);
       if (customer) {
         const plusCode = customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode, customer.mobileNumber);
-        const scopedDocs = docs.filter((item: any) => 
+        const scopedDocs = docs.filter((item: any) =>
           item.partnerId === customer.id ||
           item.customerId === customer.id ||
           item.userId === customer.id ||
@@ -1117,10 +1122,10 @@ async function buildCustomerReferralSummary(customer: any): Promise<Record<strin
     const totalCommissionEarned = money(commissionSnap.docs.reduce((sum, doc) => {
       const data: any = doc.data();
       const isMatch = partnerDocIds.has(data.referrerCustomerId) ||
-                      partnerDocIds.has(data.referrerAuthUid) ||
-                      partnerDocIds.has(data.customerId) ||
-                      partnerPlusCodes.has(data.referrerMobileNumber) ||
-                      partnerPlusCodes.has(data.customerMobile);
+        partnerDocIds.has(data.referrerAuthUid) ||
+        partnerDocIds.has(data.customerId) ||
+        partnerPlusCodes.has(data.referrerMobileNumber) ||
+        partnerPlusCodes.has(data.customerMobile);
       if (!isMatch) return sum;
       if (data.status === 'Cancelled' || data.status === 'Reversed') return sum;
       return sum + Math.max(0, numberValue(data.commissionAmount) - numberValue(data.reversedAmount));
@@ -1187,7 +1192,7 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
     const requestedId = String(req.params.invoiceId);
     const orders = await getCollectionDocs('sales_orders');
     let order = orders.find((item: any) => [item.id, item.orderNumber, item.invoiceId].includes(requestedId));
-    
+
     const customer = await findCustomerByAuthUser(authenticatedUser);
     const plusCode = customer ? (customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode, customer.mobileNumber)) : '';
 
@@ -1290,26 +1295,28 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
       .map((a: any) => String(a).trim())
       .filter(Boolean);
 
-    return res.json({ success: true, invoice: {
-      invoiceId, invoiceDate,
-      header: {
-        companyName: format.companyName || format.company_name || 'VAMJO',
-        companyLogo: format.companyLogo || format.logoUrl || format.logo || format.vamjoLogoUrl || '',
-        addressess: format.addressess || format.address || '',
-        addressess1: format.addressess1 || '',
-        addresses: formattedAddresses,
-        mobileNumbers: [format.mobileNumber, format.customerCareNumber].filter(Boolean),
-        customerCareNumber: format.customerCareNumber || format.customerCareMobile || format.customer_care_number || '',
-        customerCareMobile: format.customerCareNumber || format.customerCareMobile || format.customer_care_number || '',
-        customerCareEmail: format.customerCareEmail || format.customer_care_email || '',
-        gstNo: format.gstNo || format.gstno || format.gst_no || '',
-        webAddress: format.webAddress || format.web_address || format.website || ''
-      },
-      customer: { name: order.customerName || '', email: order.customerEmail || '', mobile: order.customerMobile || '', address: order.shippingAddress || null },
-      items, summary: { subtotal, itemTotal, gstSubtotal, grandTotal, totalSavedAmount },
-      gstByHsn, referralSummary,
-      customerActions: { canBuyAgain: items.some((item: any) => Boolean(item.productId)), canUseReferral: Boolean(customer), canViewWallet: Boolean(customer) }
-    }});
+    return res.json({
+      success: true, invoice: {
+        invoiceId, invoiceDate,
+        header: {
+          companyName: format.companyName || format.company_name || 'VAMJO',
+          companyLogo: format.companyLogo || format.logoUrl || format.logo || format.vamjoLogoUrl || '',
+          addressess: format.addressess || format.address || '',
+          addressess1: format.addressess1 || '',
+          addresses: formattedAddresses,
+          mobileNumbers: [format.mobileNumber, format.customerCareNumber].filter(Boolean),
+          customerCareNumber: format.customerCareNumber || format.customerCareMobile || format.customer_care_number || '',
+          customerCareMobile: format.customerCareNumber || format.customerCareMobile || format.customer_care_number || '',
+          customerCareEmail: format.customerCareEmail || format.customer_care_email || '',
+          gstNo: format.gstNo || format.gstno || format.gst_no || '',
+          webAddress: format.webAddress || format.web_address || format.website || ''
+        },
+        customer: { name: order.customerName || '', email: order.customerEmail || '', mobile: order.customerMobile || '', address: order.shippingAddress || null },
+        items, summary: { subtotal, itemTotal, gstSubtotal, grandTotal, totalSavedAmount },
+        gstByHsn, referralSummary,
+        customerActions: { canBuyAgain: items.some((item: any) => Boolean(item.productId)), canUseReferral: Boolean(customer), canViewWallet: Boolean(customer) }
+      }
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to read invoice" });
   }
@@ -1595,8 +1602,12 @@ app.post("/api/data/:collectionName", async (req, res) => {
       return res.status(400).json({ error: "Missing payload item.id" });
     }
     if (collectionName === 'leads') {
-      const lead = await saveLeadRecord(item);
-      return res.json({ success: true, item: lead });
+      const { payload: lead, isNew } = await saveLeadRecord(item);
+      // Transaction committed: notify the newly added lead (non-blocking failure).
+      const whatsapp = isNew
+        ? await sendLeadAddedNotification({ db: adminDb }, String(item.id)).catch(() => null)
+        : null;
+      return res.json({ success: true, item: lead, whatsapp });
     }
     if (collectionName === 'sales_orders') {
       item.salesPlatform = determineSalesPlatform(item, req);
@@ -1809,31 +1820,20 @@ app.post("/api/payment/test-connection", async (req, res) => {
   }
 });
 
-async function getNotificationSettings() {
-  const configs = await getCollectionDocs('notification_settings');
-  let config = configs.find((c: any) => c.id === 'config-notifications');
-  if (!config) {
-    config = {
-      id: 'config-notifications',
-      companyName: 'Leafyearth',
-      successEmails: ['sales@vamjo.com', 'vamjosales@gmail.com'],
-      failedEmails: ['sales@vamjo.com', 'vamjosales@gmail.com'],
-      cancelledEmails: ['sales@vamjo.com', 'vamjosales@gmail.com'],
-      successPhones: ['+918547927539', '+918547927538','+918589037171'],
-      failedPhones: ['+918547927539', '+918547927538','+918589037171'],
-      cancelledPhones: ['+918547927539', '+918547927538','+918589037171'],
-      smtpHost: '',
-      smtpPort: 2525,
-      smtpUser: '',
-      smtpPass: '',
-      smtpFrom: 'no-reply@vamj.com',
-      whatsappApiUrl: 'https://graph.facebook.com/v17.0',
-      whatsappToken: '',
-      whatsappPhoneId: ''
-    };
-    await saveCollectionDoc('notification_settings', config);
+// Single source of truth: Firestore `global/config`. No hardcoded fallback is
+// created; when the document is missing, senders see empty settings and skip.
+async function getNotificationSettings(): Promise<any> {
+  try {
+    const snap = await adminDb.collection('global').doc('config').get();
+    if (!snap.exists) {
+      console.warn('[Notifications] global/config not found; notifications will be skipped.');
+      return {};
+    }
+    return snap.data() || {};
+  } catch (err: any) {
+    console.error('[Notifications] global/config unreadable:', err?.message || err);
+    return {};
   }
-  return config;
 }
 
 async function sendEmailNotification(settings: any, type: 'Success' | 'Failed' | 'Cancelled', tx: any, recipients: string[]) {
@@ -2280,6 +2280,33 @@ async function findCustomerById(customerId: string): Promise<any | null> {
   return findCustomerByAuthUid(customerId);
 }
 
+// Returns the logged-in customer's registered mobile incl. country code (e.g. +919876543210),
+// resolved from the customers record (mobileNumberpluscode, else mobileCountrycode + mobileNumber).
+// Returns '' when the customer cannot be resolved, so callers keep the existing value.
+async function resolveCustomerMobileWithCode(identifiers: any[]): Promise<string> {
+  for (const ident of identifiers) {
+    if (!ident) continue;
+    try {
+      const cust = await findCustomerByAuthUid(String(ident));
+      if (!cust) continue;
+      const plus = String(cust.mobileNumberpluscode || '').replace(/\s+/g, '');
+      if (plus.startsWith('+')) return plus;
+      const built = formatMobileNumberPlusCode(cust.mobileCountrycode, cust.mobileNumber || cust.mobile);
+      if (built) return built;
+    } catch (err: any) {
+      console.warn('[Order customerMobile] customer lookup failed:', err?.message || err);
+    }
+  }
+  return '';
+}
+
+function orderCustomerIdentifiers(tx: any, order?: any): any[] {
+  return [
+    order?.customerId, tx?.orderPayload?.customerId, tx?.customerId, tx?.userId,
+    tx?.orderPayload?.customerMobile, tx?.customerMobile,
+  ];
+}
+
 async function findCustomerByAuthUser(authenticatedUser: any): Promise<any | null> {
   if (!authenticatedUser) return null;
   let cust: any = null;
@@ -2449,7 +2476,7 @@ function calculatePreGstCommissionBase(item: any): { base: number; gstExcluded: 
     const grandTotal = Number(item.amount || item.orderPayload?.totalValue || item.totalValue || item.grandTotal || item.total || 0);
     const gst = Number(item.totalGstAmount || item.orderPayload?.totalGstAmount || item.gstAmount || 0);
     const delivery = Number(item.deliveryFee || item.deliveryCharge || item.courierCharges || item.orderPayload?.deliveryFee || item.orderPayload?.deliveryCharge || 0);
-    
+
     if (gst > 0) gstExcluded = true;
     if (delivery > 0) deliveryExcluded = true;
 
@@ -2611,7 +2638,7 @@ async function getCustomerEarningsPayload(customer: any): Promise<Record<string,
         return sum;
       }, 0));
     }
-  } catch (_) {}
+  } catch (_) { }
 
   const effectivePending = roundCurrency(Math.max(pending, totalFromTxs));
 
@@ -2674,8 +2701,11 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
     let productsList = gstCalc ? gstCalc.items : (tx.orderPayload?.products || []);
     productsList = await enrichOrderProductsFromMaster(productsList);
 
+    const loginMobile = await resolveCustomerMobileWithCode(orderCustomerIdentifiers(tx));
+
     order = {
       ...tx.orderPayload,
+      ...(loginMobile ? { customerMobile: loginMobile } : {}),
       id: tx.orderId,
       orderNumber: orderNum,
       products: productsList,
@@ -2713,6 +2743,11 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
       order.salesPlatform = salesPlatform;
       updated = true;
     }
+    const loginMobile = await resolveCustomerMobileWithCode(orderCustomerIdentifiers(tx, order));
+    if (loginMobile && order.customerMobile !== loginMobile) {
+      order.customerMobile = loginMobile;
+      updated = true;
+    }
     if (updated) {
       await saveCollectionDoc('sales_orders', order);
     }
@@ -2739,13 +2774,10 @@ async function triggerAllNotifications(type: 'Success' | 'Failed' | 'Cancelled',
 
     if (type === 'Success') {
       emailRecipients = settings.successEmails || [];
-      phoneRecipients = settings.successPhones || [];
     } else if (type === 'Failed') {
       emailRecipients = settings.failedEmails || [];
-      phoneRecipients = settings.failedPhones || [];
     } else if (type === 'Cancelled') {
       emailRecipients = settings.cancelledEmails || [];
-      phoneRecipients = settings.cancelledPhones || [];
     }
 
     const orderData = tx.orderPayload || {};
@@ -2762,9 +2794,17 @@ async function triggerAllNotifications(type: 'Success' | 'Failed' | 'Cancelled',
       });
     }
 
-    if (phoneRecipients.length > 0) {
-      sendWhatsAppNotification(settings, type, tx, phoneRecipients).catch(err => {
-        console.error('Asynchronous sendWhatsAppNotification failed:', err);
+    if (type === 'Success') {
+      // Replaced the free-form Success text with the approved "Order Placed" template.
+      // Uses the persisted sales_orders record; never affects the order outcome.
+      sendOrderPlacedNotification({ db: adminDb }, String(tx.orderId || '')).catch(err => {
+        console.error('Asynchronous sendOrderPlacedNotification failed:', err?.message || err);
+      });
+    } else {
+      // Failed / Cancelled: approved template global/config.whatsappTemplate_Failed
+      // (recipients: customerMobile + failedPhones1/2), sourced from the payments record.
+      sendPaymentOutcomeNotification({ db: adminDb }, type, String(tx.id || '')).catch(err => {
+        console.error('Asynchronous sendPaymentOutcomeNotification failed:', err?.message || err);
       });
     }
   } catch (err) {
@@ -3023,12 +3063,12 @@ export async function auditAndRepairSalesOrders(): Promise<number> {
 
       if (needsUpdate) {
         console.log(`[SalesOrders Audit] Repairing order ${order.id || order.orderNumber}: customerMobile=${sanitizedMobile}, customerId=${newCustomerId}`);
-        
+
         let gstCalc: any = null;
         if (order.products && Array.isArray(order.products) && order.products.length > 0) {
           try {
             gstCalc = await calculateGSTForOrderItems(order.products, delFee);
-          } catch (_) {}
+          } catch (_) { }
         }
 
         let productsList = gstCalc ? gstCalc.items : order.products;
@@ -3574,8 +3614,10 @@ async function handleCreateCodOrder(req: any, res: any) {
       productsList = await enrichOrderProductsFromMaster(productsList);
 
       const salesPlatform = determineSalesPlatform(orderData, req);
+      const loginMobile = await resolveCustomerMobileWithCode([authenticatedUser?.uid, orderData.customerId, orderData.customerMobile]);
       order = {
         ...orderData,
+        ...(loginMobile ? { customerMobile: loginMobile } : {}),
         id: transactionId,
         orderNumber: orderNum,
         customerId: authenticatedUser.uid || orderData.customerId,
@@ -3709,7 +3751,7 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
         const pCurrency = (paymentEntity.currency || '').toString().toUpperCase();
         const validState = pStatus === 'captured' || pStatus === 'authorized';
         const validCurrency = pCurrency === 'INR';
-        
+
         if (!validState || !validCurrency) {
           tx.status = 'PAYMENT_FAILED';
           tx.logs.push({
@@ -3718,6 +3760,9 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
             details: `S2S payment status verification failed. Status: ${paymentEntity.status}`
           });
           await saveCollectionDoc('payments', tx);
+          // Razorpay-confirmed payment failure: WhatsApp-only template notification.
+          sendPaymentOutcomeNotification({ db: adminDb }, 'Failed', String(tx.id || '')).catch(err =>
+            console.error('Asynchronous sendPaymentOutcomeNotification failed:', err?.message || err));
           return res.status(400).json({ error: "Server-to-server payment verification failed" });
         }
       }
@@ -4255,6 +4300,11 @@ app.post("/api/notifications/resend", async (req, res) => {
         sentStatus = 'Failed';
         errorMessage = err.message || 'SMTP delivery failure';
       }
+    } else if (log.type === 'WhatsApp' && log.eventKey && log.orderId) {
+      // Template-based log: re-send the same template to the same recipient.
+      const summary = await resendTemplateLog({ db: adminDb }, log);
+      const refreshed = await adminDb.collection('notification_logs').doc(String(log.id)).get();
+      return res.json({ success: summary.accepted > 0, log: refreshed.exists ? { id: refreshed.id, ...refreshed.data() } : log });
     } else if (log.type === 'WhatsApp') {
       const isWaConfigured = settings.whatsappApiUrl && settings.whatsappToken && settings.whatsappPhoneId;
       try {

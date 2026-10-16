@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../core/config/env_config.dart';
+import '../core/errors/app_errors.dart';
 import '../core/network/api_client.dart';
 import '../models/models.dart';
 
@@ -816,47 +817,23 @@ class ShoppingRepository {
         payload['referralpartner'] = partnerName;
         payload['referralmobileno'] = referralMobileWithCode;
       }
-      if (firestore != null) {
-        final phone = lead.phone.replaceAll(RegExp(r'\D'), '');
-        if (phone.isEmpty) {
-          lastLeadSaveError = 'A valid WhatsApp mobile number is required.';
-          return false;
-        }
-        payload['phone'] = phone;
-        final countryCode = lead.countrymobilecode.isNotEmpty ? lead.countrymobilecode : '+91';
-        payload['countrymobilecode'] = countryCode;
-        payload['mobilenumberwithcountrycode'] = phone.startsWith('+') ? phone : '$countryCode$phone';
-        final reservationRef = firestore!.collection('lead_mobile_index').doc(phone);
-        final leadRef = firestore!.collection('leads').doc(lead.id);
-        final existingLeads = await firestore!
-            .collection('leads')
-            .where('phone', isEqualTo: phone)
-            .limit(2)
-            .get()
-            .timeout(const Duration(seconds: 5));
-        if (existingLeads.docs.any((doc) => doc.id != lead.id)) {
-          lastLeadSaveError = 'Mobile number is already reserved. Duplicate number is not allowed.';
-          return false;
-        }
-        final existingLead = await leadRef.get().timeout(const Duration(seconds: 5));
-        if (existingLead.exists) {
-          await leadRef.set(payload, SetOptions(merge: true)).timeout(const Duration(seconds: 10));
-          await reservationRef.set({'leadId': lead.id, 'phone': phone}, SetOptions(merge: true)).timeout(const Duration(seconds: 5));
-          return true;
-        }
-        final reservation = await reservationRef.get().timeout(const Duration(seconds: 5));
-        if (reservation.exists && reservation.data()?['leadId'] != lead.id) {
-          lastLeadSaveError = 'Mobile number is already reserved. Duplicate number is not allowed.';
-          return false;
-        }
-        final batch = firestore!.batch();
-        batch.set(reservationRef, {'leadId': lead.id, 'phone': phone}, SetOptions(merge: true));
-        batch.set(leadRef, payload, SetOptions(merge: true));
-        await batch.commit().timeout(const Duration(seconds: 10));
-      } else {
-        await _apiClient.post('/api/data/leads', payload);
+      final phone = lead.phone.replaceAll(RegExp(r'\D'), '');
+      if (phone.isEmpty) {
+        lastLeadSaveError = 'A valid WhatsApp mobile number is required.';
+        return false;
       }
+      payload['phone'] = phone;
+      final countryCode = lead.countrymobilecode.isNotEmpty ? lead.countrymobilecode : '+91';
+      payload['countrymobilecode'] = countryCode;
+      payload['mobilenumberwithcountrycode'] = '$countryCode$phone';
+      // Saved via backend (Admin SDK): atomic duplicate-mobile reservation, not subject to
+      // client Firestore rules, and sends the lead-add WhatsApp template on success.
+      await _apiClient.post('/api/data/leads', payload);
       return true;
+    } on AppException catch (e) {
+      debugPrint('[ShoppingRepository] Error saving lead (API): ${e.message}');
+      lastLeadSaveError = e.message;
+      return false;
     } catch (e) {
       debugPrint('[ShoppingRepository] Error saving lead: $e');
       final errorCode = e is FirebaseException ? e.code : null;
