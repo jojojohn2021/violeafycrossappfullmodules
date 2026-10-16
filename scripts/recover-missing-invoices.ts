@@ -22,7 +22,7 @@ async function recoverMissingInvoices() {
   const startTime = new Date().toISOString();
 
   console.log(`========================================`);
-  console.log(`VioLeafyCross Invoice Recovery`);
+  console.log(`Leafyearth Invoice Recovery`);
   console.log(`Start Time: ${startTime}`);
   console.log(`Dry-Run Mode: ${isDryRun ? 'YES (No writes will be performed)' : 'NO (Live Execution)'}`);
   console.log(`========================================\n`);
@@ -51,7 +51,7 @@ async function recoverMissingInvoices() {
 
     for (const doc of salesOrdersSnap.docs) {
       scannedCount++;
-      const order = { id: doc.id, ...doc.data() };
+      const order: Record<string, any> & { id: string } = { ...doc.data(), id: doc.id };
       const orderId = order.id;
       const existingInvoiceId = order.invoiceId;
 
@@ -74,7 +74,7 @@ async function recoverMissingInvoices() {
 
       try {
         const result = await ensureInvoiceForOrder(order);
-        
+
         // Verify document creation in Firestore
         const verifySnap = await adminDb.collection('invoices').doc(result.invoiceId).get();
         if (verifySnap.exists) {

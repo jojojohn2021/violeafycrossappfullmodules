@@ -35,10 +35,10 @@ All data transmission between the client application and VioleafyCross servers i
 1. **Firebase Authentication (Google)**: Used for OTP mobile login and email authentication.
 2. **Cloud Firestore (Google)**: Stores order history, product catalog, addresses, and user profiles.
 3. **Firebase Storage (Google)**: Used for profile avatar uploads.
-4. **Razorpay SDK / Gateway**: Handles payment processing securely. Sensitive payment credentials (card numbers, UPI PINs, bank credentials) are handled directly by Razorpay (PCI-DSS Level 1 compliant) and never stored on VioleafyCross servers.
+4. **Razorpay SDK / Gateway**: Handles payment processing securely. Sensitive payment credentials (card numbers, UPI PINs, bank credentials) are handled directly by Razorpay (PCI-DSS Level 1 compliant) and never stored on Leafyearth servers.
 
 ---
 
 ## 4. User Data Rights & Account Deletion
 
-VioleafyCross complies with Google Play user privacy policies by providing an in-app account deletion mechanism under **Profile > Account Settings > Request Account & Data Deletion**, as well as web-based deletion request options via privacy contact `privacy@violeafy.com`.
+Leafyearth complies with Google Play user privacy policies by providing an in-app account deletion mechanism under **Profile > Account Settings > Request Account & Data Deletion**, as well as web-based deletion request options via privacy contact `privacy@violeafy.com`.

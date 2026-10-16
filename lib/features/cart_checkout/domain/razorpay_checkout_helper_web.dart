@@ -47,7 +47,7 @@ Future<Map<String, dynamic>?> launchWebRazorpayCheckout({
     'key': keyId,
     'amount': amount,
     'currency': currency,
-    'name': 'VioleafyCross',
+    'name': 'Leafyearth',
     'description': 'Order Payment $transactionId',
     'order_id': orderId,
     'callback_url': callbackUrl,
