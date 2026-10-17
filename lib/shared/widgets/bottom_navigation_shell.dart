@@ -48,7 +48,7 @@ class BottomNavigationShell extends StatelessWidget {
             BottomNavigationBarItem(
               icon: Icon(Icons.auto_graph_outlined),
               activeIcon: Icon(Icons.auto_graph_rounded, color: AppColors.primaryGreen),
-              label: 'Lead Pipeline',
+              label: 'Refer a Friend',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),

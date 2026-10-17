@@ -503,8 +503,8 @@ class ProductPerformance {
   bool matchesCategory(String selectedCategory) {
     if (selectedCategory == 'All') return true;
     final selLower = selectedCategory.trim().toLowerCase();
-    if (category != null && category!.toLowerCase().contains(selLower)) return true;
-    if (categories != null && categories!.any((c) => c.toLowerCase() == selLower)) return true;
+    if (category != null && (category!.toLowerCase() == selLower || category!.toLowerCase().contains(selLower))) return true;
+    if (categories != null && categories!.any((c) => c.trim().toLowerCase() == selLower || c.trim().toLowerCase().contains(selLower))) return true;
     return false;
   }
 }

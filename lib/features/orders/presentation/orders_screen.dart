@@ -44,13 +44,13 @@ class OrdersScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.secondaryBackground,
       appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => context.go('/'),
-          icon: const Icon(Icons.home_outlined),
-          tooltip: 'Home',
-        ),
         title: const Text('My Orders', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: 'Home',
+          ),
           IconButton(
             onPressed: () => ref.invalidate(salesOrdersProvider),
             icon: const Icon(Icons.refresh),
