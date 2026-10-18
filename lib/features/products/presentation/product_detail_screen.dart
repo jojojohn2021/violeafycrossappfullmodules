@@ -7,6 +7,7 @@ import '../../../models/models.dart';
 import '../../../providers/app_providers.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/product_story_dialog.dart';
+import '../../reviews/presentation/customer_reviews_section.dart';
 
 /// Resolves a product by its Firestore document ID.
 /// Uses the already-loaded product list (existing cache) first and only falls back
@@ -102,6 +103,7 @@ class _ProductDetailBody extends ConsumerWidget {
       final info = _ProductInfo(product: product, showInlinePurchase: isWide);
       final details = _ProductDetailsSections(product: product);
       final related = _RelatedProducts(product: product);
+      final reviews = CustomerReviewsSection(productId: product.id, productName: product.name);
 
       final content = isWide
           ? Column(
@@ -119,6 +121,7 @@ class _ProductDetailBody extends ConsumerWidget {
                 ),
                 const SizedBox(height: 28),
                 details,
+                reviews,
                 related,
               ],
             )
@@ -130,6 +133,7 @@ class _ProductDetailBody extends ConsumerWidget {
                 info,
                 const SizedBox(height: 8),
                 details,
+                reviews,
                 related,
               ],
             );

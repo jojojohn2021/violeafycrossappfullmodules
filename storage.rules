@@ -19,6 +19,26 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Customer review media: customer_reviews/{userUid}/{productId}/{reviewId}/{mediaId}_{safeFileName}
+    // - Only the authenticated owner may create objects inside their own directory.
+    // - Create-only (no overwrite / delete from clients); server-side Admin SDK handles cleanup.
+    // - No client reads: published media is delivered through short-lived server-signed URLs,
+    //   so draft / pending / rejected media is never publicly accessible.
+    match /customer_reviews/{userUid}/{productId}/{reviewId}/{fileName} {
+      allow read: if false;
+      allow create: if request.auth != null
+        && request.auth.uid == userUid
+        && resource == null
+        && fileName.matches('^[A-Za-z0-9\\-]{8,64}_[A-Za-z0-9._\\-]{1,100}$')
+        && (
+          (request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)')
+            && request.resource.size <= 8 * 1024 * 1024)
+          || (request.resource.contentType.matches('video/(mp4|quicktime|webm)')
+            && request.resource.size <= 50 * 1024 * 1024)
+        );
+      allow update, delete: if false;
+    }
+
     // Default: no access
     match /{allPaths=**} {
       allow read, write: if false;

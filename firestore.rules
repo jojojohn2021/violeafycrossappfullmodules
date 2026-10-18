@@ -146,6 +146,22 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // Customer Reviews (verified purchase). All writes go through VioLeafyServer (Admin SDK).
+    // NOTE: the top-level `match /{document=**}` wildcard above currently overrides this;
+    // these rules take effect once that wildcard is tightened.
+    match /customer_reviews/{reviewId} {
+      allow read: if resource.data.status == 'published';
+      allow write: if false;
+      match /helpful_votes/{uid} {
+        allow read, write: if false;
+      }
+    }
+
+    match /customer_review_aggregates/{productId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Customer Delivery Addresses Collection
     match /customer_delivery_addresses/{addressId} {
       allow read, write: if isSignedIn();

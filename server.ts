@@ -11,6 +11,7 @@ import { adminApp, adminAuth, adminDb, adminStorage } from "./firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { complianceConfig } from "./src/config/complianceConfig";
 import { sendOrderPlacedNotification, sendPaymentOutcomeNotification, resendTemplateLog, sendLeadAddedNotification } from "./whatsapp-notifier";
+import { registerCustomerReviewRoutes } from "./src/reviews/customerReviews";
 
 dotenv.config();
 
@@ -86,6 +87,14 @@ app.use((req, res, next) => {
 
 app.get("/api/products", getProducts);
 app.get("/api/products/:id/story", getProductStory);
+// Customer reviews, ratings, photos & videos (src/reviews/customerReviews.ts)
+registerCustomerReviewRoutes(app as any, {
+  adminDb,
+  adminStorage,
+  getAuthenticatedUser: (req: any) => getAuthenticatedUser(req),
+  fetchUserScopedSalesOrders: (user: any) => fetchUserScopedSalesOrders(user),
+  findCustomerByAuthUser: (user: any) => findCustomerByAuthUser(user),
+});
 app.get("/api/data", async (req: any, res: any) => {
   try {
     const snapshot = await adminDb.collection("products").get();
