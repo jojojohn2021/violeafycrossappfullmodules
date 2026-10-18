@@ -64,6 +64,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Icons.category;
   }
 
+  /// Orders products by their category's `homepagesortorder` (product_categories).
+  /// Products in multiple categories use the lowest order; unmatched ones go last.
+  /// Stable: original order is kept within the same sort value.
+  List<ProductPerformance> _sortByCategoryHomepageOrder(
+    List<ProductPerformance> products,
+    List<ProductCategory> categoryModels,
+  ) {
+    final orderByKey = <String, int>{};
+    for (final c in categoryModels) {
+      final o = c.homepageSortOrder;
+      if (o == null) continue;
+      orderByKey[c.name.trim().toLowerCase()] = o;
+      orderByKey[c.id.trim().toLowerCase()] = o;
+    }
+    if (orderByKey.isEmpty) return products;
+
+    int keyFor(ProductPerformance p) {
+      final cats = <String>[
+        ...?p.categories,
+        if (p.categories == null || p.categories!.isEmpty) ...(p.category ?? '').split(','),
+      ];
+      var best = 1 << 30;
+      for (final c in cats) {
+        final o = orderByKey[c.trim().toLowerCase()];
+        if (o != null && o < best) best = o;
+      }
+      return best;
+    }
+
+    final indexed = products.asMap().entries.toList()
+      ..sort((a, b) {
+        final cmp = keyFor(a.value).compareTo(keyFor(b.value));
+        return cmp != 0 ? cmp : a.key.compareTo(b.key);
+      });
+    return indexed.map((e) => e.value).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
@@ -459,7 +496,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   productsAsync.when(
                     data: (_) {
-                      final filteredList = ref.watch(filteredProductsProvider);
+                      final filteredList = _sortByCategoryHomepageOrder(
+                        ref.watch(filteredProductsProvider),
+                        categoryModelsAsync.valueOrNull ?? const [],
+                      );
                       if (filteredList.isEmpty) {
                         return Container(
                           padding: const EdgeInsets.all(32),

@@ -303,6 +303,44 @@ class ProductPerformance {
   final int? reviewsCount;
   final List<String>? videos;
   final String? productStoryUrl;
+  final String? uniqueSpec1;
+  final String? uniqueSpec2;
+  final String? uniqueSpec3;
+  final String? uniqueSpec4;
+
+  /// Maximum allowed length for each uniqueSpec field.
+  static const int uniqueSpecMaxLength = 30;
+
+  /// Non-empty, trimmed unique specifications in field order (1..4).
+  List<String> get uniqueSpecs => [uniqueSpec1, uniqueSpec2, uniqueSpec3, uniqueSpec4]
+      .whereType<String>()
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  /// Validator for product create/edit write paths. Returns an error message or null.
+  static String? validateUniqueSpec(String? value) {
+    if (value == null) return null;
+    if (value.trim().length > uniqueSpecMaxLength) {
+      return 'Must be $uniqueSpecMaxLength characters or fewer';
+    }
+    return null;
+  }
+
+  /// Normalizes a uniqueSpec value for persistence: trims, empty -> null.
+  /// Throws [ArgumentError] when the value exceeds [uniqueSpecMaxLength].
+  static String? sanitizeUniqueSpecForWrite(String? value) {
+    final error = validateUniqueSpec(value);
+    if (error != null) throw ArgumentError.value(value, 'uniqueSpec', error);
+    final trimmed = value?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  static String? _parseUniqueSpec(dynamic val) {
+    if (val == null || val is! String) return null;
+    final trimmed = val.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
 
   ProductPerformance({
     required this.id,
@@ -349,6 +387,10 @@ class ProductPerformance {
     this.reviewsCount,
     this.videos,
     this.productStoryUrl,
+    this.uniqueSpec1,
+    this.uniqueSpec2,
+    this.uniqueSpec3,
+    this.uniqueSpec4,
   });
 
   static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -426,6 +468,10 @@ class ProductPerformance {
     reviewsCount: _toIntNullable(json['reviewsCount']),
     videos: json['videos'] is List ? List<String>.from((json['videos'] as List).map((e) => e.toString())) : null,
     productStoryUrl: (json['productStoryUrl'] ?? json['productStoryVideoUrl'] ?? json['linkedInVideoUrl'] ?? json['storyVideoUrl'] ?? json['productStory'] ?? json['videoUrl'])?.toString() ?? (json['videos'] is List && (json['videos'] as List).isNotEmpty ? (json['videos'] as List).first.toString() : null),
+    uniqueSpec1: _parseUniqueSpec(json['uniqueSpec1']),
+    uniqueSpec2: _parseUniqueSpec(json['uniqueSpec2']),
+    uniqueSpec3: _parseUniqueSpec(json['uniqueSpec3']),
+    uniqueSpec4: _parseUniqueSpec(json['uniqueSpec4']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -473,6 +519,10 @@ class ProductPerformance {
     'reviewsCount': reviewsCount,
     'videos': videos,
     'productStoryUrl': productStoryUrl,
+    if (uniqueSpec1 != null) 'uniqueSpec1': uniqueSpec1,
+    if (uniqueSpec2 != null) 'uniqueSpec2': uniqueSpec2,
+    if (uniqueSpec3 != null) 'uniqueSpec3': uniqueSpec3,
+    if (uniqueSpec4 != null) 'uniqueSpec4': uniqueSpec4,
   };
 
   static String? _parseCategory(dynamic raw) {
@@ -1763,6 +1813,8 @@ class ProductCategory {
   final String status;
   final String? imageId;
   final String? imageUrl;
+  /// Firestore `product_categories.homepagesortorder` (lower = shown first on homepage).
+  final int? homepageSortOrder;
 
   ProductCategory({
     required this.id,
@@ -1771,6 +1823,7 @@ class ProductCategory {
     this.status = 'Active',
     this.imageId,
     this.imageUrl,
+    this.homepageSortOrder,
   });
 
   factory ProductCategory.fromJson(Map<String, dynamic> json) => ProductCategory(
@@ -1782,6 +1835,9 @@ class ProductCategory {
     imageUrl: json['imageUrl']?.toString() != null 
         ? EnvConfig.normalizeUrl(json['imageUrl'].toString()) 
         : (json['image']?.toString() != null ? EnvConfig.normalizeUrl(json['image'].toString()) : null),
+    homepageSortOrder: json['homepagesortorder'] is num
+        ? (json['homepagesortorder'] as num).toInt()
+        : int.tryParse(json['homepagesortorder']?.toString() ?? ''),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1791,6 +1847,7 @@ class ProductCategory {
     'status': status,
     'imageId': imageId,
     'imageUrl': imageUrl,
+    if (homepageSortOrder != null) 'homepagesortorder': homepageSortOrder,
   };
 }
 

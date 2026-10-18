@@ -134,36 +134,6 @@ class ProductCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-
-                  // Rating Pill
-                  if (product.rating != null && product.rating! > 0)
-                    Positioned(
-                      bottom: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              product.rating!.toStringAsFixed(1),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.star, color: AppColors.ratingStar, size: 10),
-                          ],
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -288,6 +258,19 @@ class ProductCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
 
+                  // Unique specification highlights (immediately above rating)
+                  if (product.uniqueSpecs.isNotEmpty) ...[
+                    UniqueSpecHighlights(specs: product.uniqueSpecs),
+                    const SizedBox(height: 4),
+                  ],
+
+                  // Star rating & review count (existing product rating fields)
+                  if (product.rating != null && product.rating! > 0) ...[
+                    ProductRatingRow(rating: product.rating!, reviewsCount: product.reviewsCount),
+                    const SizedBox(height: 8),
+                  ] else if (product.uniqueSpecs.isNotEmpty)
+                    const SizedBox(height: 4),
+
                   // Add to Cart / Quantity Modifier Button
                   if (currentCartQty == 0)
                     SizedBox(
@@ -363,6 +346,86 @@ class ProductCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class UniqueSpecHighlights extends StatelessWidget {
+  final List<String> specs;
+  final double scale;
+
+  const UniqueSpecHighlights({super.key, required this.specs, this.scale = 1.0});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 4 * scale,
+      runSpacing: 4 * scale,
+      children: [
+        for (final spec in specs)
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 5 * scale, vertical: 2 * scale),
+            decoration: BoxDecoration(
+              color: AppColors.ratingStar,
+              borderRadius: BorderRadius.circular(4 * scale),
+              border: Border.all(color: AppColors.ratingStar, width: 0.8),
+            ),
+            child: Text(
+              spec,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9 * scale,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class ProductRatingRow extends StatelessWidget {
+  final double rating;
+  final int? reviewsCount;
+  final double scale;
+
+  const ProductRatingRow({super.key, required this.rating, required this.reviewsCount, this.scale = 1.0});
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = rating.clamp(0.0, 5.0);
+    return Row(
+      children: [
+        for (var i = 1; i <= 5; i++)
+          Icon(
+            i == 5
+                ? Icons.star_half // last star always shown as half
+                : clamped >= i
+                    ? Icons.star
+                    : (clamped >= i - 0.5 ? Icons.star_half : Icons.star_border),
+            color: AppColors.ratingStar,
+            size: 12 * scale,
+          ),
+        SizedBox(width: 4 * scale),
+        Flexible(
+          child: Text(
+            [
+              // Rating number hidden for 5.0-rated products; review count still shown.
+              if (rating < 5.0) rating.toStringAsFixed(1),
+              if (reviewsCount != null && reviewsCount! > 0) '($reviewsCount)',
+            ].join(' '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10 * scale,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
