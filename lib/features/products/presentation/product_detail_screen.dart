@@ -832,7 +832,7 @@ class _RelatedProducts extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final products = ref.watch(productsProvider).valueOrNull ?? const <ProductPerformance>[];
+    final products = ref.watch(productsProvider).value ?? const <ProductPerformance>[];
     final mine = _cats(product);
     if (mine.isEmpty) return const SizedBox.shrink();
 

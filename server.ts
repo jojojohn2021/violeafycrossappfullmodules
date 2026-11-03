@@ -460,7 +460,6 @@ async function saveCustomerRecord(item: any, authenticatedUser: any): Promise<an
       mobileCountrycode,
       mobileNumberpluscode,
       countrymobilecode: mobileCountrycode,
-      mobilenumberwithcountrycode: mobileNumberpluscode,
       leadslinkid: lead?.id || null,
       referralcode: lead?.referralcode ?? lead?.referralCode ?? null,
       referralpartner: lead?.referralpartner ?? lead?.referralPartner ?? null,
@@ -937,10 +936,19 @@ app.post(['/api/customer/permanent-address', '/api/customers/permanent-address']
     } else {
       const userPhone = (authenticatedUser.phone_number || '').replace(/\D/g, '');
       if (userPhone) {
-        const phoneMatch = await adminDb.collection('customers').where('mobileNumber', '==', userPhone).limit(1).get();
-        if (!phoneMatch.empty) {
-          customerRef = phoneMatch.docs[0].ref;
-          customerDoc = { id: phoneMatch.docs[0].id, ...phoneMatch.docs[0].data() };
+        const plusCode = formatMobileNumberPlusCode('+91', userPhone);
+        const plusMatch = plusCode
+          ? await adminDb.collection('customers').where('mobileNumberpluscode', '==', plusCode).limit(1).get()
+          : null;
+        if (plusMatch && !plusMatch.empty) {
+          customerRef = plusMatch.docs[0].ref;
+          customerDoc = { id: plusMatch.docs[0].id, ...plusMatch.docs[0].data() };
+        } else {
+          const phoneMatch = await adminDb.collection('customers').where('mobileNumber', '==', userPhone).limit(1).get();
+          if (!phoneMatch.empty) {
+            customerRef = phoneMatch.docs[0].ref;
+            customerDoc = { id: phoneMatch.docs[0].id, ...phoneMatch.docs[0].data() };
+          }
         }
       }
       if (!customerRef) {
@@ -1125,7 +1133,7 @@ async function buildCustomerReferralSummary(customer: any): Promise<Record<strin
   try {
     const plusCode = customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode || customer.countrymobilecode || '+91', customer.mobileNumber || customer.phone || '');
     const partnerDocIds = new Set([customer.id, customer.authUid, customer.customerId].filter(Boolean));
-    const partnerPlusCodes = new Set([plusCode, customer.mobileNumberpluscode, customer.mobilenumberwithcountrycode].filter(Boolean));
+    const partnerPlusCodes = new Set([plusCode, customer.mobileNumberpluscode].filter(Boolean));
 
     const commissionSnap = await adminDb.collection('commission_transactions').get();
     const totalCommissionEarned = money(commissionSnap.docs.reduce((sum, doc) => {
@@ -1214,8 +1222,7 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
 
     const validPlusCodes = new Set([
       plusCode,
-      customer?.mobileNumberpluscode,
-      customer?.mobilenumberwithcountrycode
+      customer?.mobileNumberpluscode
     ].filter(Boolean));
 
     const isAuthorizedOrder = (ord: any) => {
@@ -1398,7 +1405,6 @@ app.post("/api/auth/verify-login", async (req, res) => {
         updateObj.mobileCountrycode = mobileCountrycode;
         updateObj.mobileNumberpluscode = mobileNumberpluscode;
         updateObj.countrymobilecode = mobileCountrycode;
-        updateObj.mobilenumberwithcountrycode = mobileNumberpluscode;
         await adminDb.collection("customer_mobile_plus_code_index").doc(mobileNumberpluscode).set({
           customerId: existingCustomerDoc.id,
           mobileNumberpluscode
@@ -1495,7 +1501,6 @@ app.post("/api/auth/verify-login", async (req, res) => {
           mobileCountrycode: mobileCountrycode,
           mobileNumberpluscode: mobileNumberpluscode,
           countrymobilecode: mobileCountrycode,
-          mobilenumberwithcountrycode: mobileNumberpluscode,
           referralcode: refCode,
           referralpartner: refPartner,
           isFromLead: true,
@@ -1544,7 +1549,6 @@ app.post("/api/auth/verify-login", async (req, res) => {
           mobileCountrycode: mobileCountrycode,
           mobileNumberpluscode: mobileNumberpluscode,
           countrymobilecode: mobileCountrycode,
-          mobilenumberwithcountrycode: mobileNumberpluscode,
           referralcode: "organic",
           referralpartner: "organic",
           isFromLead: false,
@@ -4114,7 +4118,7 @@ app.get("/api/partners/commission-history", async (req, res) => {
 
     const plusCode = customer.mobileNumberpluscode || formatMobileNumberPlusCode(customer.mobileCountrycode || customer.countrymobilecode || '+91', customer.mobileNumber || customer.phone || '');
     const partnerDocIds = new Set([customer.id, customer.authUid, customer.customerId].filter(Boolean));
-    const partnerPlusCodes = new Set([plusCode, customer.mobileNumberpluscode, customer.mobilenumberwithcountrycode].filter(Boolean));
+    const partnerPlusCodes = new Set([plusCode, customer.mobileNumberpluscode].filter(Boolean));
 
     const snap = await adminDb.collection('commission_transactions').get();
     const items = snap.docs

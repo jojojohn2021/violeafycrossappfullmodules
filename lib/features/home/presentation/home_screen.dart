@@ -498,7 +498,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     data: (_) {
                       final filteredList = _sortByCategoryHomepageOrder(
                         ref.watch(filteredProductsProvider),
-                        categoryModelsAsync.valueOrNull ?? const [],
+                        categoryModelsAsync.value ?? const [],
                       );
                       if (filteredList.isEmpty) {
                         return Container(

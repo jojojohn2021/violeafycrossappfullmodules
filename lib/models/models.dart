@@ -90,7 +90,6 @@ class Lead {
   final String email;
   final String phone;
   final String countrymobilecode;
-  final String mobilenumberwithcountrycode;
   final String status; // 'New' | 'Contacted' | 'Qualified' | 'Proposal' | 'Nurturing' | 'Unqualified'
   final double score;
   final String source;
@@ -109,7 +108,6 @@ class Lead {
     required this.email,
     required this.phone,
     this.countrymobilecode = '+91',
-    this.mobilenumberwithcountrycode = '',
     required this.status,
     required this.score,
     required this.source,
@@ -129,7 +127,6 @@ class Lead {
     email: json['email'] ?? '',
     phone: json['phone'] ?? '',
     countrymobilecode: json['countrymobilecode'] ?? json['countryMobileCode'] ?? '+91',
-    mobilenumberwithcountrycode: json['mobilenumberwithcountrycode'] ?? json['mobileNumberWithCountryCode'] ?? (json['phone'] != null && json['phone'].toString().isNotEmpty ? (json['phone'].toString().startsWith('+') ? json['phone'] : '${json['countrymobilecode'] ?? json['countryMobileCode'] ?? '+91'}${json['phone']}') : ''),
     status: json['status'] ?? 'New',
     score: (json['score'] ?? 0).toDouble(),
     source: json['source'] ?? '',
@@ -149,7 +146,6 @@ class Lead {
     'email': email,
     'phone': phone,
     'countrymobilecode': countrymobilecode,
-    'mobilenumberwithcountrycode': mobilenumberwithcountrycode.isNotEmpty ? mobilenumberwithcountrycode : (phone.startsWith('+') ? phone : '$countrymobilecode$phone'),
     'status': status,
     'score': score,
     'source': source,
@@ -570,7 +566,6 @@ class CustomerPerformance {
   final String mobileCountrycode;
   final String mobileNumberpluscode;
   final String countrymobilecode;
-  final String mobilenumberwithcountrycode;
   final String address;
   final String state;
   final String district;
@@ -597,7 +592,6 @@ class CustomerPerformance {
     this.mobileCountrycode = '+91',
     this.mobileNumberpluscode = '',
     this.countrymobilecode = '+91',
-    this.mobilenumberwithcountrycode = '',
     required this.address,
     required this.state,
     required this.district,
@@ -618,10 +612,9 @@ class CustomerPerformance {
   factory CustomerPerformance.fromJson(Map<String, dynamic> json) {
     final cc = json['mobileCountrycode'] ?? json['countrymobilecode'] ?? json['countryMobileCode'] ?? '+91';
     final mob = json['mobileNumber'] ?? '';
-    final computedPlusCode = json['mobileNumberpluscode'] ??
-        (json['mobilenumberwithcountrycode'] != null && json['mobilenumberwithcountrycode'].toString().isNotEmpty
-            ? json['mobilenumberwithcountrycode'].toString().replaceAll(RegExp(r'\s+'), '')
-            : (mob.toString().startsWith('+') ? mob.toString().replaceAll(RegExp(r'\s+'), '') : '$cc$mob'.replaceAll(RegExp(r'\s+'), '')));
+    final computedPlusCode = (json['mobileNumberpluscode'] != null && json['mobileNumberpluscode'].toString().isNotEmpty)
+        ? json['mobileNumberpluscode'].toString().replaceAll(RegExp(r'\s+'), '')
+        : (mob.toString().startsWith('+') ? mob.toString().replaceAll(RegExp(r'\s+'), '') : '$cc$mob'.replaceAll(RegExp(r'\s+'), ''));
 
     return CustomerPerformance(
       id: json['customerId'] ?? json['id'] ?? '',
@@ -633,7 +626,6 @@ class CustomerPerformance {
       mobileCountrycode: cc,
       mobileNumberpluscode: computedPlusCode,
       countrymobilecode: cc,
-      mobilenumberwithcountrycode: computedPlusCode,
       address: json['address'] ?? '',
       state: json['state'] ?? '',
       district: json['district'] ?? '',
@@ -665,7 +657,6 @@ class CustomerPerformance {
         ? mobileNumberpluscode.replaceAll(RegExp(r'\s+'), '')
         : '$mobileCountrycode$mobileNumber'.replaceAll(RegExp(r'\s+'), ''),
     'countrymobilecode': countrymobilecode,
-    'mobilenumberwithcountrycode': mobilenumberwithcountrycode.isNotEmpty ? mobilenumberwithcountrycode : (mobileNumber.startsWith('+') ? mobileNumber : '$countrymobilecode$mobileNumber'),
     'address': address,
     'state': state,
     'district': district,

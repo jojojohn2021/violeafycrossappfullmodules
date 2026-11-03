@@ -20,7 +20,7 @@ class ShoppingRepository {
       currentUser.referralCode ?? '',
       currentUser.id,
       currentUser.mobileNumber,
-      currentUser.mobilenumberwithcountrycode,
+      currentUser.mobileNumberpluscode,
       currentUser.name,
     }.where((value) => value.trim().isNotEmpty).toSet();
 
@@ -31,7 +31,7 @@ class ShoppingRepository {
       final leadReferralPartner = (lead.referralPartner ?? '').trim();
       final leadReferralMobile = (lead.referralmobileno ?? '').trim();
       final customerPhone = (currentUser.mobileNumber).trim();
-      final customerMobileWithCode = (currentUser.mobilenumberwithcountrycode).trim();
+      final customerMobileWithCode = (currentUser.mobileNumberpluscode).trim();
 
       final matchesReferralCode = leadReferralCode.isNotEmpty && userReferralCodes.contains(leadReferralCode);
       final matchesCustomerId = leadReferralCode.isNotEmpty && leadReferralCode == currentUser.id;
@@ -809,8 +809,8 @@ class ShoppingRepository {
 
         final customerId = customer?.id.isNotEmpty == true ? customer!.id : user.uid;
         final partnerName = customer?.name.isNotEmpty == true ? customer!.name : (user.displayName ?? 'Referral User');
-        final referralMobileWithCode = customer?.mobilenumberwithcountrycode.isNotEmpty == true
-            ? customer!.mobilenumberwithcountrycode
+        final referralMobileWithCode = customer?.mobileNumberpluscode.isNotEmpty == true
+            ? customer!.mobileNumberpluscode
             : (user.phoneNumber ?? '');
 
         payload['referralcode'] = customerId;
@@ -825,7 +825,6 @@ class ShoppingRepository {
       payload['phone'] = phone;
       final countryCode = lead.countrymobilecode.isNotEmpty ? lead.countrymobilecode : '+91';
       payload['countrymobilecode'] = countryCode;
-      payload['mobilenumberwithcountrycode'] = '$countryCode$phone';
       // Saved via backend (Admin SDK): atomic duplicate-mobile reservation, not subject to
       // client Firestore rules, and sends the lead-add WhatsApp template on success.
       await _apiClient.post('/api/data/leads', payload);
@@ -901,7 +900,6 @@ class ShoppingRepository {
         payload['mobileCountrycode'] = countryCode;
         payload['countrymobilecode'] = countryCode;
         payload['mobileNumberpluscode'] = rawPlusCode;
-        payload['mobilenumberwithcountrycode'] = rawPlusCode;
         payload['authUid'] = user?.uid;
         payload['leadslinkid'] = lead?.id;
         payload['referralcode'] = lead?.referralCode;
@@ -989,6 +987,17 @@ class ShoppingRepository {
           }
         }
         if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
+          final cleanPhone = user.phoneNumber!.replaceAll(RegExp(r'\s+'), '');
+          final plusMatch = await firestore!
+              .collection('customers')
+              .where('mobileNumberpluscode', isEqualTo: cleanPhone)
+              .limit(1)
+              .get()
+              .timeout(const Duration(seconds: 5));
+          if (plusMatch.docs.isNotEmpty) {
+            final doc = plusMatch.docs.first;
+            return CustomerPerformance.fromJson({...doc.data(), 'id': doc.id});
+          }
           final phoneMatch = await firestore!
               .collection('customers')
               .where('mobileNumber', isEqualTo: user.phoneNumber)
@@ -1013,7 +1022,9 @@ class ShoppingRepository {
         for (final item in response) {
           if (item is Map<String, dynamic> &&
               ((user.email != null && item['email'] == user.email) ||
-                  (user.phoneNumber != null && item['mobileNumber'] == user.phoneNumber))) {
+                  (user.phoneNumber != null &&
+                      (item['mobileNumberpluscode'] == user.phoneNumber ||
+                          item['mobileNumber'] == user.phoneNumber)))) {
             return CustomerPerformance.fromJson(item);
           }
         }

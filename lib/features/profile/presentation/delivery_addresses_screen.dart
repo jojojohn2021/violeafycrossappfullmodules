@@ -80,8 +80,8 @@ class _DeliveryAddressesScreenState extends ConsumerState<DeliveryAddressesScree
     final user = firebase_auth.FirebaseAuth.instance.currentUser;
     final userPhone = user?.phoneNumber ?? '';
 
-    final rawMobile = (customer?.mobilenumberwithcountrycode != null && customer!.mobilenumberwithcountrycode.isNotEmpty)
-        ? customer.mobilenumberwithcountrycode
+    final rawMobile = (customer?.mobileNumberpluscode != null && customer!.mobileNumberpluscode.isNotEmpty)
+        ? customer.mobileNumberpluscode
         : ((customer?.mobileNumber != null && customer!.mobileNumber.isNotEmpty) ? customer.mobileNumber : userPhone);
 
     _permNameController.text = customer?.name ?? (user?.displayName ?? '');

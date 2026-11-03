@@ -584,7 +584,7 @@ export async function sendLeadAddedNotification(deps: NotifyDeps, leadId: string
     const lead = snap.data() || {};
     const national = String(lead.phone || "").replace(/\D/g, "");
     const cc = String(lead.countrymobilecode || "+91").replace(/\D/g, "") || "91";
-    const norm = normalizeInternational(String(lead.mobilenumberwithcountrycode || `+${cc}${national}`));
+    const norm = normalizeInternational(String(lead.mobileNumberpluscode || `+${cc}${national}`));
     if (!norm.ok) { log.warn(`${tag} skipped: invalid lead mobile (${norm.reason})`); return empty(`invalid lead mobile: ${norm.reason}`); }
     const digits = norm.value;
 
