@@ -210,5 +210,26 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if false; // Audit logs should be append-only & immutable
     }
+
+    // Isolated Pre-Order Module Collections — API-Only Access (Admin SDK bypasses client rules)
+    match /preorders/{preorderId} {
+      allow read, write: if false;
+    }
+
+    match /preorder_slots/{slotId} {
+      allow read, write: if false;
+    }
+
+    match /preorder_quotes/{quoteId} {
+      allow read, write: if false;
+    }
+
+    match /preorder_idempotency/{lockId} {
+      allow read, write: if false;
+    }
+
+    match /preorder_events/{eventId} {
+      allow read, write: if false;
+    }
   }
 }

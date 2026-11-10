@@ -13,6 +13,7 @@ import '../../../../core/utils/gst_calculator.dart';
 import '../../../../models/models.dart';
 import '../../../../providers/app_providers.dart';
 import '../../../../core/config/compliance_config.dart';
+import '../../preorder/preorder_module.dart';
 import '../domain/payment_orchestrator.dart';
 
 class CheckoutData {
@@ -47,6 +48,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     super.initState();
     _selectedAddress = ref.read(selectedAddressProvider);
     _loadAddresses();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
+      }
+    });
   }
 
   void _loadAddresses() {
@@ -99,9 +105,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
 
     ref.read(selectedAddressProvider.notifier).state = address;
-    final res = await ref.read(shoppingRepositoryProvider).getDeliveryCharge(address.pincode);
-    final deliveryFee = res.success ? res.deliveryCharge : 0.0;
-    final subtotal = cart.fold<double>(0, (sum, item) => sum + item.price * item.quantity);
+    final hasRegularItems = cart.any((item) => !item.isPreorder);
+    final res = hasRegularItems
+        ? await ref.read(shoppingRepositoryProvider).getDeliveryCharge(address.pincode)
+        : null;
+    final deliveryFee = (hasRegularItems && res != null && res.success) ? res.deliveryCharge : 0.0;
+    final summary = GstCalculator.calculateCartSummary(cart, deliveryFee: deliveryFee);
 
     if (!mounted) return;
     context.push(
@@ -109,7 +118,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       extra: CheckoutData(
         cart: cart,
         address: address,
-        subtotal: subtotal,
+        subtotal: summary.regularSalesSubtotal,
         deliveryFee: deliveryFee,
       ),
     );
@@ -455,6 +464,16 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
   bool _isStartingPayment = false;
   String _selectedPaymentMethod = 'Razorpay'; // 'Razorpay' or 'COD'
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
+      }
+    });
+  }
+
   Future<void> _startPayment() async {
     if (_isStartingPayment) return;
     setState(() => _isStartingPayment = true);
@@ -477,6 +496,12 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
 
     final orderId = 'ORD-${DateTime.now().millisecondsSinceEpoch}';
     final isCod = _selectedPaymentMethod == 'COD' && kIsWeb;
+    final hasRegularItems = widget.data.cart.any((item) => !item.isPreorder);
+    final effectiveDeliveryFee = hasRegularItems ? widget.data.deliveryFee : 0.0;
+    final gstSummary = GstCalculator.calculateCartSummary(
+      widget.data.cart,
+      deliveryFee: effectiveDeliveryFee,
+    );
 
     final orderData = {
       'id': orderId,
@@ -487,9 +512,12 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
       'customerMobile': sanitizeMobileNumber(widget.data.address.mobileNumber),
       'customerCompany': '',
       'products': widget.data.cart.map((item) => item.toJson()).toList(),
-      'subtotal': widget.data.subtotal,
-      'deliveryFee': widget.data.deliveryFee,
-      'totalValue': widget.data.total,
+      'subtotal': gstSummary.regularSalesSubtotal,
+      'deliveryFee': effectiveDeliveryFee,
+      'regularInvoiceGrandTotal': gstSummary.regularInvoiceGrandTotal,
+      'totalPreorderBookingAdvance': gstSummary.totalPreorderBookingAdvance,
+      'customerGrandTotalPayable': gstSummary.customerGrandTotalPayable,
+      'totalValue': gstSummary.customerGrandTotalPayable,
       'paymentStatus': isCod ? 'Pending' : 'Pending',
       'deliveryStatus': isCod ? 'Processing' : 'Pending Payment',
       'assignedTo': 'Logistics',
@@ -505,9 +533,9 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
         final result = await _orchestrator.payCod(orderData: orderData);
         if (!mounted) return;
         if (result.outcome == PaymentOutcome.success) {
-          context.push('/payment-result?txnid=${result.transactionId}&payment_status=success');
+          context.go('/payment-result?txnid=${result.transactionId}&payment_status=success');
         } else {
-          context.push('/payment-result?txnid=${result.transactionId}&payment_status=failed');
+          context.go('/payment-result?txnid=${result.transactionId}&payment_status=failed');
         }
       } else {
         final result = await _orchestrator.pay(
@@ -521,14 +549,14 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
           case PaymentOutcome.launchedExternally:
             break;
           case PaymentOutcome.success:
-            context.push('/payment-result?txnid=${result.transactionId}&payment_status=success');
+            context.go('/payment-result?txnid=${result.transactionId}&payment_status=success');
             break;
           case PaymentOutcome.cancelled:
-            context.push('/payment-result?txnid=${result.transactionId}&payment_status=cancelled');
+            context.go('/payment-result?txnid=${result.transactionId}&payment_status=cancelled');
             break;
           case PaymentOutcome.failed:
           case PaymentOutcome.initFailed:
-            context.push('/payment-result?txnid=${result.transactionId ?? ''}&payment_status=failed');
+            context.go('/payment-result?txnid=${result.transactionId ?? ''}&payment_status=failed');
             break;
         }
       }
@@ -559,61 +587,139 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
-    final gstSummary = GstCalculator.calculateCartSummary(data.cart);
+    final regularItems = data.cart.where((item) => !item.isPreorder).toList();
+    final preorderItems = data.cart.where((item) => item.isPreorder).toList();
+    final effectiveDeliveryFee = regularItems.isNotEmpty ? data.deliveryFee : 0.0;
+    final gstSummary = GstCalculator.calculateCartSummary(
+      data.cart,
+      deliveryFee: effectiveDeliveryFee,
+    );
 
     return Scaffold(
       backgroundColor: AppColors.secondaryBackground,
       appBar: AppBar(title: const Text('Order Review')),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            const Text('Products', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ...data.cart.map((item) {
-              final calc = GstCalculator.calculateItemGst(
-                price: item.price,
-                quantity: item.quantity,
-                gstPercentage: item.gstPercentage,
-                hsnCode: item.hsnCode,
-              );
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: item.imageUrl != null && item.imageUrl!.startsWith('http')
-                      ? CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.cover)
-                      : const Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
-                ),
-                title: Text(item.productName),
-                subtitle: Text(
-                  '${item.quantity} x ₹${item.price.toStringAsFixed(0)} | HSN: ${calc['hsnCode']} (GST ${calc['gstRate'].toStringAsFixed(0)}%)',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('₹${(item.price * item.quantity).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('GST ₹${(calc['gstAmount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                  ],
-                ),
-              );
-            }),
-            const Divider(height: 28),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+            if (regularItems.isNotEmpty) ...[
+              const Text('Regular Sales Items', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...regularItems.map((item) {
+                final calc = GstCalculator.calculateItemGst(
+                  price: item.price,
+                  quantity: item.quantity,
+                  gstPercentage: item.gstPercentage,
+                  hsnCode: item.hsnCode,
+                );
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: item.imageUrl != null && item.imageUrl!.startsWith('http')
+                        ? CachedNetworkImage(imageUrl: item.imageUrl!, fit: BoxFit.cover)
+                        : const Icon(Icons.image_not_supported_outlined, color: AppColors.textMuted),
+                  ),
+                  title: Text(item.productName),
+                  subtitle: Text(
+                    '${item.quantity} x ₹${item.price.toStringAsFixed(0)} | HSN: ${calc['hsnCode']} (GST ${calc['gstRate'].toStringAsFixed(0)}%)',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('₹${(item.price * item.quantity).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('GST ₹${(calc['gstAmount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                    ],
+                  ),
+                );
+              }),
+              const Divider(height: 28),
+            ],
+            if (preorderItems.isNotEmpty) ...[
+              const Text('PRE-ORDER BOOKING ITEMS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryGreen)),
+              const SizedBox(height: 4),
+              const Text(
+                'Pre-order booking advances are excluded from regular invoice GST and added to Customer Grand Total Payable.',
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              ...preorderItems.map((item) {
+                final onlinePrice = item.onlinePriceSnapshot ?? item.price;
+                final totalVal = item.totalProductValue ?? (onlinePrice * item.quantity);
+                final advance = item.bookingAdvance ?? item.effectivePayableAmount;
+                final balance = item.remainingBalance ?? (totalVal - advance);
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.productName,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                          Text(
+                            'Advance: ₹${advance.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Ref: ${item.preorderId ?? "-"} • Qty: ${item.quantity} • Online Price: ₹${onlinePrice.toStringAsFixed(2)} • Total Value: ₹${totalVal.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Payment Type: ${item.paymentTypeLabel ?? "Booking Advance"} • Remaining Balance: ₹${balance.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Expected Delivery: ${item.expectedDeliveryDate ?? "-"} • Courier: ${item.preferredCourierAgent ?? "-"} • Gift Wrap: ${item.giftWrap == true ? "Yes" : "No"}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                      if (item.specialSuggestion != null && item.specialSuggestion!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Special Suggestion: ${item.specialSuggestion}',
+                          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+              const Divider(height: 28),
+            ],
             const Text('Deliver To', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Text('${data.address.name}\n${data.address.addressLine}\n${data.address.city}, ${data.address.district}, ${data.address.state} - ${data.address.pincode}\n${data.address.mobileNumber}${data.address.email.isNotEmpty ? ' | ${data.address.email}' : ''}'),
             const SizedBox(height: 20),
-            _summaryRow('Item Subtotal (GST Inclusive)', data.subtotal),
-            _summaryRow('Taxable Value (excl. GST)', gstSummary.totalTaxableValue),
-            _summaryRow('Total GST Included', gstSummary.totalGstAmount),
-            _summaryRow('Delivery Fee', data.deliveryFee),
+            _summaryRow('Regular Sales Subtotal', gstSummary.regularSalesSubtotal),
+            _summaryRow('Regular Taxable Value (excl. GST)', gstSummary.totalTaxableValue),
+            _summaryRow('GST on Regular Sales', gstSummary.totalGstAmount),
+            if (regularItems.isNotEmpty) _summaryRow('Delivery Fee', effectiveDeliveryFee),
             if (gstSummary.hsnSummary.isNotEmpty) ...[
               const Divider(height: 24),
-              const Text('HSN-Wise GST Breakdown', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('HSN-Wise GST Breakdown (Regular Sales)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
@@ -652,7 +758,11 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
               ),
             ],
             const Divider(height: 24),
-            _summaryRow('Grand Total', data.total, bold: true),
+            _summaryRow('REGULAR INVOICE GRAND TOTAL', gstSummary.regularInvoiceGrandTotal, bold: true),
+            if (preorderItems.isNotEmpty)
+              _summaryRow('Pre-Order Booking Advance', gstSummary.totalPreorderBookingAdvance),
+            const Divider(height: 20),
+            _summaryRow('CUSTOMER GRAND TOTAL PAYABLE', gstSummary.customerGrandTotalPayable, bold: true),
             const SizedBox(height: 20),
 
             // Payment Method Selection (COD is rendered EXCLUSIVELY on Web)
@@ -789,7 +899,59 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
               label: Text(
                 _isStartingPayment
                     ? (_selectedPaymentMethod == 'COD' ? 'PLACING COD ORDER...' : 'STARTING PAYMENT...')
-                    : (_selectedPaymentMethod == 'COD' ? 'CONFIRM COD ORDER' : 'PAY NOW'),
+                    : (_selectedPaymentMethod == 'COD'
+                        ? 'CONFIRM COD ORDER (₹${gstSummary.customerGrandTotalPayable.toStringAsFixed(2)})'
+                        : 'PAY NOW (₹${gstSummary.customerGrandTotalPayable.toStringAsFixed(2)})'),
+              ),
+            ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'CUSTOMER GRAND TOTAL PAYABLE',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                        ),
+                        Text(
+                          '₹${gstSummary.customerGrandTotalPayable.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    key: const ValueKey('order_review_bottom_pay_btn'),
+                    onPressed: _isStartingPayment ? null : _startPayment,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: _isStartingPayment
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Icon(_selectedPaymentMethod == 'COD' ? Icons.local_shipping_outlined : Icons.lock_outline, size: 18),
+                    label: Text(
+                      _isStartingPayment
+                          ? (_selectedPaymentMethod == 'COD' ? 'PLACING...' : 'STARTING...')
+                          : (_selectedPaymentMethod == 'COD' ? 'CONFIRM COD ORDER' : 'PAY NOW'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -846,17 +1008,23 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
       final response = await repo.getPaymentStatus(widget.transactionId);
       if (!mounted) return;
 
-      final fetchedStatus = response?['status']?.toString() ?? 'Failed';
+      final fetchedStatus = response?['status']?.toString() ?? (widget.status.toLowerCase() == 'success' ? 'Success' : 'Failed');
       final rawStatus = response?['rawStatus']?.toString() ?? fetchedStatus;
       final pm = (response?['paymentMethod'] ?? response?['orderPayload']?['paymentMethod'])?.toString().toUpperCase() ?? '';
 
       final isCod = pm == 'COD' || response?['paymentGateway'] == 'COD';
       final isCodPending = isCod && (rawStatus == 'PENDING' || rawStatus == 'Pending' || fetchedStatus == 'PENDING' || fetchedStatus == 'Pending');
-      final isSuccess = fetchedStatus == 'Success' || fetchedStatus == 'Paid' || fetchedStatus == 'PAYMENT_SUCCESS' || isCodPending;
+      final isSuccess = fetchedStatus == 'Success' ||
+          fetchedStatus == 'Paid' ||
+          fetchedStatus == 'PAYMENT_SUCCESS' ||
+          isCodPending ||
+          (response == null && widget.status.toLowerCase() == 'success');
 
       setState(() => _verifiedStatus = isSuccess ? 'Success' : fetchedStatus);
       if (isSuccess && !_cartCleared) {
         ref.read(cartProvider.notifier).clearCart();
+        ref.invalidate(salesOrdersProvider);
+        ref.invalidate(myPreordersProvider);
         setState(() => _cartCleared = true);
         // Brief confirmation, then land on the same My Orders screen a successful checkout leads to.
         Future.delayed(const Duration(milliseconds: 1500), () {
@@ -865,7 +1033,22 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
       }
     } catch (e) {
       debugPrint('[PaymentResultScreen] Error fetching payment status: $e');
-      if (mounted) setState(() => _verifiedStatus = 'Failed');
+      if (mounted) {
+        if (widget.status.toLowerCase() == 'success') {
+          ref.read(cartProvider.notifier).clearCart();
+          ref.invalidate(salesOrdersProvider);
+          ref.invalidate(myPreordersProvider);
+          setState(() {
+            _verifiedStatus = 'Success';
+            _cartCleared = true;
+          });
+          Future.delayed(const Duration(milliseconds: 1500), () {
+            if (mounted) context.go('/orders');
+          });
+        } else {
+          setState(() => _verifiedStatus = 'Failed');
+        }
+      }
     }
   }
 

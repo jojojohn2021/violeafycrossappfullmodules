@@ -473,10 +473,30 @@ class ShoppingRepository {
   }
 
   // Cart Management
-  List<SalesProduct> getCartItems() => List.unmodifiable(_cartItems);
+  List<SalesProduct> getCartItems() {
+    final regular = _cartItems.where((i) => !i.isPreorder).toList();
+    final preorders = _cartItems.where((i) => i.isPreorder).toList();
+    return List.unmodifiable([...regular, ...preorders]);
+  }
+
+  void _sortCartRegularFirst() {
+    final regular = _cartItems.where((i) => !i.isPreorder).toList();
+    final preorders = _cartItems.where((i) => i.isPreorder).toList();
+    _cartItems
+      ..clear()
+      ..addAll(regular)
+      ..addAll(preorders);
+  }
 
   void addToCart(ProductPerformance product, {int quantity = 1}) {
-    final index = _cartItems.indexWhere((item) => item.productId == product.id);
+    if (product.preorderactive == true) {
+      throw StateError(
+        'Pre-order products cannot be added as regular cart items. Please use Pre-Order Booking.',
+      );
+    }
+    final index = _cartItems.indexWhere(
+      (item) => !item.isPreorder && item.productId == product.id,
+    );
     if (index >= 0) {
       final existing = _cartItems[index];
       _cartItems[index] = SalesProduct(
@@ -511,6 +531,50 @@ class ShoppingRepository {
         packingSize: product.packingSize,
       ));
     }
+    _sortCartRegularFirst();
+    _syncCartToBackend();
+  }
+
+  void addPreorderToCart(SalesProduct preorderItem) {
+    final normalized = SalesProduct(
+      productId: preorderItem.productId,
+      productName: preorderItem.productName,
+      imageUrl: preorderItem.imageUrl,
+      quantity: preorderItem.quantity,
+      price: preorderItem.bookingAdvance ?? preorderItem.price,
+      gstPercentage: preorderItem.gstPercentage,
+      hsnCode: preorderItem.hsnCode,
+      category: preorderItem.category,
+      categories: preorderItem.categories,
+      brand: preorderItem.brand,
+      brandOwner: preorderItem.brandOwner,
+      unit: preorderItem.unit,
+      packingSize: preorderItem.packingSize,
+      isPreorder: true,
+      preorderId: preorderItem.preorderId,
+      onlinePriceSnapshot: preorderItem.onlinePriceSnapshot,
+      totalProductValue: preorderItem.totalProductValue,
+      paymentType: preorderItem.paymentType,
+      paymentTypeLabel: preorderItem.paymentTypeLabel,
+      bookingAdvance: preorderItem.bookingAdvance ?? preorderItem.price,
+      remainingBalance: preorderItem.remainingBalance ?? 0.0,
+      giftWrap: preorderItem.giftWrap ?? false,
+      specialSuggestion: preorderItem.specialSuggestion ?? '',
+      expectedDeliveryDate: preorderItem.expectedDeliveryDate,
+      preferredCourierAgent: preorderItem.preferredCourierAgent,
+    );
+
+    final index = _cartItems.indexWhere(
+      (item) =>
+          item.isPreorder &&
+          (item.productId == normalized.productId || item.cartKey == normalized.cartKey),
+    );
+    if (index >= 0) {
+      _cartItems[index] = normalized;
+    } else {
+      _cartItems.add(normalized);
+    }
+    _sortCartRegularFirst();
     _syncCartToBackend();
   }
 
@@ -553,8 +617,13 @@ class ShoppingRepository {
     _syncCartToBackend();
   }
 
-  void removeFromCart(String productId) {
-    _cartItems.removeWhere((item) => item.productId == productId);
+  void removeFromCart(String productOrCartKey) {
+    _cartItems.removeWhere(
+      (item) =>
+          item.cartKey == productOrCartKey ||
+          item.productId == productOrCartKey ||
+          (item.isPreorder && item.preorderId == productOrCartKey),
+    );
     _syncCartToBackend();
   }
 
@@ -563,24 +632,90 @@ class ShoppingRepository {
       removeFromCart(productId);
       return;
     }
-    final index = _cartItems.indexWhere((item) => item.productId == productId);
+    final index = _cartItems.indexWhere(
+      (item) =>
+          item.cartKey == productId ||
+          item.productId == productId ||
+          (item.isPreorder && item.preorderId == productId),
+    );
     if (index >= 0) {
       final item = _cartItems[index];
-      _cartItems[index] = SalesProduct(
-        productId: item.productId,
-        productName: item.productName,
-        imageUrl: item.imageUrl,
-        quantity: newQuantity,
-        price: item.price,
-        gstPercentage: item.gstPercentage,
-        hsnCode: item.hsnCode,
-        category: item.category,
-        categories: item.categories,
-        brand: item.brand,
-        brandOwner: item.brandOwner,
-        unit: item.unit,
-        packingSize: item.packingSize,
-      );
+      if (item.isPreorder) {
+        final oldQty = item.quantity > 0 ? item.quantity : 1;
+        final unitOnlinePrice = item.onlinePriceSnapshot ??
+            (item.totalProductValue != null
+                ? item.totalProductValue! / oldQty
+                : item.price);
+        final newTotalProductValue =
+            double.parse((unitOnlinePrice * newQuantity).toStringAsFixed(2));
+        final isFullPayment = (item.paymentType ?? '').toLowerCase() == 'full' ||
+            (item.paymentTypeLabel ?? '').toLowerCase().contains('full') ||
+            ((item.remainingBalance ?? 0.0) <= 0.001);
+
+        double newBookingAdvance;
+        double newRemainingBalance;
+        if (isFullPayment) {
+          newBookingAdvance = newTotalProductValue;
+          newRemainingBalance = 0.0;
+        } else {
+          final perUnitAdvance = (item.bookingAdvance ?? item.price) / oldQty;
+          final scaledAdvance =
+              double.parse((perUnitAdvance * newQuantity).toStringAsFixed(2));
+          final minAdvance =
+              double.parse((newTotalProductValue * 0.10).toStringAsFixed(2));
+          newBookingAdvance =
+              scaledAdvance.clamp(minAdvance, newTotalProductValue);
+          newRemainingBalance = double.parse(
+            (newTotalProductValue - newBookingAdvance)
+                .clamp(0.0, newTotalProductValue)
+                .toStringAsFixed(2),
+          );
+        }
+
+        _cartItems[index] = SalesProduct(
+          productId: item.productId,
+          productName: item.productName,
+          imageUrl: item.imageUrl,
+          quantity: newQuantity,
+          price: newBookingAdvance,
+          gstPercentage: item.gstPercentage,
+          hsnCode: item.hsnCode,
+          category: item.category,
+          categories: item.categories,
+          brand: item.brand,
+          brandOwner: item.brandOwner,
+          unit: item.unit,
+          packingSize: item.packingSize,
+          isPreorder: true,
+          preorderId: item.preorderId,
+          onlinePriceSnapshot: unitOnlinePrice,
+          totalProductValue: newTotalProductValue,
+          paymentType: item.paymentType,
+          paymentTypeLabel: item.paymentTypeLabel,
+          bookingAdvance: newBookingAdvance,
+          remainingBalance: newRemainingBalance,
+          giftWrap: item.giftWrap,
+          specialSuggestion: item.specialSuggestion,
+          expectedDeliveryDate: item.expectedDeliveryDate,
+          preferredCourierAgent: item.preferredCourierAgent,
+        );
+      } else {
+        _cartItems[index] = SalesProduct(
+          productId: item.productId,
+          productName: item.productName,
+          imageUrl: item.imageUrl,
+          quantity: newQuantity,
+          price: item.price,
+          gstPercentage: item.gstPercentage,
+          hsnCode: item.hsnCode,
+          category: item.category,
+          categories: item.categories,
+          brand: item.brand,
+          brandOwner: item.brandOwner,
+          unit: item.unit,
+          packingSize: item.packingSize,
+        );
+      }
     }
     _syncCartToBackend();
   }
@@ -591,7 +726,10 @@ class ShoppingRepository {
   }
 
   double getCartTotal() {
-    return _cartItems.fold(0, (total, item) => total + (item.price * item.quantity));
+    return _cartItems.fold(
+      0,
+      (total, item) => total + item.effectivePayableAmount,
+    );
   }
 
   Future<void> _syncCartToBackend() async {

@@ -185,8 +185,13 @@ class CartNotifier extends StateNotifier<List<SalesProduct>> {
     state = List.from(_repo.getCartItems());
   }
 
-  void removeFromCart(String productId) {
-    _repo.removeFromCart(productId);
+  void addPreorderToCart(SalesProduct preorderItem) {
+    _repo.addPreorderToCart(preorderItem);
+    state = List.from(_repo.getCartItems());
+  }
+
+  void removeFromCart(String productOrCartKey) {
+    _repo.removeFromCart(productOrCartKey);
     state = List.from(_repo.getCartItems());
   }
 
@@ -200,8 +205,31 @@ class CartNotifier extends StateNotifier<List<SalesProduct>> {
     state = [];
   }
 
+  List<SalesProduct> get regularItems =>
+      state.where((item) => !item.isPreorder).toList();
+
+  List<SalesProduct> get preorderItems =>
+      state.where((item) => item.isPreorder).toList();
+
+  double get regularSalesSubtotal {
+    return regularItems.fold(
+      0.0,
+      (total, item) => total + (item.price * item.quantity),
+    );
+  }
+
+  double get totalPreorderBookingAdvance {
+    return preorderItems.fold(
+      0.0,
+      (total, item) => total + (item.bookingAdvance ?? item.price),
+    );
+  }
+
   double get totalPrice {
-    return state.fold(0, (total, item) => total + (item.price * item.quantity));
+    return state.fold(
+      0.0,
+      (total, item) => total + item.effectivePayableAmount,
+    );
   }
 
   int get totalItemCount {

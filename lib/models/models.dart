@@ -303,6 +303,7 @@ class ProductPerformance {
   final String? uniqueSpec2;
   final String? uniqueSpec3;
   final String? uniqueSpec4;
+  final bool preorderactive;
 
   /// Maximum allowed length for each uniqueSpec field.
   static const int uniqueSpecMaxLength = 30;
@@ -387,6 +388,7 @@ class ProductPerformance {
     this.uniqueSpec2,
     this.uniqueSpec3,
     this.uniqueSpec4,
+    this.preorderactive = false,
   });
 
   static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -468,6 +470,7 @@ class ProductPerformance {
     uniqueSpec2: _parseUniqueSpec(json['uniqueSpec2']),
     uniqueSpec3: _parseUniqueSpec(json['uniqueSpec3']),
     uniqueSpec4: _parseUniqueSpec(json['uniqueSpec4']),
+    preorderactive: json['preorderactive'] == true,
   );
 
   Map<String, dynamic> toJson() => {
@@ -519,6 +522,7 @@ class ProductPerformance {
     if (uniqueSpec2 != null) 'uniqueSpec2': uniqueSpec2,
     if (uniqueSpec3 != null) 'uniqueSpec3': uniqueSpec3,
     if (uniqueSpec4 != null) 'uniqueSpec4': uniqueSpec4,
+    'preorderactive': preorderactive,
   };
 
   static String? _parseCategory(dynamic raw) {
@@ -726,6 +730,18 @@ class SalesProduct {
   final String? brandOwner;
   final String? unit;
   final String? packingSize;
+  final bool isPreorder;
+  final String? preorderId;
+  final double? onlinePriceSnapshot;
+  final double? totalProductValue;
+  final String? paymentType;
+  final String? paymentTypeLabel;
+  final double? bookingAdvance;
+  final double? remainingBalance;
+  final bool? giftWrap;
+  final String? specialSuggestion;
+  final String? expectedDeliveryDate;
+  final String? preferredCourierAgent;
 
   SalesProduct({
     required this.productId,
@@ -744,7 +760,25 @@ class SalesProduct {
     this.brandOwner,
     this.unit,
     this.packingSize,
+    this.isPreorder = false,
+    this.preorderId,
+    this.onlinePriceSnapshot,
+    this.totalProductValue,
+    this.paymentType,
+    this.paymentTypeLabel,
+    this.bookingAdvance,
+    this.remainingBalance,
+    this.giftWrap,
+    this.specialSuggestion,
+    this.expectedDeliveryDate,
+    this.preferredCourierAgent,
   });
+
+  String get cartKey =>
+      isPreorder ? (preorderId ?? 'preorder_$productId') : productId;
+
+  double get effectivePayableAmount =>
+      isPreorder ? (bookingAdvance ?? price) : (price * quantity);
 
   factory SalesProduct.fromJson(Map<String, dynamic> json) => SalesProduct(
     productId: json['productId'] ?? '',
@@ -763,6 +797,18 @@ class SalesProduct {
     brandOwner: json['brandOwner']?.toString(),
     unit: json['unit']?.toString(),
     packingSize: json['packingSize']?.toString() ?? json['packing_size']?.toString(),
+    isPreorder: json['isPreorder'] == true,
+    preorderId: json['preorderId']?.toString(),
+    onlinePriceSnapshot: (json['onlinePriceSnapshot'] as num?)?.toDouble(),
+    totalProductValue: (json['totalProductValue'] as num?)?.toDouble(),
+    paymentType: json['paymentType']?.toString(),
+    paymentTypeLabel: json['paymentTypeLabel']?.toString(),
+    bookingAdvance: (json['bookingAdvance'] as num?)?.toDouble(),
+    remainingBalance: (json['remainingBalance'] as num?)?.toDouble(),
+    giftWrap: json['giftWrap'] is bool ? json['giftWrap'] as bool : null,
+    specialSuggestion: json['specialSuggestion']?.toString(),
+    expectedDeliveryDate: json['expectedDeliveryDate']?.toString(),
+    preferredCourierAgent: json['preferredCourierAgent']?.toString(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -782,6 +828,18 @@ class SalesProduct {
     'brandOwner': brandOwner,
     'unit': unit,
     'packingSize': packingSize,
+    if (isPreorder) 'isPreorder': true,
+    if (preorderId != null) 'preorderId': preorderId,
+    if (onlinePriceSnapshot != null) 'onlinePriceSnapshot': onlinePriceSnapshot,
+    if (totalProductValue != null) 'totalProductValue': totalProductValue,
+    if (paymentType != null) 'paymentType': paymentType,
+    if (paymentTypeLabel != null) 'paymentTypeLabel': paymentTypeLabel,
+    if (bookingAdvance != null) 'bookingAdvance': bookingAdvance,
+    if (remainingBalance != null) 'remainingBalance': remainingBalance,
+    if (giftWrap != null) 'giftWrap': giftWrap,
+    if (specialSuggestion != null) 'specialSuggestion': specialSuggestion,
+    if (expectedDeliveryDate != null) 'expectedDeliveryDate': expectedDeliveryDate,
+    if (preferredCourierAgent != null) 'preferredCourierAgent': preferredCourierAgent,
   };
 }
 

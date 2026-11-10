@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
@@ -46,20 +47,27 @@ class FCMService {
     }
   }
 
-  // Retrieve messaging token for server-side push notification targetting
-  Future<String?> getDeviceToken() async {
+  // Retrieve messaging registration ID / token for server-side push notification targeting
+  Future<String?> getDeviceToken({String? vapidKey}) async {
     try {
+      final tokenFuture = _fcm.onRegistered.first;
       if (kIsWeb) {
-        // VAPID key is required for Web notifications. If configured, we pass it.
-        return await _fcm.getToken();
+        await _fcm.register(vapidKey: vapidKey);
       } else {
-        return await _fcm.getToken();
+        await _fcm.register();
       }
+      return await tokenFuture.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => '',
+      );
     } catch (e) {
       debugPrint('FCM Error fetching device token: $e');
       return null;
     }
   }
+
+  // Stream of registration token updates
+  Stream<String> get onRegistered => _fcm.onRegistered;
 
   // Subscribe to topics
   Future<void> subscribeToTopic(String topic) async {

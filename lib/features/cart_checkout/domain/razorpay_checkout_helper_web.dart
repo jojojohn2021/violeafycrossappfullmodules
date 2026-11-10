@@ -21,7 +21,16 @@ Future<Map<String, dynamic>?> launchWebRazorpayCheckout({
   late html.EventListener listener;
   listener = (html.Event event) {
     if (event is html.CustomEvent && event.detail != null) {
-      final data = Map<String, dynamic>.from(event.detail as Map);
+      Map<String, dynamic> data = <String, dynamic>{};
+      final rawDetail = event.detail;
+      if (rawDetail is String) {
+        final decoded = jsonDecode(rawDetail);
+        if (decoded is Map) {
+          data = Map<String, dynamic>.from(decoded);
+        }
+      } else if (rawDetail is Map) {
+        data = Map<String, dynamic>.from(rawDetail);
+      }
       html.window.removeEventListener(callbackName, listener);
       if (!completer.isCompleted) {
         final outcomeStr = data['outcome']?.toString();
@@ -41,8 +50,9 @@ Future<Map<String, dynamic>?> launchWebRazorpayCheckout({
 
   html.window.addEventListener(callbackName, listener);
 
-  final callbackUrl = '${html.window.location.origin}/api/payment/razorpay/callback?txnid=$transactionId';
-
+  // Do NOT set callback_url here: setting callback_url forces Razorpay Checkout.js
+  // into full-page POST redirect mode instead of invoking options.handler(response)
+  // in-page, which navigates the SPA to a blank screen.
   final options = {
     'key': keyId,
     'amount': amount,
@@ -50,7 +60,6 @@ Future<Map<String, dynamic>?> launchWebRazorpayCheckout({
     'name': 'Leafyearth',
     'description': 'Order Payment $transactionId',
     'order_id': orderId,
-    'callback_url': callbackUrl,
     'prefill': {
       'name': customerName,
       'email': customerEmail,

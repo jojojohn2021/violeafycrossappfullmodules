@@ -71,7 +71,9 @@ class ProductCard extends ConsumerWidget {
     final isWishlisted = wishlist.contains(product.id);
 
     final cart = ref.watch(cartProvider);
-    final cartItemIndex = cart.indexWhere((item) => item.productId == product.id);
+    final cartItemIndex = cart.indexWhere(
+      (item) => !item.isPreorder && item.productId == product.id,
+    );
     final currentCartQty = cartItemIndex >= 0 ? cart[cartItemIndex].quantity : 0;
 
     final price = product.offerPrice ?? product.onlinePrice;
@@ -291,8 +293,35 @@ class ProductCard extends ConsumerWidget {
                   ] else if (product.uniqueSpecs.isNotEmpty)
                     const SizedBox(height: 4),
 
-                  // Add to Cart / Quantity Modifier Button
-                  if (currentCartQty == 0)
+                  // Add to Cart / Pre-Order / Quantity Modifier Button
+                  if (product.preorderactive)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 32,
+                      child: OutlinedButton(
+                        onPressed: () =>
+                            context.push('/product-detail/${product.id}'),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          side: const BorderSide(
+                            color: AppColors.primaryGreen,
+                            width: 1.2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'PRE-ORDER',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryGreen,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (currentCartQty == 0)
                     SizedBox(
                       width: double.infinity,
                       height: 32,

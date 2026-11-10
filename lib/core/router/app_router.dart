@@ -18,6 +18,7 @@ import '../../features/orders/presentation/invoice_screen.dart';
 import '../../features/profile/presentation/delivery_addresses_screen.dart';
 import '../../features/auth/presentation/otp_login_screen.dart';
 import '../../features/legal/presentation/policy_screens.dart';
+import '../../features/preorder/preorder_module.dart';
 import '../../models/models.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
@@ -41,7 +42,15 @@ class GoRouterRefreshStream extends ChangeNotifier {
 // Single source of truth for which routes require an authenticated session.
 // Everything else (Home, Shop/Categories, Search, Product details, Cart, Wishlist)
 // stays publicly accessible for guests.
-const _protectedPathPrefixes = ['/checkout', '/profile', '/referrals', '/wallet', '/addresses', '/orders'];
+const _protectedPathPrefixes = [
+  '/checkout',
+  '/profile',
+  '/referrals',
+  '/wallet',
+  '/addresses',
+  '/orders',
+  ...PreorderModule.protectedRoutePrefixes,
+];
 
 bool _isProtectedPath(String path) {
   return _protectedPathPrefixes.any((prefix) => path == prefix || path.startsWith('$prefix/'));
@@ -158,8 +167,11 @@ final appRouter = GoRouter(
       path: '/order-review',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        final checkout = state.extra as CheckoutData;
-        return OrderReviewScreen(data: checkout);
+        final checkout = state.extra;
+        if (checkout is CheckoutData) {
+          return OrderReviewScreen(data: checkout);
+        }
+        return const CheckoutScreen();
       },
     ),
     GoRoute(
@@ -193,7 +205,13 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/orders/invoice',
       parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => InvoiceScreen(order: state.extra as SalesOrder),
+      builder: (context, state) {
+        final order = state.extra;
+        if (order is SalesOrder) {
+          return InvoiceScreen(order: order);
+        }
+        return const OrdersScreen();
+      },
     ),
     GoRoute(
       path: '/addresses',
@@ -278,5 +296,6 @@ final appRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const OrdersScreen(),
     ),
+    ...PreorderModule.routes(_rootNavigatorKey),
   ],
 );

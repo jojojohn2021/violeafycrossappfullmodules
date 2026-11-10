@@ -7,6 +7,7 @@ import '../../../models/models.dart';
 import '../../../providers/app_providers.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/product_story_dialog.dart';
+import '../../preorder/presentation/widgets/preorder_widgets.dart';
 import '../../reviews/presentation/customer_reviews_section.dart';
 
 /// Resolves a product by its Firestore document ID.
@@ -43,6 +44,19 @@ class ProductDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Product Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         actions: [
+          TextButton.icon(
+            key: const ValueKey('product_detail_home_btn'),
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined, color: AppColors.primaryGreen, size: 20),
+            label: const Text(
+              'Home',
+              style: TextStyle(
+                color: AppColors.primaryGreen,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
           IconButton(
             icon: Icon(
               isWishlisted ? Icons.favorite : Icons.favorite_border,
@@ -153,7 +167,7 @@ class _ProductDetailBody extends ConsumerWidget {
               ),
             ),
           ),
-          if (!isWide) _BottomPurchaseBar(product: product),
+          if (!isWide && !product.preorderactive) _BottomPurchaseBar(product: product),
         ],
       );
     });
@@ -532,22 +546,25 @@ class _ProductInfo extends StatelessWidget {
           Text('You save ₹${(pricing.mrp - pricing.price).toStringAsFixed(0)}',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.success)),
         ],
-        // 9. Stock (existing field, shown only when set)
-        if (stockText != null) ...[
+        // 9. Stock (existing field; always shown before Pre-Order Booking Details when preorderactive is true)
+        if (stockText != null || product.preorderactive) ...[
           const SizedBox(height: 12),
           Row(
             children: [
               const Icon(Icons.inventory_2_outlined, size: 16, color: AppColors.textSecondary),
               const SizedBox(width: 6),
               Flexible(
-                child: Text(stockText,
+                child: Text(stockText ?? 'In Stock',
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
               ),
             ],
           ),
         ],
-        // 10. Purchase controls (wide layouts; mobile uses the bottom bar)
-        if (showInlinePurchase) ...[
+        // 10. Conditional Purchase / Pre-Order Booking Controls
+        if (product.preorderactive) ...[
+          const SizedBox(height: 16),
+          PreorderBookingDetailsSection(product: product),
+        ] else if (showInlinePurchase) ...[
           const SizedBox(height: 20),
           SizedBox(width: 280, child: _CartControl(product: product, height: 48)),
         ],

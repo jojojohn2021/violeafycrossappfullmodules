@@ -416,20 +416,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              alignment: Alignment.centerLeft,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryGreen.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
-                              ),
-                              child: const Text(
-                                'Pre-order booking',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: AppColors.textPrimary,
+                            child: GestureDetector(
+                              key: const ValueKey('home_preorder_booking_label'),
+                              onTap: () => context.push('/preorders'),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                alignment: Alignment.centerLeft,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryGreen.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
+                                ),
+                                child: const Text(
+                                  'Pre-order booking',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                               ),
                             ),

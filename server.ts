@@ -12,6 +12,17 @@ import { FieldValue } from "firebase-admin/firestore";
 import { complianceConfig } from "./src/config/complianceConfig";
 import { sendOrderPlacedNotification, sendPaymentOutcomeNotification, resendTemplateLog, sendLeadAddedNotification } from "./whatsapp-notifier";
 import { registerCustomerReviewRoutes } from "./src/reviews/customerReviews";
+import { registerPreorderRoutes } from "./backend/preorder/preorderRoutes";
+import {
+  isProductPreorderEligible,
+  normalizeGiftWrap,
+  normalizePaymentType,
+  roundMoney as roundPreorderMoney,
+  sanitizeNotes as sanitizePreorderNotes,
+  validateAndComputeAdvance,
+  validateFutureDeliveryDate,
+  validatePreferredCourierAgent,
+} from "./backend/preorder/preorderService";
 
 dotenv.config();
 
@@ -77,8 +88,8 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 // Enable CORS for web development
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Request-Id, X-Client-Platform, X-Sales-Platform");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
@@ -93,6 +104,12 @@ registerCustomerReviewRoutes(app as any, {
   adminStorage,
   getAuthenticatedUser: (req: any) => getAuthenticatedUser(req),
   fetchUserScopedSalesOrders: (user: any) => fetchUserScopedSalesOrders(user),
+  findCustomerByAuthUser: (user: any) => findCustomerByAuthUser(user),
+});
+// Isolated Product Pre-Order Module (backend/preorder/preorderRoutes.ts)
+const preorderService = registerPreorderRoutes(app as any, {
+  adminDb,
+  getAuthenticatedUser: (req: any) => getAuthenticatedUser(req),
   findCustomerByAuthUser: (user: any) => findCustomerByAuthUser(user),
 });
 app.get("/api/data", async (req: any, res: any) => {
@@ -215,7 +232,8 @@ function normalizeProduct(prod: any) {
   return {
     ...prod,
     categories: categories.length > 0 ? categories : (prod.categories || (prod.category ? [prod.category] : [])),
-    category: prod.category || categoryStr || ''
+    category: prod.category || categoryStr || '',
+    preorderactive: typeof prod.preorderactive === 'boolean' ? prod.preorderactive : false,
   };
 }
 
@@ -297,6 +315,11 @@ async function saveCollectionDoc(col: string, item: any): Promise<void> {
     let cleanItem = { ...item };
     delete cleanItem._id;
     if (col === 'products') {
+      if (typeof cleanItem.preorderactive !== 'boolean') {
+        const existingSnap = item.id ? await adminDb.collection('products').doc(String(item.id)).get() : null;
+        const existingVal = existingSnap?.exists ? existingSnap.data()?.preorderactive : undefined;
+        cleanItem.preorderactive = typeof existingVal === 'boolean' ? existingVal : false;
+      }
       cleanItem = normalizeProduct(cleanItem);
     }
     if (col === 'sales_orders') {
@@ -779,9 +802,22 @@ async function fetchUserScopedSalesOrders(authenticatedUser: any): Promise<any[]
   return ownOrders;
 }
 
+const PREORDER_ISOLATED_COLLECTIONS = new Set([
+  'preorders',
+  'payment_allocations',
+  'preorder_idempotency',
+  'preorder_events',
+]);
+
 // GET documents for a specific collection
 app.get("/api/data/:collectionName", async (req, res) => {
   const { collectionName } = req.params;
+  if (PREORDER_ISOLATED_COLLECTIONS.has(collectionName)) {
+    return res.status(403).json({
+      code: "FORBIDDEN",
+      message: "Direct collection access is disabled for pre-order collections. Use /api/v1/preorders.",
+    });
+  }
   try {
     if (collectionName === 'sales_orders') {
       const authenticatedUser = await getAuthenticatedUser(req);
@@ -1201,6 +1237,47 @@ export async function ensureInvoiceForOrder(order: any): Promise<{ invoiceId: st
   return { invoiceId, invoiceDate, savedInvoice };
 }
 
+export async function ensureInvoiceForPreorderCheckout(
+  tx: any,
+  preorderIds: string[]
+): Promise<{ invoiceId: string; invoiceDate: string; savedInvoice: any }> {
+  const checkoutRef = String(tx?.id || tx?.orderId || '').trim();
+  if (!checkoutRef) {
+    throw new Error("Invalid checkout reference for pre-order receipt creation");
+  }
+  const invoiceDocs = await getCollectionDocs('invoices');
+  let savedInvoice = invoiceDocs.find(
+    (item: any) =>
+      item.checkoutReference === checkoutRef ||
+      item.orderId === checkoutRef ||
+      item.id === tx?.invoiceId
+  );
+  const invoiceId =
+    tx?.invoiceId || savedInvoice?.invoiceId || savedInvoice?.id || invoiceNumber(checkoutRef);
+  const invoiceDate =
+    savedInvoice?.invoiceDate || tx?.createdAt || new Date().toISOString();
+
+  const orderPayload = tx?.orderPayload || {};
+  savedInvoice = {
+    ...(savedInvoice || {}),
+    id: invoiceId,
+    invoiceId,
+    orderId: null,
+    checkoutReference: checkoutRef,
+    documentType: 'PREORDER_RECEIPT',
+    preorderIds,
+    customerId: orderPayload.customerId || tx?.customerId || '',
+    customerName: orderPayload.customerName || tx?.customerName || '',
+    customerEmail: orderPayload.customerEmail || tx?.customerEmail || '',
+    customerMobile: orderPayload.customerMobile || tx?.customerMobile || '',
+    shippingAddress: orderPayload.shippingAddress || tx?.shippingAddress || null,
+    invoiceDate,
+    createdAt: savedInvoice?.createdAt || new Date().toISOString(),
+  };
+  await saveCollectionDoc('invoices', savedInvoice);
+  return { invoiceId, invoiceDate, savedInvoice };
+}
+
 app.get("/api/invoices/:invoiceId", async (req, res) => {
   try {
     const authenticatedUser = await getAuthenticatedUser(req);
@@ -1240,24 +1317,81 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
       return false;
     };
 
-    if (!order || !isAuthorizedOrder(order)) {
-      return res.status(404).json({ error: "Invoice not found" });
-    }
-
     const invoiceDocs = await getCollectionDocs('invoices');
-    let savedInvoice = invoiceDocs.find((item: any) => item.orderId === order.id || item.id === order.invoiceId || item.id === requestedId || item.invoiceId === requestedId);
+    const allPreorders = await getCollectionDocs('preorders');
 
-    if (!savedInvoice) {
-      return res.status(404).json({ error: "Invoice not found for this order" });
+    // Check if this is a pre-order-only receipt/invoice (not in sales_orders)
+    let savedInvoice = order
+      ? invoiceDocs.find((item: any) => item.orderId === order.id || item.id === order.invoiceId || item.id === requestedId || item.invoiceId === requestedId)
+      : invoiceDocs.find(
+          (item: any) =>
+            item.id === requestedId ||
+            item.invoiceId === requestedId ||
+            item.checkoutReference === requestedId ||
+            (Array.isArray(item.preorderIds) && item.preorderIds.includes(requestedId))
+        );
+
+    let matchedPreorders: any[] = [];
+    if (order) {
+      if (!isAuthorizedOrder(order)) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      if (!savedInvoice) {
+        return res.status(404).json({ error: "Invoice not found for this order" });
+      }
+      matchedPreorders = allPreorders.filter(
+        (po: any) =>
+          po.checkoutReference === order.id ||
+          po.invoiceId === savedInvoice.invoiceId ||
+          po.invoiceId === savedInvoice.id
+      );
+    } else {
+      // Pre-order-only lookup by invoiceId, checkoutReference, or preorderId
+      matchedPreorders = allPreorders.filter(
+        (po: any) =>
+          po.preorderId === requestedId ||
+          po.id === requestedId ||
+          po.checkoutReference === requestedId ||
+          po.invoiceId === requestedId ||
+          (savedInvoice &&
+            (po.checkoutReference === savedInvoice.checkoutReference ||
+              (Array.isArray(savedInvoice.preorderIds) &&
+                savedInvoice.preorderIds.includes(po.preorderId || po.id))))
+      );
+
+      // Authorize pre-order ownership
+      const authorizedPreorders = matchedPreorders.filter((po: any) =>
+        validCustomerDocIds.has(String(po.userId || '')) ||
+        validCustomerDocIds.has(String(po.customerId || ''))
+      );
+
+      if (authorizedPreorders.length === 0 && (!savedInvoice || !isAuthorizedOrder(savedInvoice))) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      matchedPreorders = authorizedPreorders;
     }
 
-    const invoiceId = savedInvoice.invoiceId || savedInvoice.id || order.invoiceId;
-    const invoiceDate = savedInvoice.invoiceDate || order.invoiceDate || order.createdAt || new Date().toISOString();
+    const invoiceId =
+      savedInvoice?.invoiceId ||
+      savedInvoice?.id ||
+      order?.invoiceId ||
+      invoiceNumber(requestedId);
+    const invoiceDate =
+      savedInvoice?.invoiceDate ||
+      order?.invoiceDate ||
+      order?.createdAt ||
+      matchedPreorders[0]?.createdAt ||
+      new Date().toISOString();
 
     const formatInvoiceDocs = await getCollectionDocs('formatinvoice');
     const format = formatInvoiceDocs.find((f: any) => f.id === 'D2UOUmmS3YJf3TLwhW0M' || f.defaultSelection) || formatInvoiceDocs[0] || {};
     const products = await getCollectionDocs('products');
-    const rawProducts = order.products || order.items || order.orderPayload?.products || [];
+
+    // Regular sales items ONLY (exclude any item marked isPreorder)
+    const rawProducts = order
+      ? (order.products || order.items || order.orderPayload?.products || []).filter((item: any) => !item?.isPreorder)
+      : [];
+
     const items = rawProducts.map((item: any, index: number) => {
       const product = products.find((candidate: any) => candidate.id === (item.productId || item.id)) || {};
       const quantity = numberValue(item.quantity ?? item.qty ?? 1);
@@ -1285,6 +1419,35 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
       };
     });
 
+    // Separate Pre-Order Booking Items section (Section 6.2)
+    const preorderItems = matchedPreorders.map((po: any, index: number) => {
+      const dto = preorderService.toBookingDto(po);
+      return {
+        slNo: index + 1,
+        preorderId: dto.preorderId,
+        bookingReference: dto.preorderId,
+        productId: dto.productId,
+        productName: dto.productNameSnapshot,
+        imageUrl: dto.imageUrlSnapshot || '',
+        sku: dto.skuSnapshot,
+        packingSize: dto.packingSizeSnapshot,
+        quantity: dto.quantity,
+        onlinePrice: money(dto.onlinePriceSnapshot),
+        totalProductValue: money(dto.totalProductValue),
+        paymentType: dto.paymentTypeLabel,
+        paymentTypeKey: dto.paymentType,
+        bookingAdvance: money(dto.bookingAdvance),
+        remainingBalance: money(dto.remainingBalance),
+        giftWrap: dto.giftWrap,
+        giftWrapLabel: dto.giftWrap ? 'Yes' : 'No',
+        specialSuggestion: dto.specialSuggestion,
+        expectedDeliveryDate: dto.expectedDeliveryDate,
+        preferredCourierAgent: dto.preferredCourierAgent,
+        bookingStatus: dto.bookingStatus,
+        paymentStatus: dto.paymentStatus,
+      };
+    });
+
     const gstGroups: Record<string, any> = {};
     for (const item of items) {
       const key = `${item.hsnCode || '-'}|${item.gstRate}`;
@@ -1297,12 +1460,27 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
       taxableAmount: money(group.taxableAmount),
       gstAmount: money(group.gstAmount)
     }));
+
     const subtotal = money(items.reduce((sum: number, item: any) => sum + item.total, 0));
-    const itemTotal = money(numberValue(order.itemTotal ?? order.subtotal ?? subtotal));
+    const itemTotal = order ? money(numberValue(order.itemTotal ?? order.subtotal ?? subtotal)) : 0;
     const gstSubtotal = money(gstByHsn.reduce((sum: number, item: any) => sum + item.gstAmount, 0));
-    const grandTotalVal = numberValue(order.totalValue ?? order.grandTotal ?? order.totalAmount ?? order.total ?? order.amount ?? subtotal);
-    const grandTotal = money(grandTotalVal);
-    const totalSavedAmount = money(items.reduce((sum: number, item: any) => sum + item.discount, 0) + numberValue(order.invoiceDiscount));
+    const grandTotalVal = order
+      ? numberValue(order.totalValue ?? order.grandTotal ?? order.totalAmount ?? order.total ?? order.amount ?? subtotal)
+      : 0;
+    const grandTotal = items.length > 0 ? money(grandTotalVal) : 0;
+    const totalSavedAmount = order
+      ? money(items.reduce((sum: number, item: any) => sum + item.discount, 0) + numberValue(order.invoiceDiscount))
+      : 0;
+
+    // Mandatory Section 5 & Section 6.3 Totals
+    const regularSalesSubtotal = subtotal;
+    const regularSalesGst = gstSubtotal;
+    const regularInvoiceGrandTotal = grandTotal;
+    const preorderBookingAdvance = money(
+      preorderItems.reduce((sum: number, po: any) => sum + numberValue(po.bookingAdvance), 0)
+    );
+    const customerGrandTotalPayable = money(regularInvoiceGrandTotal + preorderBookingAdvance);
+
     const referralSummary = await buildCustomerReferralSummary(customer);
 
     const formattedAddresses = [format.addressess, format.addressess1, format.addresses, format.address]
@@ -1311,9 +1489,18 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
       .map((a: any) => String(a).trim())
       .filter(Boolean);
 
+    const customerSource = order || savedInvoice || {};
+    const documentType = items.length > 0 ? 'TAX_INVOICE' : 'PREORDER_RECEIPT';
+    const documentTitle =
+      items.length > 0
+        ? 'TAX INVOICE'
+        : 'PRE-ORDER BOOKING & ADVANCE PAYMENT RECEIPT';
+
     return res.json({
       success: true, invoice: {
         invoiceId, invoiceDate,
+        documentType,
+        documentTitle,
         header: {
           companyName: format.companyName || format.company_name || 'VAMJO',
           companyLogo: format.companyLogo || format.logoUrl || format.logo || format.vamjoLogoUrl || '',
@@ -1327,10 +1514,32 @@ app.get("/api/invoices/:invoiceId", async (req, res) => {
           gstNo: format.gstNo || format.gstno || format.gst_no || '',
           webAddress: format.webAddress || format.web_address || format.website || ''
         },
-        customer: { name: order.customerName || '', email: order.customerEmail || '', mobile: order.customerMobile || '', address: order.shippingAddress || null },
-        items, summary: { subtotal, itemTotal, gstSubtotal, grandTotal, totalSavedAmount },
+        customer: {
+          name: customerSource.customerName || matchedPreorders[0]?.customerDisplayName || customer?.name || '',
+          email: customerSource.customerEmail || customer?.email || '',
+          mobile: customerSource.customerMobile || customer?.mobileNumber || '',
+          address: customerSource.shippingAddress || null
+        },
+        items,
+        preorderItems,
+        summary: {
+          subtotal,
+          itemTotal,
+          gstSubtotal,
+          grandTotal,
+          totalSavedAmount,
+          regularSalesSubtotal,
+          regularSalesGst,
+          regularInvoiceGrandTotal,
+          preorderBookingAdvance,
+          customerGrandTotalPayable,
+        },
         gstByHsn, referralSummary,
-        customerActions: { canBuyAgain: items.some((item: any) => Boolean(item.productId)), canUseReferral: Boolean(customer), canViewWallet: Boolean(customer) }
+        customerActions: {
+          canBuyAgain: items.some((item: any) => Boolean(item.productId)),
+          canUseReferral: Boolean(customer),
+          canViewWallet: Boolean(customer)
+        }
       }
     });
   } catch (err: any) {
@@ -1600,6 +1809,12 @@ app.post("/api/auth/verify-login", async (req, res) => {
 // POST to save a document in a collection
 app.post("/api/data/:collectionName", async (req, res) => {
   const { collectionName } = req.params;
+  if (PREORDER_ISOLATED_COLLECTIONS.has(collectionName)) {
+    return res.status(403).json({
+      code: "FORBIDDEN",
+      message: "Direct collection access is disabled for pre-order collections. Use /api/v1/preorders.",
+    });
+  }
   const item = req.body;
   if (!item) {
     return res.status(400).json({ error: "Missing payload item" });
@@ -1646,6 +1861,12 @@ app.post("/api/data/:collectionName", async (req, res) => {
 // DELETE a document from a collection
 app.delete("/api/data/:collectionName/:id", async (req, res) => {
   const { collectionName, id } = req.params;
+  if (PREORDER_ISOLATED_COLLECTIONS.has(collectionName)) {
+    return res.status(403).json({
+      code: "FORBIDDEN",
+      message: "Direct collection access is disabled for pre-order collections. Use /api/v1/preorders.",
+    });
+  }
   try {
     await adminDb.collection(collectionName).doc(id).delete();
     return res.json({ success: true });
@@ -2701,23 +2922,48 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
   let order = salesOrders.find((o: any) => o.id === tx.orderId);
   const salesPlatform = determineSalesPlatform(tx);
 
-  if (!order && tx.orderPayload) {
-    const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
-    const deliveryFee = typeof tx.orderPayload?.deliveryFee === 'number'
-      ? tx.orderPayload.deliveryFee
-      : (typeof tx.orderPayload?.deliveryCharge === 'number' ? tx.orderPayload.deliveryCharge : 0);
-    let gstCalc: any = null;
-    try {
-      gstCalc = await calculateGSTForOrderItems(tx.orderPayload?.products || [], deliveryFee);
-    } catch (_) { }
+  const deliveryFee = typeof tx.orderPayload?.deliveryFee === 'number'
+    ? tx.orderPayload.deliveryFee
+    : (typeof tx.orderPayload?.deliveryCharge === 'number' ? tx.orderPayload.deliveryCharge : 0);
+  const discount = typeof tx.orderPayload?.discount === 'number' ? tx.orderPayload.discount : 0;
 
-    let productsList = gstCalc ? gstCalc.items : (tx.orderPayload?.products || []);
-    productsList = await enrichOrderProductsFromMaster(productsList);
+  let gstCalc: any = null;
+  try {
+    gstCalc = await calculateGSTForOrderItems(tx.orderPayload?.products || [], deliveryFee, discount);
+  } catch (calcErr) {
+    console.error('[Finalize Payment] GST/Preorder calculation warning:', calcErr);
+  }
+
+  const rawPayloadProducts = Array.isArray(tx.orderPayload?.products) ? tx.orderPayload.products : [];
+  const regularProductsInput = gstCalc
+    ? gstCalc.items
+    : rawPayloadProducts.filter((p: any) => !p?.isPreorder);
+  const preorderItemsInput = gstCalc
+    ? gstCalc.preorderItems
+    : rawPayloadProducts.filter((p: any) => Boolean(p?.isPreorder));
+
+  // CRITICAL RULE 8.1 & 12: Only create a sales_orders record if regular sales items exist!
+  // Pre-order items and pre-order advances must NEVER be stored in sales_orders.
+  if (!order && tx.orderPayload && regularProductsInput.length > 0) {
+    const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
+    let productsList = await enrichOrderProductsFromMaster(regularProductsInput);
 
     const loginMobile = await resolveCustomerMobileWithCode(orderCustomerIdentifiers(tx));
+    const regularGrandTotal = gstCalc
+      ? gstCalc.regularInvoiceGrandTotal
+      : roundPreorderMoney(
+          productsList.reduce(
+            (sum: number, item: any) => sum + Number(item.price || 0) * Number(item.quantity || 1),
+            0
+          ) + deliveryFee - discount
+        );
+
+    const cleanOrderPayload = { ...tx.orderPayload };
+    delete cleanOrderPayload.preorderItems;
+    delete cleanOrderPayload.preorderIds;
 
     order = {
-      ...tx.orderPayload,
+      ...cleanOrderPayload,
       ...(loginMobile ? { customerMobile: loginMobile } : {}),
       id: tx.orderId,
       orderNumber: orderNum,
@@ -2726,8 +2972,8 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
       totalGstAmount: gstCalc ? gstCalc.totalGstAmount : undefined,
       hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : undefined,
       gstByHsn: gstCalc ? gstCalc.hsnGstSummary : undefined,
-      deliveryFee: deliveryFee,
-      totalValue: gstCalc ? gstCalc.grandTotal : (tx.orderPayload?.totalValue || tx.amount),
+      deliveryFee: gstCalc ? gstCalc.deliveryFee : deliveryFee,
+      totalValue: regularGrandTotal,
       paymentStatus: 'Paid',
       orderStatus: 'Confirmed',
       deliveryStatus: 'Processing',
@@ -2766,15 +3012,80 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
     }
   }
 
+  let generatedInvoiceId: string | null = null;
   if (order) {
     try {
-      await ensureInvoiceForOrder(order);
+      const invRes = await ensureInvoiceForOrder(order);
+      generatedInvoiceId = invRes.invoiceId;
     } catch (invErr) {
       console.error('[Finalize Payment] Error auto-generating invoice:', invErr);
     }
   }
 
-  await processOrderCommissionsAuthoritative(tx);
+  // Confirm Pre-Order Bookings & Record Payment Allocation (Section 8.3 & Section 12)
+  if (preorderItemsInput.length > 0) {
+    try {
+      const resolvedPreorderIds: string[] = [];
+      const userId = String(tx.orderPayload?.customerId || tx.customerId || '').trim();
+      const customerName = String(tx.orderPayload?.customerName || tx.customerName || 'LeafyEarth Customer').trim();
+
+      for (const poItem of preorderItemsInput) {
+        if (poItem.preorderId) {
+          resolvedPreorderIds.push(String(poItem.preorderId));
+        } else {
+          const created = await preorderService.createPreorder({
+            userId,
+            customerId: userId,
+            customerDisplayName: customerName,
+            productId: String(poItem.productId || poItem.id || ''),
+            quantity: Number(poItem.quantity || 1),
+            paymentType: poItem.paymentType || 'full',
+            bookingAdvance: poItem.bookingAdvance,
+            giftWrap: Boolean(poItem.giftWrap),
+            specialSuggestion: poItem.specialSuggestion || '',
+            expectedDeliveryDate: poItem.expectedDeliveryDate,
+            preferredCourierAgent: poItem.preferredCourierAgent || 'Standard Courier',
+            idempotencyKey: `chk_${tx.id}_${poItem.productId || poItem.id}`,
+          });
+          resolvedPreorderIds.push(created.booking.preorderId);
+        }
+      }
+
+      if (!order && resolvedPreorderIds.length > 0) {
+        try {
+          const poInv = await ensureInvoiceForPreorderCheckout(tx, resolvedPreorderIds);
+          generatedInvoiceId = poInv.invoiceId;
+        } catch (poInvErr) {
+          console.error('[Finalize Payment] Error generating pre-order receipt:', poInvErr);
+        }
+      }
+
+      if (resolvedPreorderIds.length > 0) {
+        await preorderService.confirmPreorderPaymentsForCheckout({
+          checkoutReference: String(tx.id || tx.orderId),
+          paymentReference: String(tx.transactionReference || tx.razorpayPaymentId || tx.id),
+          userId,
+          regularSalesOrderId: order ? String(order.id) : null,
+          regularSalesAmount: order ? Number(order.totalValue || 0) : 0,
+          preorderIds: resolvedPreorderIds,
+          invoiceId: generatedInvoiceId,
+          preorderItemOverrides: preorderItemsInput
+            .filter((p: any) => p.preorderId)
+            .map((p: any) => ({
+              preorderId: String(p.preorderId),
+              quantity: Number(p.quantity || 1),
+              bookingAdvance: Number(p.bookingAdvance || 0),
+            })),
+        });
+      }
+    } catch (poErr) {
+      console.error('[Finalize Payment] Error confirming pre-order bookings:', poErr);
+    }
+  }
+
+  if (order) {
+    await processOrderCommissionsAuthoritative(tx);
+  }
 
   triggerAllNotifications('Success', tx).catch(err => console.error(err));
 }
@@ -2914,27 +3225,58 @@ export async function enrichOrderProductsFromMaster(rawProducts: any[]): Promise
   }
 }
 
-// Server-side Authoritative GST Calculation Helper
-export async function calculateGSTForOrderItems(rawItems: any[], deliveryFeeOverride?: number): Promise<{
+// Server-side Authoritative GST & Pre-Order Advance Calculation Helper (Section 5)
+export async function calculateGSTForOrderItems(
+  rawItems: any[],
+  deliveryFeeOverride?: number,
+  discountOverride?: number
+): Promise<{
   items: any[];
+  preorderItems: any[];
   totalTaxableValue: number;
   totalGstAmount: number;
   subtotal: number;
+  regularSalesSubtotal: number;
   deliveryFee: number;
+  discount: number;
   grandTotal: number;
+  regularInvoiceGrandTotal: number;
+  totalPreorderBookingAdvance: number;
+  totalPreorderProductValue: number;
+  totalPreorderRemainingBalance: number;
+  customerGrandTotalPayable: number;
   hsnGstSummary: any[];
 }> {
   const products = await getCollectionDocs('products');
+  const existingPreorders = await getCollectionDocs('preorders');
+
   let totalTaxableValue = 0;
   let totalGstAmount = 0;
   let subtotal = 0;
-  const deliveryFee = typeof deliveryFeeOverride === 'number' && !isNaN(deliveryFeeOverride) ? Math.max(0, deliveryFeeOverride) : 0;
+  const rawDeliveryFee =
+    typeof deliveryFeeOverride === 'number' && !isNaN(deliveryFeeOverride)
+      ? Math.max(0, deliveryFeeOverride)
+      : 0;
+  const rawDiscount =
+    typeof discountOverride === 'number' && !isNaN(discountOverride)
+      ? Math.max(0, discountOverride)
+      : 0;
 
   const hsnGroups: Record<string, any> = {};
 
-  const enrichedItems = (rawItems || []).map((item: any) => {
+  const regularRawItems = (rawItems || []).filter((item: any) => !item?.isPreorder);
+  const preorderRawItems = (rawItems || []).filter((item: any) => Boolean(item?.isPreorder));
+
+  const enrichedItems = regularRawItems.map((item: any) => {
     const productId = item.productId || item.id;
     const product = products.find((candidate: any) => candidate.id === productId) || {};
+
+    // Prevent pre-order eligible products from entering checkout as regular sales items (Section 2)
+    if (isProductPreorderEligible(product)) {
+      throw new Error(
+        `Product '${product.name || item.productName || productId}' is a pre-order item and must be booked via Pre-Order Booking.`
+      );
+    }
 
     const quantity = Number(item.quantity ?? 1);
     const unitPrice = Number(product.offerPrice ?? product.onlinePrice ?? item.price ?? 0);
@@ -2968,6 +3310,7 @@ export async function calculateGSTForOrderItems(rawItems: any[], deliveryFeeOver
 
     return {
       ...item,
+      isPreorder: false,
       productId,
       productName: item.productName || product.name || '',
       imageUrl: item.imageUrl || product.imageUrl || product.image || '',
@@ -2985,34 +3328,171 @@ export async function calculateGSTForOrderItems(rawItems: any[], deliveryFeeOver
     };
   });
 
+  let totalPreorderBookingAdvance = 0;
+  let totalPreorderProductValue = 0;
+  let totalPreorderRemainingBalance = 0;
+
+  const preorderItems = preorderRawItems.map((item: any) => {
+    const preorderId = String(item.preorderId || '').trim();
+    const storedBooking = preorderId
+      ? existingPreorders.find((b: any) => b.preorderId === preorderId || b.id === preorderId)
+      : null;
+
+    if (storedBooking) {
+      const dto = preorderService.toBookingDto(storedBooking);
+      const requestedQty = Math.max(1, Number(item.quantity || dto.quantity));
+      let effectiveAdvance = dto.bookingAdvance;
+      let effectiveTotalValue = dto.totalProductValue;
+      let effectiveBalance = dto.remainingBalance;
+
+      if (requestedQty !== dto.quantity) {
+        const { paymentType } = normalizePaymentType(item.paymentType || dto.paymentType || 'full');
+        const recalc = validateAndComputeAdvance({
+          onlinePriceSnapshot: dto.onlinePriceSnapshot,
+          quantity: requestedQty,
+          paymentType,
+          rawBookingAdvance: item.bookingAdvance ?? (dto.bookingAdvance / Math.max(1, dto.quantity)) * requestedQty,
+        });
+        effectiveAdvance = recalc.bookingAdvance;
+        effectiveTotalValue = recalc.totalProductValue;
+        effectiveBalance = recalc.remainingBalance;
+      }
+
+      totalPreorderBookingAdvance = roundPreorderMoney(totalPreorderBookingAdvance + effectiveAdvance);
+      totalPreorderProductValue = roundPreorderMoney(totalPreorderProductValue + effectiveTotalValue);
+      totalPreorderRemainingBalance = roundPreorderMoney(totalPreorderRemainingBalance + effectiveBalance);
+      return {
+        ...item,
+        isPreorder: true,
+        preorderId: dto.preorderId,
+        bookingReference: dto.preorderId,
+        productId: dto.productId,
+        productName: dto.productNameSnapshot,
+        imageUrl: dto.imageUrlSnapshot || item.imageUrl || '',
+        quantity: requestedQty,
+        price: effectiveAdvance,
+        onlinePriceSnapshot: dto.onlinePriceSnapshot,
+        totalProductValue: effectiveTotalValue,
+        paymentType: dto.paymentType,
+        paymentTypeLabel: dto.paymentTypeLabel,
+        bookingAdvance: effectiveAdvance,
+        remainingBalance: effectiveBalance,
+        giftWrap: dto.giftWrap,
+        specialSuggestion: dto.specialSuggestion,
+        expectedDeliveryDate: dto.expectedDeliveryDate,
+        preferredCourierAgent: dto.preferredCourierAgent,
+      };
+    }
+
+    const productId = String(item.productId || item.id || '').trim();
+    const product = products.find((candidate: any) => candidate.id === productId);
+    if (!product || !isProductPreorderEligible(product)) {
+      throw new Error(
+        `Product '${item.productName || productId}' is not eligible for pre-order booking (preorderactive !== true).`
+      );
+    }
+
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const onlinePriceSnapshot = roundPreorderMoney(
+      Number(product.offerPrice ?? product.onlinePrice ?? item.onlinePriceSnapshot ?? item.price ?? 0)
+    );
+    const { paymentType, paymentTypeLabel } = normalizePaymentType(item.paymentType || 'full');
+    const advanceCalc = validateAndComputeAdvance({
+      onlinePriceSnapshot,
+      quantity,
+      paymentType,
+      rawBookingAdvance: item.bookingAdvance,
+    });
+    const giftWrap = normalizeGiftWrap(item.giftWrap);
+    const specialSuggestion = sanitizePreorderNotes(item.specialSuggestion, 500);
+    const expectedDeliveryDate = validateFutureDeliveryDate(item.expectedDeliveryDate);
+    const preferredCourierAgent = validatePreferredCourierAgent(
+      item.preferredCourierAgent || 'Standard Courier'
+    );
+
+    totalPreorderBookingAdvance = roundPreorderMoney(
+      totalPreorderBookingAdvance + advanceCalc.bookingAdvance
+    );
+    totalPreorderProductValue = roundPreorderMoney(
+      totalPreorderProductValue + advanceCalc.totalProductValue
+    );
+    totalPreorderRemainingBalance = roundPreorderMoney(
+      totalPreorderRemainingBalance + advanceCalc.remainingBalance
+    );
+
+    return {
+      ...item,
+      isPreorder: true,
+      preorderId: preorderId || null,
+      productId,
+      productName: item.productName || product.name || '',
+      imageUrl: item.imageUrl || product.imageUrl || product.image || '',
+      quantity,
+      price: advanceCalc.bookingAdvance,
+      onlinePriceSnapshot,
+      totalProductValue: advanceCalc.totalProductValue,
+      paymentType,
+      paymentTypeLabel,
+      bookingAdvance: advanceCalc.bookingAdvance,
+      remainingBalance: advanceCalc.remainingBalance,
+      giftWrap,
+      specialSuggestion,
+      expectedDeliveryDate,
+      preferredCourierAgent,
+    };
+  });
+
   const hsnGstSummary = Object.values(hsnGroups).sort((a: any, b: any) => a.hsnCode.localeCompare(b.hsnCode));
   totalTaxableValue = Number(totalTaxableValue.toFixed(2));
   totalGstAmount = Number(totalGstAmount.toFixed(2));
   subtotal = Number(subtotal.toFixed(2));
-  const grandTotal = Number((subtotal + deliveryFee).toFixed(2));
+
+  // Section 5: Pre-Order-Only Cart has Regular Sales Subtotal = 0, Regular Sales GST = 0, Regular Invoice Grand Total = 0
+  const hasRegularItems = enrichedItems.length > 0 && subtotal > 0;
+  const deliveryFee = hasRegularItems ? Number(rawDeliveryFee.toFixed(2)) : 0;
+  const discount = hasRegularItems ? Number(rawDiscount.toFixed(2)) : 0;
+  const regularInvoiceGrandTotal = hasRegularItems
+    ? Number(Math.max(0, subtotal + deliveryFee - discount).toFixed(2))
+    : 0;
+  const grandTotal = regularInvoiceGrandTotal;
+  const customerGrandTotalPayable = Number(
+    (regularInvoiceGrandTotal + totalPreorderBookingAdvance).toFixed(2)
+  );
 
   return {
     items: enrichedItems,
+    preorderItems,
     totalTaxableValue,
     totalGstAmount,
     subtotal,
+    regularSalesSubtotal: subtotal,
     deliveryFee,
+    discount,
     grandTotal,
+    regularInvoiceGrandTotal,
+    totalPreorderBookingAdvance,
+    totalPreorderProductValue,
+    totalPreorderRemainingBalance,
+    customerGrandTotalPayable,
     hsnGstSummary,
   };
 }
 
-// POST /api/orders/calculate-gst - Authoritative server-side GST calculation endpoint
+// POST /api/orders/calculate-gst - Authoritative server-side GST & Pre-Order Advance calculation endpoint
 app.post("/api/orders/calculate-gst", async (req, res) => {
   try {
-    const { items, deliveryFee } = req.body;
+    const { items, deliveryFee, discount } = req.body;
     if (!items || !Array.isArray(items)) {
       return res.status(400).json({ error: "Missing or invalid items array in payload" });
     }
-    const calculation = await calculateGSTForOrderItems(items, typeof deliveryFee === 'number' ? deliveryFee : 0);
+    const calculation = await calculateGSTForOrderItems(
+      items,
+      typeof deliveryFee === 'number' ? deliveryFee : 0,
+      typeof discount === 'number' ? discount : 0
+    );
     return res.json({ success: true, calculation });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || "Failed to calculate GST" });
+    return res.status(400).json({ error: err.message || "Failed to calculate GST" });
   }
 });
 
@@ -3381,24 +3861,16 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
       return res.status(401).json({ error: "Authenticated customer required" });
     }
 
-    // Authoritative amount calculation from database / product catalog
-    let products: any[] = [];
+    const deliveryFee = typeof orderData.deliveryFee === 'number' ? orderData.deliveryFee : 0;
+    const discount = typeof orderData.discount === 'number' ? orderData.discount : 0;
+    let gstCalc: any = null;
     try {
-      products = await getCollectionDocs('products');
-    } catch (dbErr: any) {
-      console.warn("[Razorpay API] Products collection read warning, using payload product prices:", dbErr?.message || dbErr);
+      gstCalc = await calculateGSTForOrderItems(orderData.products || [], deliveryFee, discount);
+    } catch (calcErr: any) {
+      return res.status(400).json({ error: calcErr.message || "Invalid order or pre-order items" });
     }
 
-    const secureSubtotal = (orderData.products || []).reduce((sum: number, item: any) => {
-      const product = products.find((candidate: any) => candidate.id === (item.productId || item.id));
-      const unitPrice = product && typeof product.offeredPrice === 'number'
-        ? product.offeredPrice
-        : (product && typeof product.onlinePrice === 'number' ? product.onlinePrice : (item.price || 0));
-      return sum + (unitPrice * Number(item.quantity || 1));
-    }, 0);
-
-    const deliveryFee = typeof orderData.deliveryFee === 'number' ? orderData.deliveryFee : 0;
-    const finalAmount = Math.max(0, secureSubtotal + deliveryFee);
+    const finalAmount = gstCalc.customerGrandTotalPayable;
     const amountInPaise = Math.round(finalAmount * 100);
     const transactionId = orderData.id;
 
@@ -3457,6 +3929,10 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
       orderPayload: orderData,
       salesPlatform: salesPlatform,
       amount: finalAmount,
+      regularSalesAmount: gstCalc.regularInvoiceGrandTotal,
+      totalPreorderBookingAdvance: gstCalc.totalPreorderBookingAdvance,
+      customerGrandTotalPayable: gstCalc.customerGrandTotalPayable,
+      preorderIds: (gstCalc.preorderItems || []).map((p: any) => p.preorderId).filter(Boolean),
       amountPaise: amountInPaise,
       currency: "INR",
       status: "PAYMENT_CREATED",
@@ -3575,7 +4051,18 @@ async function handleCreateCodOrder(req: any, res: any) {
     }
 
     const deliveryFee = typeof orderData.deliveryFee === 'number' ? orderData.deliveryFee : 0;
-    const finalAmount = Math.max(0, secureSubtotal + deliveryFee);
+    let gstCalc: any = null;
+    try {
+      gstCalc = await calculateGSTForOrderItems(validatedProducts, deliveryFee);
+    } catch (calcErr: any) {
+      return res.status(400).json({ success: false, error: calcErr.message, message: calcErr.message });
+    }
+
+    const regularProductsList = gstCalc ? gstCalc.items : validatedProducts.filter((p: any) => !p?.isPreorder);
+    const preorderProductsList = gstCalc ? gstCalc.preorderItems : validatedProducts.filter((p: any) => Boolean(p?.isPreorder));
+    const finalAmount = gstCalc
+      ? Math.max(0, gstCalc.customerGrandTotalPayable)
+      : Math.max(0, secureSubtotal + deliveryFee);
     const transactionId = orderData.id;
 
     // 4. Create Payment Record (COD, status: PENDING)
@@ -3585,7 +4072,10 @@ async function handleCreateCodOrder(req: any, res: any) {
       orderId: transactionId,
       orderPayload: {
         ...orderData,
-        products: validatedProducts,
+        products: [...regularProductsList, ...preorderProductsList],
+        regularInvoiceGrandTotal: gstCalc ? gstCalc.regularInvoiceGrandTotal : finalAmount,
+        totalPreorderBookingAdvance: gstCalc ? gstCalc.totalPreorderBookingAdvance : 0,
+        customerGrandTotalPayable: finalAmount,
         totalValue: finalAmount,
         paymentMethod: "COD",
         paymentStatus: "Pending"
@@ -3613,18 +4103,13 @@ async function handleCreateCodOrder(req: any, res: any) {
 
     await saveCollectionDoc('payments', tx);
 
-    // 5. Create Sales Order Record & Deduct Inventory Stock Idempotently
+    // 5. Create Sales Order Record & Deduct Inventory Stock Idempotently (ONLY for regular sales items)
     const salesOrders = await getCollectionDocs('sales_orders');
     let order = salesOrders.find((o: any) => o.id === transactionId);
-    if (!order) {
-      const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
-      let gstCalc: any = null;
-      try {
-        gstCalc = await calculateGSTForOrderItems(validatedProducts, deliveryFee);
-      } catch (_) { }
 
-      let productsList = gstCalc ? gstCalc.items : validatedProducts;
-      productsList = await enrichOrderProductsFromMaster(productsList);
+    if (!order && regularProductsList.length > 0) {
+      const orderNum = `SO-2026-${String(salesOrders.length + 1).padStart(4, '0')}`;
+      let productsList = await enrichOrderProductsFromMaster(regularProductsList);
 
       const salesPlatform = determineSalesPlatform(orderData, req);
       const loginMobile = await resolveCustomerMobileWithCode([authenticatedUser?.uid, orderData.customerId, orderData.customerMobile]);
@@ -3639,8 +4124,8 @@ async function handleCreateCodOrder(req: any, res: any) {
         totalGstAmount: gstCalc ? gstCalc.totalGstAmount : undefined,
         hsnGstSummary: gstCalc ? gstCalc.hsnGstSummary : undefined,
         gstByHsn: gstCalc ? gstCalc.hsnGstSummary : undefined,
-        deliveryFee: deliveryFee,
-        totalValue: gstCalc ? gstCalc.grandTotal : finalAmount,
+        deliveryFee: gstCalc ? gstCalc.deliveryFee : deliveryFee,
+        totalValue: gstCalc ? gstCalc.regularInvoiceGrandTotal : finalAmount,
         paymentMethod: 'COD',
         paymentStatus: 'PENDING',
         orderStatus: 'Confirmed',
@@ -3650,7 +4135,7 @@ async function handleCreateCodOrder(req: any, res: any) {
       };
       await saveCollectionDoc('sales_orders', order);
 
-      // Deduct product stock
+      // Deduct product stock for regular sales items only
       for (const item of (order.products || [])) {
         const prod = products.find((p: any) => p.id === (item.productId || item.id));
         if (prod) {
@@ -3668,6 +4153,63 @@ async function handleCreateCodOrder(req: any, res: any) {
         console.error('[COD Order] Error auto-generating invoice:', invErr);
       }
       triggerAllNotifications('Success', tx).catch(err => console.error(err));
+    }
+
+    if (preorderProductsList.length > 0) {
+      try {
+        const resolvedPreorderIds: string[] = [];
+        const userId = String(authenticatedUser?.uid || orderData.customerId || '').trim();
+        const customerName = String(orderData.customerName || 'LeafyEarth Customer').trim();
+
+        for (const poItem of preorderProductsList) {
+          if (poItem.preorderId) {
+            resolvedPreorderIds.push(String(poItem.preorderId));
+          } else {
+            const created = await preorderService.createPreorder({
+              userId,
+              customerId: userId,
+              customerDisplayName: customerName,
+              productId: String(poItem.productId || poItem.id || ''),
+              quantity: Number(poItem.quantity || 1),
+              paymentType: poItem.paymentType || 'full',
+              bookingAdvance: poItem.bookingAdvance,
+              giftWrap: Boolean(poItem.giftWrap),
+              specialSuggestion: poItem.specialSuggestion || '',
+              expectedDeliveryDate: poItem.expectedDeliveryDate,
+              preferredCourierAgent: poItem.preferredCourierAgent || 'Standard Courier',
+              idempotencyKey: `cod_${transactionId}_${poItem.productId || poItem.id}`,
+            });
+            resolvedPreorderIds.push(created.booking.preorderId);
+          }
+        }
+
+        let codInvoiceId: string | null = order ? `INV-${order.orderNumber || order.id}` : null;
+        if (!order && resolvedPreorderIds.length > 0) {
+          const poInv = await ensureInvoiceForPreorderCheckout(tx, resolvedPreorderIds).catch(() => null);
+          if (poInv?.invoiceId) codInvoiceId = poInv.invoiceId;
+        }
+
+        if (resolvedPreorderIds.length > 0) {
+          await preorderService.confirmPreorderPaymentsForCheckout({
+            checkoutReference: String(transactionId),
+            paymentReference: `COD-${transactionId}`,
+            userId,
+            regularSalesOrderId: order ? String(order.id) : null,
+            regularSalesAmount: order ? Number(order.totalValue || 0) : 0,
+            preorderIds: resolvedPreorderIds,
+            invoiceId: codInvoiceId,
+            preorderItemOverrides: preorderProductsList
+              .filter((p: any) => p.preorderId)
+              .map((p: any) => ({
+                preorderId: String(p.preorderId),
+                quantity: Number(p.quantity || 1),
+                bookingAdvance: Number(p.bookingAdvance || 0),
+              })),
+          });
+        }
+      } catch (poErr) {
+        console.error('[COD Order] Pre-order confirmation error:', poErr);
+      }
     }
 
     return res.json({
@@ -3748,6 +4290,16 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
         details: 'Razorpay HMAC signature mismatch.'
       });
       await saveCollectionDoc('payments', tx);
+      if (Array.isArray(tx.preorderIds) && tx.preorderIds.length > 0) {
+        await preorderService.failPreorderPaymentsForCheckout({
+          checkoutReference: String(tx.id),
+          paymentReference: razorpay_payment_id,
+          userId: String(authenticatedUser.uid),
+          regularSalesAmount: Number(tx.regularSalesAmount || 0),
+          preorderIds: tx.preorderIds,
+          reason: 'Razorpay signature verification failed',
+        }).catch(() => {});
+      }
       return res.status(400).json({ error: "Invalid Razorpay payment signature" });
     }
 
@@ -3773,6 +4325,16 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
             details: `S2S payment status verification failed. Status: ${paymentEntity.status}`
           });
           await saveCollectionDoc('payments', tx);
+          if (Array.isArray(tx.preorderIds) && tx.preorderIds.length > 0) {
+            await preorderService.failPreorderPaymentsForCheckout({
+              checkoutReference: String(tx.id),
+              paymentReference: razorpay_payment_id,
+              userId: String(authenticatedUser.uid),
+              regularSalesAmount: Number(tx.regularSalesAmount || 0),
+              preorderIds: tx.preorderIds,
+              reason: `S2S payment verification failed (${paymentEntity.status})`,
+            }).catch(() => {});
+          }
           // Razorpay-confirmed payment failure: WhatsApp-only template notification.
           sendPaymentOutcomeNotification({ db: adminDb }, 'Failed', String(tx.id || '')).catch(err =>
             console.error('Asynchronous sendPaymentOutcomeNotification failed:', err?.message || err));
@@ -4461,6 +5023,29 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[violeafycrossap Server listening on http://0.0.0.0:${PORT}`);
+
+    // Automatically ensure every newly added or modified product document has `preorderactive` (boolean, default false)
+    try {
+      adminDb.collection("products").onSnapshot(
+        (snapshot) => {
+          for (const change of snapshot.docChanges()) {
+            if (change.type === "added" || change.type === "modified") {
+              const data = change.doc.data() || {};
+              if (typeof data.preorderactive !== "boolean") {
+                change.doc.ref.set({ preorderactive: false }, { merge: true }).catch((err: any) => {
+                  console.warn(`[Products Default Guard] Failed to set preorderactive=false on ${change.doc.id}:`, err?.message || err);
+                });
+              }
+            }
+          }
+        },
+        (err: any) => {
+          console.warn("[Products Default Guard] Listener warning:", err?.message || err);
+        }
+      );
+    } catch (err: any) {
+      console.warn("[Products Default Guard] Could not attach products snapshot listener:", err?.message || err);
+    }
   });
 }
 

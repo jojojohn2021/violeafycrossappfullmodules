@@ -138,7 +138,8 @@
         "discount": { "type": "number" },
         "rating": { "type": "number" },
         "reviewsCount": { "type": "integer" },
-        "videos": { "type": "array" }
+        "videos": { "type": "array" },
+        "preorderactive": { "type": "boolean", "default": false }
       },
       "required": ["id", "name", "sku", "onlinePrice"]
     },
