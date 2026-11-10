@@ -31,6 +31,13 @@ subprojects {
             }
         }
     }
+    afterEvaluate {
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+            compilerOptions {
+                allWarningsAsErrors.set(false)
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -12,9 +13,28 @@ class ProductCard extends ConsumerWidget {
 
   const ProductCard({super.key, required this.product});
 
+  bool get _isMobilePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   Widget _buildProductImage(ProductPerformance product) {
     final displayUrl = product.imageUrl ?? (product.images != null && product.images!.isNotEmpty ? product.images!.first : null);
     if (displayUrl != null && displayUrl.isNotEmpty && displayUrl.startsWith('http')) {
+      if (_isMobilePlatform) {
+        return Padding(
+          padding: const EdgeInsets.all(8),
+          child: Center(
+            child: CachedNetworkImage(
+              imageUrl: displayUrl,
+              fit: BoxFit.contain,
+              alignment: Alignment.center,
+              placeholder: (context, url) => _buildPlaceholder(),
+              errorWidget: (context, url, error) => _buildErrorWidget(),
+            ),
+          ),
+        );
+      }
       return CachedNetworkImage(
         imageUrl: displayUrl,
         fit: BoxFit.cover,

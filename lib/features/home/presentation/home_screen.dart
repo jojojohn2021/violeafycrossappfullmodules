@@ -411,66 +411,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => context.push('/referrals'),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
                             child: Container(
                               padding: const EdgeInsets.all(12),
+                              alignment: Alignment.centerLeft,
                               decoration: BoxDecoration(
                                 color: AppColors.primaryGreen.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
                               ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.share, color: AppColors.primaryGreen, size: 24),
-                                  SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Refer & Earn', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
-                                        Text('Earn 5% on referrals', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                              child: const Text(
+                                'Pre-order booking',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => context.push('/wallet'),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.accentLime.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppColors.accentLime.withValues(alpha: 0.4)),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.account_balance_wallet, color: AppColors.primaryGreen, size: 24),
-                                  SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Leafy Wallet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
-                                        Text('Cashback & Payouts', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => context.push('/referrals'),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accentLime.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.accentLime.withValues(alpha: 0.4)),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.share, color: AppColors.primaryGreen, size: 24),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Refer & Earn', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary)),
+                                          Text('Earn on referrals', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
 
@@ -516,6 +510,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       return LayoutBuilder(
                         builder: (context, constraints) {
                           final width = constraints.maxWidth;
+                          final isMobilePlatform = !kIsWeb &&
+                              (defaultTargetPlatform == TargetPlatform.android ||
+                                  defaultTargetPlatform == TargetPlatform.iOS);
                           int crossAxisCount = 2;
                           double childAspectRatio = 0.64;
 
@@ -527,6 +524,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             childAspectRatio = 0.68;
                           }
 
+                          double? mainAxisExtent;
+                          if (isMobilePlatform) {
+                            final cardWidth = (width - 24 - ((crossAxisCount - 1) * 12)) / crossAxisCount;
+                            final targetImageHeight = cardWidth.clamp(180.0, 200.0);
+                            mainAxisExtent = targetImageHeight + 178.0;
+                          }
+
                           return GridView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
@@ -534,6 +538,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: crossAxisCount,
                               childAspectRatio: childAspectRatio,
+                              mainAxisExtent: mainAxisExtent,
                               crossAxisSpacing: 12,
                               mainAxisSpacing: 12,
                             ),
