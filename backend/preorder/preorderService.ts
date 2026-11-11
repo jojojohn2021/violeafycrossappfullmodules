@@ -759,6 +759,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       preorderId?: string;
       quantity?: number;
       bookingAdvance?: number;
+      isBalancePayment?: boolean;
     }>;
     invoiceId?: string | null;
   }): Promise<{
@@ -821,25 +822,40 @@ export function createPreorderService(deps: PreorderServiceDeps) {
         const override = (params.preorderItemOverrides || []).find(
           (o) => String(o.preorderId || '') === preorderId
         );
+        const isBalancePayment = Boolean(override?.isBalancePayment);
         const finalQty =
-          override?.quantity && Number.isInteger(Number(override.quantity)) && Number(override.quantity) >= 1
+          !isBalancePayment &&
+          override?.quantity &&
+          Number.isInteger(Number(override.quantity)) &&
+          Number(override.quantity) >= 1
             ? Number(override.quantity)
             : baseDto.quantity;
-        const advanceCalc = validateAndComputeAdvance({
-          onlinePriceSnapshot: baseDto.onlinePriceSnapshot,
-          quantity: finalQty,
-          paymentType: baseDto.paymentType,
-          rawBookingAdvance:
-            baseDto.paymentType === 'full'
-              ? undefined
-              : override?.bookingAdvance !== undefined
-              ? override.bookingAdvance
-              : baseDto.bookingAdvance,
-          config,
-        });
+
+        const balancePaidAmount = isBalancePayment
+          ? roundMoney(Math.max(0, baseDto.remainingBalance))
+          : 0;
+
+        const advanceCalc = isBalancePayment
+          ? {
+              totalProductValue: baseDto.totalProductValue,
+              bookingAdvance: baseDto.totalProductValue,
+              remainingBalance: 0,
+            }
+          : validateAndComputeAdvance({
+              onlinePriceSnapshot: baseDto.onlinePriceSnapshot,
+              quantity: finalQty,
+              paymentType: baseDto.paymentType,
+              rawBookingAdvance:
+                baseDto.paymentType === 'full'
+                  ? undefined
+                  : override?.bookingAdvance !== undefined
+                  ? override.bookingAdvance
+                  : baseDto.bookingAdvance,
+              config,
+            });
 
         const nextPaymentStatus: PreorderPaymentStatus =
-          baseDto.paymentType === 'full' || advanceCalc.remainingBalance <= 0
+          isBalancePayment || baseDto.paymentType === 'full' || advanceCalc.remainingBalance <= 0
             ? 'paid'
             : 'partially_paid';
 
@@ -849,12 +865,22 @@ export function createPreorderService(deps: PreorderServiceDeps) {
           totalProductValue: advanceCalc.totalProductValue,
           bookingAdvance: advanceCalc.bookingAdvance,
           remainingBalance: advanceCalc.remainingBalance,
-          bookingStatus: 'confirmed' as PreorderBookingStatus,
-          status: 'confirmed' as PreorderBookingStatus,
+          bookingStatus: (data.bookingStatus && data.bookingStatus !== 'pending_payment'
+            ? data.bookingStatus
+            : 'confirmed') as PreorderBookingStatus,
+          status: (data.bookingStatus && data.bookingStatus !== 'pending_payment'
+            ? data.bookingStatus
+            : 'confirmed') as PreorderBookingStatus,
           paymentStatus: nextPaymentStatus,
           paymentReference,
-          checkoutReference,
-          invoiceId: params.invoiceId || data.invoiceId || checkoutReference,
+          checkoutReference: data.checkoutReference || checkoutReference,
+          ...(isBalancePayment
+            ? {
+                balancePaymentReference: paymentReference,
+                balanceCheckoutReference: checkoutReference,
+              }
+            : {}),
+          invoiceId: data.invoiceId || params.invoiceId || checkoutReference,
           updatedAt: nowIso,
         };
         const dto = toBookingDto(updatedRecord);
@@ -868,18 +894,21 @@ export function createPreorderService(deps: PreorderServiceDeps) {
           preorderId,
           actorId: userId || dto.userId,
           actorRole: 'system',
-          eventType: 'preorder.payment_confirmed',
+          eventType: isBalancePayment
+            ? 'preorder.balance_payment_confirmed'
+            : 'preorder.payment_confirmed',
           oldStatus: dto.bookingStatus,
-          newStatus: 'confirmed',
+          newStatus: updatedRecord.bookingStatus,
           paymentStatus: nextPaymentStatus,
           paymentReference,
           checkoutReference,
-          bookingAdvance: dto.bookingAdvance,
+          bookingAdvance: isBalancePayment ? balancePaidAmount : dto.bookingAdvance,
           remainingBalance: dto.remainingBalance,
           occurredAt: nowIso,
         });
 
-        totalPreorderAdvance = roundMoney(totalPreorderAdvance + dto.bookingAdvance);
+        const txAllocatedAmount = isBalancePayment ? balancePaidAmount : dto.bookingAdvance;
+        totalPreorderAdvance = roundMoney(totalPreorderAdvance + txAllocatedAmount);
         allocations.push({
           preorderId: dto.preorderId,
           productId: dto.productId,
@@ -889,7 +918,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
           totalProductValue: dto.totalProductValue,
           paymentType: dto.paymentType,
           paymentTypeLabel: dto.paymentTypeLabel,
-          bookingAdvance: dto.bookingAdvance,
+          bookingAdvance: txAllocatedAmount,
           remainingBalance: dto.remainingBalance,
           giftWrap: dto.giftWrap,
           specialSuggestion: dto.specialSuggestion,

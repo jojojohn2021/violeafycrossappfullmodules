@@ -111,8 +111,8 @@ class OrdersScreen extends ConsumerWidget {
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
                       ),
                       TextButton(
-                        onPressed: () => context.push('/preorders'),
-                        child: const Text('View All Pre-Orders'),
+                        onPressed: () => context.push('/preorders/history'),
+                        child: const Text('My Bookings'),
                       ),
                     ],
                   ),

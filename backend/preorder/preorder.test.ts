@@ -279,6 +279,28 @@ test('Payment verification confirms preorders (paid vs partially_paid), writes p
   });
   assert.equal(replay.idempotentReplay, true);
 
+  // Remaining balance payment settles partially_paid booking to paid with 0 remainingBalance
+  const balanceResult = await service.confirmPreorderPaymentsForCheckout({
+    checkoutReference: 'BAL-PO-PARTIAL-1-200',
+    paymentReference: 'pay_balance_888',
+    userId: 'user-1',
+    preorderIds: ['PO-PARTIAL-1'],
+    regularSalesOrderId: null,
+    regularSalesAmount: 0,
+    preorderItemOverrides: [
+      {
+        preorderId: 'PO-PARTIAL-1',
+        bookingAdvance: 800,
+        isBalancePayment: true,
+      },
+    ],
+  });
+  assert.equal(balanceResult.allocation.totalPreorderAdvance, 800);
+  assert.equal(balanceResult.allocation.customerGrandTotalPayable, 800);
+  assert.equal(store.preorders['PO-PARTIAL-1'].paymentStatus, 'paid');
+  assert.equal(store.preorders['PO-PARTIAL-1'].bookingAdvance, 1000);
+  assert.equal(store.preorders['PO-PARTIAL-1'].remainingBalance, 0);
+
   // Failed payment on a pending booking never marks confirmed/paid
   store.preorders['PO-FAIL-1'] = {
     preorderId: 'PO-FAIL-1',

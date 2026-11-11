@@ -685,20 +685,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   Text('₹${totalPayable.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primaryGreen)),
                                 ],
                               ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 48,
-                                child: ElevatedButton.icon(
-                                  key: const ValueKey('cart_bill_proceed_to_pay_btn'),
-                                  onPressed: _isNavigating ? null : _proceedToCheckout,
-                                  icon: const Icon(Icons.lock_outline, size: 18),
-                                  label: Text(
-                                    'PROCEED TO PAY (₹${totalPayable.toStringAsFixed(2)})',
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
                         ),

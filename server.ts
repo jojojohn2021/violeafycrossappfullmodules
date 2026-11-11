@@ -3075,6 +3075,10 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
               preorderId: String(p.preorderId),
               quantity: Number(p.quantity || 1),
               bookingAdvance: Number(p.bookingAdvance || 0),
+              isBalancePayment: Boolean(
+                p.isPreorderBalancePayment ||
+                  String(p.paymentType || '').toLowerCase() === 'balance'
+              ),
             })),
         });
       }
@@ -3340,12 +3344,26 @@ export async function calculateGSTForOrderItems(
 
     if (storedBooking) {
       const dto = preorderService.toBookingDto(storedBooking);
-      const requestedQty = Math.max(1, Number(item.quantity || dto.quantity));
+      const isBalancePayment =
+        Boolean(item.isPreorderBalancePayment) ||
+        String(item.paymentType || '').toLowerCase() === 'balance';
+      const requestedQty = isBalancePayment
+        ? dto.quantity
+        : Math.max(1, Number(item.quantity || dto.quantity));
       let effectiveAdvance = dto.bookingAdvance;
       let effectiveTotalValue = dto.totalProductValue;
       let effectiveBalance = dto.remainingBalance;
 
-      if (requestedQty !== dto.quantity) {
+      if (isBalancePayment) {
+        if (dto.remainingBalance <= 0) {
+          throw new Error(
+            `No remaining balance is due for pre-order booking '${dto.preorderId}'.`
+          );
+        }
+        effectiveAdvance = dto.remainingBalance;
+        effectiveTotalValue = dto.totalProductValue;
+        effectiveBalance = 0;
+      } else if (requestedQty !== dto.quantity) {
         const { paymentType } = normalizePaymentType(item.paymentType || dto.paymentType || 'full');
         const recalc = validateAndComputeAdvance({
           onlinePriceSnapshot: dto.onlinePriceSnapshot,
@@ -3364,6 +3382,7 @@ export async function calculateGSTForOrderItems(
       return {
         ...item,
         isPreorder: true,
+        isPreorderBalancePayment: isBalancePayment,
         preorderId: dto.preorderId,
         bookingReference: dto.preorderId,
         productId: dto.productId,
@@ -3373,8 +3392,8 @@ export async function calculateGSTForOrderItems(
         price: effectiveAdvance,
         onlinePriceSnapshot: dto.onlinePriceSnapshot,
         totalProductValue: effectiveTotalValue,
-        paymentType: dto.paymentType,
-        paymentTypeLabel: dto.paymentTypeLabel,
+        paymentType: isBalancePayment ? 'balance' : dto.paymentType,
+        paymentTypeLabel: isBalancePayment ? 'Remaining Balance Payment' : dto.paymentTypeLabel,
         bookingAdvance: effectiveAdvance,
         remainingBalance: effectiveBalance,
         giftWrap: dto.giftWrap,
@@ -4204,6 +4223,10 @@ async function handleCreateCodOrder(req: any, res: any) {
                 preorderId: String(p.preorderId),
                 quantity: Number(p.quantity || 1),
                 bookingAdvance: Number(p.bookingAdvance || 0),
+                isBalancePayment: Boolean(
+                  p.isPreorderBalancePayment ||
+                    String(p.paymentType || '').toLowerCase() === 'balance'
+                ),
               })),
           });
         }

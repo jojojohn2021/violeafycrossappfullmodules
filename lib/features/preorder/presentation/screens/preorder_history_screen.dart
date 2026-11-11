@@ -1,9 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../models/models.dart';
+import '../../../../providers/app_providers.dart';
+import '../../../cart_checkout/domain/payment_orchestrator.dart';
 import '../../data/models/preorder_models.dart';
 import '../../preorder_module.dart';
 import '../widgets/preorder_widgets.dart';
@@ -20,9 +24,21 @@ class PreorderHistoryScreen extends ConsumerWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
-          'My Pre-Order Bookings',
+          'My Bookings',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: 'Home',
+          ),
+          IconButton(
+            onPressed: () => ref.invalidate(myPreordersProvider),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh Bookings',
+          ),
+        ],
       ),
       body: RefreshIndicator(
         color: AppColors.primaryGreen,
@@ -228,54 +244,159 @@ class PreorderDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
-  bool _cancelling = false;
+  final _orchestrator = PaymentOrchestrator();
+  bool _isPayingBalance = false;
 
-  Future<void> _confirmCancel() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel Pre-Order Booking?'),
-        content: const Text(
-          'Are you sure you want to cancel this pre-order booking?',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Keep Booking')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Yes, Cancel'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _payRemainingBalance(PreorderBooking booking) async {
+    if (_isPayingBalance || booking.remainingBalance <= 0) return;
 
-    if (confirmed != true || !mounted) return;
-    setState(() => _cancelling = true);
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      if (mounted) {
+        context.go('/login?redirect=${Uri.encodeComponent('/preorders/detail/${booking.preorderId}')}');
+      }
+      return;
+    }
+
+    setState(() => _isPayingBalance = true);
     try {
-      await ref.read(preorderServiceProvider).cancelBooking(
-            preorderId: widget.preorderId,
-            reason: 'Cancelled by customer',
-          );
+      String customerName = booking.customerDisplayName.trim();
+      String customerEmail = user.email?.trim() ?? '';
+      String customerMobile = user.phoneNumber?.trim() ?? '';
+
+      try {
+        final customer = await ref.read(shoppingRepositoryProvider).getCurrentCustomer();
+        if (customer != null) {
+          if (customerName.isEmpty && customer.name.trim().isNotEmpty) {
+            customerName = customer.name.trim();
+          }
+          if (customerEmail.isEmpty && customer.email.trim().isNotEmpty) {
+            customerEmail = customer.email.trim();
+          }
+          if (customerMobile.isEmpty && customer.mobileNumber.trim().isNotEmpty) {
+            customerMobile = customer.mobileNumber.trim();
+          }
+        }
+      } catch (_) {}
+
+      if (customerName.isEmpty) {
+        customerName = 'LeafyEarth Customer';
+      }
+
+      final balanceAmount = booking.remainingBalance;
+      final orderId = 'BAL-${booking.preorderId}-${DateTime.now().millisecondsSinceEpoch}';
+
+      final orderData = <String, dynamic>{
+        'id': orderId,
+        'orderNumber': booking.preorderId,
+        'customerId': user.uid,
+        'customerName': customerName,
+        'customerEmail': customerEmail,
+        'customerMobile': sanitizeMobileNumber(customerMobile),
+        'customerCompany': '',
+        'isPreorderBalancePayment': true,
+        'preorderId': booking.preorderId,
+        'products': [
+          {
+            'productId': booking.productId,
+            'productName': booking.productNameSnapshot,
+            'imageUrl': booking.imageUrlSnapshot,
+            'quantity': booking.quantity,
+            'price': balanceAmount,
+            'isPreorder': true,
+            'isPreorderBalancePayment': true,
+            'preorderId': booking.preorderId,
+            'onlinePriceSnapshot': booking.onlinePriceSnapshot,
+            'totalProductValue': booking.totalProductValue,
+            'paymentType': 'balance',
+            'paymentTypeLabel': 'Remaining Balance Payment',
+            'bookingAdvance': balanceAmount,
+            'remainingBalance': 0.0,
+            'giftWrap': booking.giftWrap,
+            'specialSuggestion': booking.specialSuggestion,
+            'expectedDeliveryDate': booking.expectedDeliveryDate,
+            'preferredCourierAgent': booking.preferredCourierAgent,
+          },
+        ],
+        'subtotal': 0.0,
+        'deliveryFee': 0.0,
+        'regularInvoiceGrandTotal': 0.0,
+        'totalPreorderBookingAdvance': balanceAmount,
+        'customerGrandTotalPayable': balanceAmount,
+        'totalValue': balanceAmount,
+        'paymentStatus': 'Pending',
+        'deliveryStatus': booking.bookingStatus.displayLabel,
+        'assignedTo': 'Logistics',
+        'createdAt': DateTime.now().toIso8601String(),
+        'paymentMethod': 'UPI',
+        'salesPlatform': kIsWeb ? 'webleafyearth' : 'mobleafyearth',
+      };
+
       if (!mounted) return;
-      ref.invalidate(preorderDetailProvider(widget.preorderId));
-      ref.invalidate(myPreordersProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pre-order booking cancelled.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+      final result = await _orchestrator.pay(
+        orderData: orderData,
+        environment: 'Live',
+        context: context,
       );
+
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.clearSnackBars();
+
+      switch (result.outcome) {
+        case PaymentOutcome.launchedExternally:
+          break;
+        case PaymentOutcome.success:
+          ref.invalidate(preorderDetailProvider(widget.preorderId));
+          ref.invalidate(myPreordersProvider);
+          ref.invalidate(salesOrdersProvider);
+          messenger?.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Remaining balance of ₹${balanceAmount.toStringAsFixed(2)} paid successfully!',
+              ),
+              backgroundColor: AppColors.primaryGreen,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          Future.delayed(const Duration(seconds: 3), () {
+            messenger?.hideCurrentSnackBar();
+          });
+          break;
+        case PaymentOutcome.cancelled:
+          messenger?.showSnackBar(
+            const SnackBar(
+              content: Text('Remaining balance payment was cancelled.'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          break;
+        case PaymentOutcome.failed:
+        case PaymentOutcome.initFailed:
+          messenger?.showSnackBar(
+            const SnackBar(
+              content: Text('Remaining balance payment could not be completed. Please try again.'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          break;
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
-          content: Text(e.toString().replaceFirst('ServerException: ', '')),
+          content: Text('Payment error: ${e.toString().replaceFirst("Exception: ", "")}'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
         ),
       );
     } finally {
-      if (mounted) setState(() => _cancelling = false);
+      if (mounted) setState(() => _isPayingBalance = false);
     }
   }
 
@@ -290,6 +411,18 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
           'Pre-Order Booking Details',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: 'Home',
+          ),
+          IconButton(
+            onPressed: () => ref.invalidate(preorderDetailProvider(widget.preorderId)),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       body: detailAsync.when(
         loading: () => const Center(
@@ -397,6 +530,36 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
                       _DetailLine(label: 'Expected Date of Delivery', value: booking.expectedDeliveryDate),
                       _DetailLine(label: 'Preferred Courier Agent', value: booking.preferredCourierAgent),
                       const SizedBox(height: 18),
+                      if (booking.remainingBalance > 0 &&
+                          booking.bookingStatus != PreorderBookingStatus.cancelled) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 46,
+                          child: ElevatedButton.icon(
+                            key: const ValueKey('preorder_pay_remaining_balance_btn'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryGreen,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: _isPayingBalance ? null : () => _payRemainingBalance(booking),
+                            icon: _isPayingBalance
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.payment_outlined, size: 18),
+                            label: Text(
+                              _isPayingBalance
+                                  ? 'STARTING PAYMENT...'
+                                  : 'Pay Remaining Balance (₹${booking.remainingBalance.toStringAsFixed(2)})',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       if (hasPaidAdvance) ...[
                         SizedBox(
                           width: double.infinity,
@@ -434,30 +597,13 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
                         ),
                         const SizedBox(height: 10),
                       ],
-                      if (booking.canCancel) ...[
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.error,
-                              side: const BorderSide(color: AppColors.error),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            onPressed: _cancelling ? null : _confirmCancel,
-                            icon: const Icon(Icons.cancel_outlined, size: 18),
-                            label: Text(_cancelling ? 'Cancelling...' : 'Cancel Pre-Order Booking'),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
                       SizedBox(
                         width: double.infinity,
                         height: 44,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryGreen,
-                            foregroundColor: Colors.white,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primaryGreen,
+                            side: const BorderSide(color: AppColors.primaryGreen),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           onPressed: () => context.go('/preorders/history'),

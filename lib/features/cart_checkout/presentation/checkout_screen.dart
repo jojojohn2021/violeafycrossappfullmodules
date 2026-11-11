@@ -891,19 +891,6 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _isStartingPayment ? null : _startPayment,
-              icon: _isStartingPayment
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : Icon(_selectedPaymentMethod == 'COD' ? Icons.local_shipping_outlined : Icons.lock_outline),
-              label: Text(
-                _isStartingPayment
-                    ? (_selectedPaymentMethod == 'COD' ? 'PLACING COD ORDER...' : 'STARTING PAYMENT...')
-                    : (_selectedPaymentMethod == 'COD'
-                        ? 'CONFIRM COD ORDER (₹${gstSummary.customerGrandTotalPayable.toStringAsFixed(2)})'
-                        : 'PAY NOW (₹${gstSummary.customerGrandTotalPayable.toStringAsFixed(2)})'),
-              ),
-            ),
                 ],
               ),
             ),

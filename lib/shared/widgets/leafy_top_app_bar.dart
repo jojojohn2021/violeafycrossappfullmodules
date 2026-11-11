@@ -251,7 +251,7 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                   ),
                 ),
 
-                // Right Action Buttons: Wishlist, Cart, Orders
+                // Right Action Buttons: Wishlist, My Orders, My Bookings, Cart
                 Flexible(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -269,6 +269,14 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                           icon: const Icon(Icons.receipt_long_outlined, color: AppColors.textPrimary, size: 22),
                           onPressed: () => context.push('/orders'),
                           tooltip: 'My Orders',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        ),
+                        IconButton(
+                          key: const ValueKey('top_bar_my_bookings_btn'),
+                          icon: const Icon(Icons.event_note_outlined, color: AppColors.textPrimary, size: 22),
+                          onPressed: () => context.push('/preorders/history'),
+                          tooltip: 'My Bookings',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                         ),

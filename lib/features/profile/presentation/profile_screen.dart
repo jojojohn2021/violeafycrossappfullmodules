@@ -201,6 +201,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     const Divider(height: 1, indent: 56),
                     _buildListTile(
+                      icon: Icons.event_note_outlined,
+                      title: 'My Bookings',
+                      subtitle: 'View pre-order bookings, advance receipts & status',
+                      onTap: () => context.push('/preorders/history'),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _buildListTile(
                       icon: Icons.share_outlined,
                       title: 'Referral Hub',
                       subtitle: 'Invite friends & earn commission',
