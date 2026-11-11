@@ -50,7 +50,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   }
 
   Future<void> _initAddress() async {
-    final selected = ref.read(selectedAddressProvider);
+    var selected = ref.read(selectedAddressProvider);
     if (selected == null) {
       final user = firebase_auth.FirebaseAuth.instance.currentUser;
       if (user != null) {
@@ -62,6 +62,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               orElse: () => addresses.first,
             );
             ref.read(selectedAddressProvider.notifier).state = defaultAddr;
+            selected = defaultAddr;
           }
         } catch (_) {}
       }

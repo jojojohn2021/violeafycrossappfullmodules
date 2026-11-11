@@ -19,6 +19,7 @@ import {
   type PreorderBookingDto,
   type PreorderBookingStatus,
   type PreorderConfig,
+  type PreorderDeliveryAddressDto,
   PreorderDomainError,
   type PreorderPaymentAllocationItemDto,
   type PreorderPaymentStatus,
@@ -166,13 +167,135 @@ export function normalizeGiftWrap(raw: unknown): boolean {
   throw new PreorderDomainError('VALIDATION_ERROR', 'Gift Wrap must be Yes or No (boolean).', 400);
 }
 
-/** Validates Preferred Courier Agent string. */
-export function validatePreferredCourierAgent(raw: unknown): string {
+/** Validates Preferred Courier Agent against the restricted combo box list. */
+export function validatePreferredCourierAgent(
+  raw: unknown,
+  allowedAgents: string[] = DEFAULT_COURIER_AGENTS
+): string {
   const sanitized = sanitizeNotes(raw, 100);
   if (!sanitized) {
     throw new PreorderDomainError('VALIDATION_ERROR', 'Preferred Courier Agent is required.', 400);
   }
-  return sanitized;
+  const match = allowedAgents.find(
+    (agent) => agent.toLowerCase() === sanitized.toLowerCase()
+  );
+  if (!match) {
+    throw new PreorderDomainError(
+      'VALIDATION_ERROR',
+      `Preferred Courier Agent must be one of: ${allowedAgents.join(', ')}.`,
+      400
+    );
+  }
+  return match;
+}
+
+/** Normalizes a delivery/shipping address object or flat fields into structured + flat fields for the preorders table. */
+export function normalizeDeliveryAddress(raw: unknown): {
+  deliveryAddress: PreorderDeliveryAddressDto | null;
+  shippingAddress: PreorderDeliveryAddressDto | null;
+  deliveryAddressName: string;
+  deliveryAddressMobile: string;
+  deliveryAddressEmail: string;
+  deliveryAddressLine: string;
+  deliveryCity: string;
+  deliveryDistrict: string;
+  deliveryState: string;
+  deliveryPincode: string;
+  formattedDeliveryAddress: string;
+} {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      deliveryAddress: null,
+      shippingAddress: null,
+      deliveryAddressName: '',
+      deliveryAddressMobile: '',
+      deliveryAddressEmail: '',
+      deliveryAddressLine: '',
+      deliveryCity: '',
+      deliveryDistrict: '',
+      deliveryState: '',
+      deliveryPincode: '',
+      formattedDeliveryAddress: '',
+    };
+  }
+  const obj = raw as Record<string, unknown>;
+  const id = sanitizeNotes(obj.id ?? obj.addressId, 128);
+  const name = sanitizeNotes(
+    obj.name ?? obj.deliveryAddressName ?? obj.customerName ?? obj.recipientName,
+    120
+  );
+  const mobileNumber = sanitizeNotes(
+    obj.mobileNumber ?? obj.deliveryAddressMobile ?? obj.mobile ?? obj.phone ?? obj.contactNo,
+    30
+  );
+  const email = sanitizeNotes(obj.email ?? obj.deliveryAddressEmail ?? obj.customerEmail, 150);
+  const addressLine = sanitizeNotes(
+    obj.addressLine ?? obj.deliveryAddressLine ?? obj.address ?? obj.street ?? obj.line1,
+    300
+  );
+  const city = sanitizeNotes(obj.city ?? obj.deliveryCity ?? obj.town ?? obj.locality, 100);
+  const district = sanitizeNotes(obj.district ?? obj.deliveryDistrict, 100);
+  const state = sanitizeNotes(obj.state ?? obj.deliveryState, 100);
+  const pincode = sanitizeNotes(
+    obj.pincode ?? obj.deliveryPincode ?? obj.pinCode ?? obj.zipCode ?? obj.postalCode,
+    20
+  );
+
+  const hasContent = Boolean(
+    addressLine || city || district || state || pincode || name || mobileNumber
+  );
+  if (!hasContent) {
+    return {
+      deliveryAddress: null,
+      shippingAddress: null,
+      deliveryAddressName: '',
+      deliveryAddressMobile: '',
+      deliveryAddressEmail: '',
+      deliveryAddressLine: '',
+      deliveryCity: '',
+      deliveryDistrict: '',
+      deliveryState: '',
+      deliveryPincode: '',
+      formattedDeliveryAddress: '',
+    };
+  }
+
+  const locationParts = [addressLine, city, district, state].filter(Boolean);
+  let formatted = locationParts.join(', ');
+  if (pincode) {
+    formatted = formatted ? `${formatted} - ${pincode}` : pincode;
+  }
+  if (name) {
+    const header = mobileNumber ? `${name} (${mobileNumber})` : name;
+    formatted = formatted ? `${header}, ${formatted}` : header;
+  }
+
+  const dto: PreorderDeliveryAddressDto = {
+    ...(id ? { id } : {}),
+    name,
+    mobileNumber,
+    ...(email ? { email } : {}),
+    addressLine,
+    city,
+    district,
+    state,
+    pincode,
+    formattedAddress: formatted,
+  };
+
+  return {
+    deliveryAddress: dto,
+    shippingAddress: dto,
+    deliveryAddressName: name,
+    deliveryAddressMobile: mobileNumber,
+    deliveryAddressEmail: email,
+    deliveryAddressLine: addressLine,
+    deliveryCity: city,
+    deliveryDistrict: district,
+    deliveryState: state,
+    deliveryPincode: pincode,
+    formattedDeliveryAddress: formatted,
+  };
 }
 
 /** Computes server-authoritative unit price (Online Price), MRP, GST, and total product value. */
@@ -468,6 +591,10 @@ export function createPreorderService(deps: PreorderServiceDeps) {
 
     const cancelCheck = canCustomerCancelBooking({ bookingStatus: rawBookingStatus });
 
+    const addrNorm = normalizeDeliveryAddress(
+      data.deliveryAddress ?? data.shippingAddress ?? data
+    );
+
     return {
       preorderId: String(data.preorderId || data.id),
       userId: String(data.userId || ''),
@@ -490,7 +617,18 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       giftWrap: Boolean(data.giftWrap),
       specialSuggestion: String(data.specialSuggestion ?? data.notes ?? ''),
       expectedDeliveryDate: String(data.expectedDeliveryDate || ''),
-      preferredCourierAgent: String(data.preferredCourierAgent || 'Standard Courier'),
+      preferredCourierAgent: String(data.preferredCourierAgent || 'India Post'),
+      deliveryAddress: addrNorm.deliveryAddress,
+      shippingAddress: addrNorm.shippingAddress,
+      deliveryAddressName: addrNorm.deliveryAddressName,
+      deliveryAddressMobile: addrNorm.deliveryAddressMobile,
+      deliveryAddressEmail: addrNorm.deliveryAddressEmail,
+      deliveryAddressLine: addrNorm.deliveryAddressLine,
+      deliveryCity: addrNorm.deliveryCity,
+      deliveryDistrict: addrNorm.deliveryDistrict,
+      deliveryState: addrNorm.deliveryState,
+      deliveryPincode: addrNorm.deliveryPincode,
+      formattedDeliveryAddress: addrNorm.formattedDeliveryAddress,
       currency: String(data.currency || config.currency),
       bookingStatus: rawBookingStatus,
       status: rawBookingStatus,
@@ -537,38 +675,24 @@ export function createPreorderService(deps: PreorderServiceDeps) {
 
   /**
    * 2. GET /api/v1/preorders/couriers
-   * Returns preferred courier agent options from `courier_agencies` merged with defaults.
+   * Returns the restricted preferred courier agent options:
+   * Amazon Shipping, Delhivery, India Post, DTDC.
    */
   async function listCourierAgents(): Promise<{ courierAgents: string[] }> {
-    const set = new Set<string>();
-    try {
-      const snap = await adminDb.collection(COLLECTIONS.COURIER_AGENCIES).get();
-      for (const doc of snap.docs || []) {
-        const data = doc.data() || {};
-        const name = String(data.agencyName || data.name || '').trim();
-        if (name && data.isActive !== false) {
-          set.add(name);
-        }
-      }
-    } catch (_) {
-      // Fallback to default courier list if collection doesn't exist
-    }
-    for (const c of config.defaultCourierAgents) {
-      set.add(c);
-    }
-    return { courierAgents: Array.from(set) };
+    return { courierAgents: [...config.defaultCourierAgents] };
   }
 
   /**
    * 3. POST /api/v1/preorders
    * Validates product eligibility (`preorderactive === true`), quantity, Full Amount vs Partial Payment
    * (10%–100% of Online Price * quantity), Gift Wrap, Special Suggestion, future Expected Date of Delivery,
-   * and Preferred Courier Agent inside a Firestore transaction.
+   * and Preferred Courier Agent.
    *
-   * Creates a pre-order booking record in `preorders/{preorderId}` with:
-   *   - `bookingStatus: 'pending_payment'`
-   *   - `paymentStatus: 'unpaid'`
-   * Does NOT mark the booking as paid and NEVER writes to `sales_orders`.
+   * By default (`persistImmediately !== true`), this endpoint ONLY validates the pre-order booking and
+   * returns the authoritative `PreorderBookingDto` for the shopping cart WITHOUT adding records to
+   * `preorders`, `preorder_idempotency`, or `preorder_events`.
+   * Records in `preorders`, `preorder_idempotency`, and `preorder_events` are restricted to be created
+   * ONLY after successful payment processing (`confirmPreorderPaymentsForCheckout`).
    */
   async function createPreorder(params: {
     userId: string;
@@ -582,9 +706,12 @@ export function createPreorderService(deps: PreorderServiceDeps) {
     specialSuggestion?: unknown;
     expectedDeliveryDate: unknown;
     preferredCourierAgent: unknown;
+    deliveryAddress?: unknown;
+    shippingAddress?: unknown;
     idempotencyKey: string;
+    persistImmediately?: boolean;
   }): Promise<{ booking: PreorderBookingDto; idempotentReplay: boolean }> {
-    const { userId, productId } = params;
+    const { userId, productId, persistImmediately = false } = params;
     const quantity = Number(params.quantity);
     const rawIdemKey = String(params.idempotencyKey || '').trim();
 
@@ -615,7 +742,11 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       now,
       config.timezoneOffsetMinutes
     );
-    const preferredCourierAgent = validatePreferredCourierAgent(params.preferredCourierAgent);
+    const preferredCourierAgent = validatePreferredCourierAgent(
+      params.preferredCourierAgent,
+      config.defaultCourierAgents
+    );
+    const addrNorm = normalizeDeliveryAddress(params.deliveryAddress ?? params.shippingAddress);
 
     const idemDocId = `${userId}__${rawIdemKey}`;
     const idemRef = adminDb.collection(COLLECTIONS.IDEMPOTENCY).doc(idemDocId);
@@ -629,8 +760,21 @@ export function createPreorderService(deps: PreorderServiceDeps) {
         const existingRef = adminDb.collection(COLLECTIONS.PREORDERS).doc(existingPreorderId);
         const existingSnap = await tx.get(existingRef);
         if (existingSnap.exists) {
+          const existingData = existingSnap.data() || {};
+          if (persistImmediately && addrNorm.deliveryAddress && !existingData.deliveryAddress) {
+            const mergedExisting = {
+              ...existingData,
+              ...addrNorm,
+              updatedAt: now.toISOString(),
+            };
+            tx.set(existingRef, mergedExisting, { merge: true });
+            return {
+              booking: toBookingDto(mergedExisting),
+              idempotentReplay: true,
+            };
+          }
           return {
-            booking: toBookingDto(existingSnap.data() || {}),
+            booking: toBookingDto(existingData),
             idempotentReplay: true,
           };
         }
@@ -659,10 +803,12 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       });
 
       const nowIso = now.toISOString();
-      const preorderId = `po_${crypto.randomBytes(12).toString('hex')}`;
-      const preorderRef = adminDb.collection(COLLECTIONS.PREORDERS).doc(preorderId);
-      const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
-      const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+      const deterministicHash = crypto
+        .createHash('sha256')
+        .update(`${userId}__${rawIdemKey}`)
+        .digest('hex')
+        .slice(0, 24);
+      const preorderId = `po_${deterministicHash}`;
 
       const imageUrl =
         productData.imageUrl ||
@@ -695,6 +841,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
         specialSuggestion,
         expectedDeliveryDate,
         preferredCourierAgent,
+        ...addrNorm,
         currency: config.currency,
         bookingStatus: 'pending_payment' as PreorderBookingStatus,
         status: 'pending_payment' as PreorderBookingStatus,
@@ -707,28 +854,35 @@ export function createPreorderService(deps: PreorderServiceDeps) {
         updatedAt: nowIso,
       };
 
-      tx.set(preorderRef, bookingRecord);
-      tx.set(idemRef, {
-        preorderId,
-        userId,
-        idempotencyKey: rawIdemKey,
-        createdAt: nowIso,
-      });
-      tx.set(eventRef, {
-        eventId,
-        preorderId,
-        actorId: userId,
-        actorRole: 'customer',
-        eventType: 'preorder.booking_created',
-        oldStatus: null,
-        newStatus: 'pending_payment',
-        paymentType,
-        bookingAdvance: advanceBreakdown.bookingAdvance,
-        remainingBalance: advanceBreakdown.remainingBalance,
-        totalProductValue: advanceBreakdown.totalProductValue,
-        quantity,
-        occurredAt: nowIso,
-      });
+      if (persistImmediately) {
+        const preorderRef = adminDb.collection(COLLECTIONS.PREORDERS).doc(preorderId);
+        const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
+        const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+
+        tx.set(preorderRef, bookingRecord);
+        tx.set(idemRef, {
+          preorderId,
+          userId,
+          idempotencyKey: rawIdemKey,
+          createdAt: nowIso,
+        });
+        tx.set(eventRef, {
+          eventId,
+          preorderId,
+          actorId: userId,
+          actorRole: 'customer',
+          eventType: 'preorder.booking_created',
+          oldStatus: null,
+          newStatus: 'pending_payment',
+          paymentType,
+          bookingAdvance: advanceBreakdown.bookingAdvance,
+          remainingBalance: advanceBreakdown.remainingBalance,
+          totalProductValue: advanceBreakdown.totalProductValue,
+          quantity,
+          deliveryAddress: addrNorm.deliveryAddress,
+          occurredAt: nowIso,
+        });
+      }
 
       return {
         booking: toBookingDto(bookingRecord),
@@ -738,13 +892,178 @@ export function createPreorderService(deps: PreorderServiceDeps) {
   }
 
   /**
+   * 3b. PATCH /api/v1/preorders/:id (and POST /api/v1/preorders/:id/update)
+   * Updates pre-order booking fields in `preorders/{preorderId}` including deliveryAddress / shippingAddress
+   * for future reference, as well as quantity, bookingAdvance, preferredCourierAgent, expectedDeliveryDate,
+   * specialSuggestion, or giftWrap.
+   */
+  async function updatePreorderDetails(params: {
+    preorderId: string;
+    requesterUid: string;
+    isAdmin?: boolean;
+    deliveryAddress?: unknown;
+    shippingAddress?: unknown;
+    quantity?: unknown;
+    paymentType?: unknown;
+    bookingAdvance?: unknown;
+    giftWrap?: unknown;
+    specialSuggestion?: unknown;
+    expectedDeliveryDate?: unknown;
+    preferredCourierAgent?: unknown;
+  }): Promise<PreorderBookingDto> {
+    const { preorderId, requesterUid, isAdmin = false } = params;
+    if (!isValidId(preorderId)) {
+      throw new PreorderDomainError('VALIDATION_ERROR', 'Invalid preorder ID.', 400);
+    }
+
+    const preorderRef = adminDb.collection(COLLECTIONS.PREORDERS).doc(preorderId);
+
+    return adminDb.runTransaction(async (tx: any) => {
+      const snap = await tx.get(preorderRef);
+      if (!snap.exists) {
+        throw new PreorderDomainError('NOT_FOUND', 'Pre-order booking not found.', 404);
+      }
+
+      const data = snap.data() || {};
+      if (!isAdmin && data.userId !== requesterUid && data.customerId !== requesterUid) {
+        throw new PreorderDomainError(
+          'FORBIDDEN',
+          'You do not have permission to update this pre-order booking.',
+          403
+        );
+      }
+
+      const baseDto = toBookingDto(data);
+      const now = getNow();
+      const nowIso = now.toISOString();
+
+      let nextQty = baseDto.quantity;
+      if (params.quantity !== undefined && params.quantity !== null) {
+        const parsedQty = Number(params.quantity);
+        if (
+          !Number.isInteger(parsedQty) ||
+          parsedQty < config.minQuantity ||
+          parsedQty > config.maxQuantity
+        ) {
+          throw new PreorderDomainError(
+            'VALIDATION_ERROR',
+            `Quantity must be an integer between ${config.minQuantity} and ${config.maxQuantity}.`,
+            400
+          );
+        }
+        nextQty = parsedQty;
+      }
+
+      const { paymentType, paymentTypeLabel } =
+        params.paymentType !== undefined && params.paymentType !== null
+          ? normalizePaymentType(params.paymentType)
+          : { paymentType: baseDto.paymentType, paymentTypeLabel: baseDto.paymentTypeLabel };
+
+      const isAlreadyPaidOrPartiallyPaid =
+        baseDto.paymentStatus === 'paid' || baseDto.paymentStatus === 'partially_paid';
+
+      let totalProductValue = baseDto.totalProductValue;
+      let bookingAdvance = baseDto.bookingAdvance;
+      let remainingBalance = baseDto.remainingBalance;
+
+      if (
+        !isAlreadyPaidOrPartiallyPaid &&
+        (nextQty !== baseDto.quantity ||
+          params.bookingAdvance !== undefined ||
+          params.paymentType !== undefined)
+      ) {
+        const advanceCalc = validateAndComputeAdvance({
+          onlinePriceSnapshot: baseDto.onlinePriceSnapshot,
+          quantity: nextQty,
+          paymentType,
+          rawBookingAdvance:
+            paymentType === 'full'
+              ? undefined
+              : params.bookingAdvance !== undefined
+              ? params.bookingAdvance
+              : (baseDto.bookingAdvance / Math.max(1, baseDto.quantity)) * nextQty,
+          config,
+        });
+        totalProductValue = advanceCalc.totalProductValue;
+        bookingAdvance = advanceCalc.bookingAdvance;
+        remainingBalance = advanceCalc.remainingBalance;
+      }
+
+      const giftWrap =
+        params.giftWrap !== undefined ? normalizeGiftWrap(params.giftWrap) : baseDto.giftWrap;
+      const specialSuggestion =
+        params.specialSuggestion !== undefined
+          ? sanitizeNotes(params.specialSuggestion, config.maxSpecialSuggestionLength)
+          : baseDto.specialSuggestion;
+      const expectedDeliveryDate =
+        params.expectedDeliveryDate !== undefined && params.expectedDeliveryDate !== null
+          ? validateFutureDeliveryDate(
+              params.expectedDeliveryDate,
+              now,
+              config.timezoneOffsetMinutes
+            )
+          : baseDto.expectedDeliveryDate;
+      const preferredCourierAgent =
+        params.preferredCourierAgent !== undefined && params.preferredCourierAgent !== null
+          ? validatePreferredCourierAgent(
+              params.preferredCourierAgent,
+              config.defaultCourierAgents
+            )
+          : baseDto.preferredCourierAgent;
+
+      const rawAddressInput = params.deliveryAddress ?? params.shippingAddress;
+      const addrNorm =
+        rawAddressInput !== undefined
+          ? normalizeDeliveryAddress(rawAddressInput)
+          : normalizeDeliveryAddress(data.deliveryAddress ?? data.shippingAddress ?? data);
+
+      const updatedRecord = {
+        ...data,
+        quantity: nextQty,
+        totalProductValue,
+        paymentType,
+        paymentTypeLabel,
+        bookingAdvance,
+        remainingBalance,
+        giftWrap,
+        specialSuggestion,
+        expectedDeliveryDate,
+        preferredCourierAgent,
+        ...addrNorm,
+        updatedAt: nowIso,
+      };
+
+      tx.set(preorderRef, updatedRecord, { merge: true });
+
+      const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
+      const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+      tx.set(eventRef, {
+        eventId,
+        preorderId,
+        actorId: requesterUid,
+        actorRole: isAdmin ? 'admin' : 'customer',
+        eventType: 'preorder.updated',
+        quantity: nextQty,
+        bookingAdvance,
+        remainingBalance,
+        preferredCourierAgent,
+        deliveryAddress: addrNorm.deliveryAddress,
+        occurredAt: nowIso,
+      });
+
+      return toBookingDto(updatedRecord);
+    });
+  }
+
+  /**
    * 4. Confirm Pre-Order Payments on Verified Checkout Payment (Section 8.3 & Section 12).
    * - Idempotent: repeated calls with the same `checkoutReference` return existing allocation without double-counting.
-   * - Updates each `preorders/{preorderId}`:
+   * - Creates or updates each `preorders/{preorderId}` ONLY after successful payment verification:
    *     - `bookingStatus = 'confirmed'`
    *     - `paymentStatus = 'paid'` (if `paymentType === 'full'` or `remainingBalance === 0`)
    *     - `paymentStatus = 'partially_paid'` (if `paymentType === 'partial'` and `remainingBalance > 0`)
-   *     - `paymentReference`, `checkoutReference`, `invoiceId`
+   *     - `paymentReference`, `checkoutReference`, `invoiceId`, and `deliveryAddress`
+   * - Writes `preorder_idempotency` and `preorder_events` ONLY after successful payment verification.
    * - Writes `payment_allocations/{checkoutReference}`
    * - NEVER inserts or modifies `sales_orders`.
    */
@@ -752,14 +1071,30 @@ export function createPreorderService(deps: PreorderServiceDeps) {
     checkoutReference: string;
     paymentReference: string;
     userId: string;
+    customerId?: string;
+    customerDisplayName?: string;
     regularSalesOrderId?: string | null;
     regularSalesAmount: number;
     preorderIds: string[];
+    deliveryAddress?: unknown;
+    shippingAddress?: unknown;
     preorderItemOverrides?: Array<{
       preorderId?: string;
+      productId?: string;
+      productName?: string;
       quantity?: number;
+      paymentType?: unknown;
       bookingAdvance?: number;
+      giftWrap?: unknown;
+      specialSuggestion?: unknown;
+      expectedDeliveryDate?: unknown;
+      preferredCourierAgent?: unknown;
+      idempotencyKey?: string;
+      customerId?: string;
+      customerDisplayName?: string;
       isBalancePayment?: boolean;
+      deliveryAddress?: unknown;
+      shippingAddress?: unknown;
     }>;
     invoiceId?: string | null;
   }): Promise<{
@@ -802,7 +1137,26 @@ export function createPreorderService(deps: PreorderServiceDeps) {
         };
       }
 
-      const nowIso = getNow().toISOString();
+      // Pre-read products for any pre-order items that have not been written to `preorders` yet
+      // (since pre-order records are restricted to be created only after successful payment).
+      const productSnapsByIndex: Record<number, any> = {};
+      for (let i = 0; i < uniquePreorderIds.length; i++) {
+        if (!preorderSnaps[i].exists) {
+          const preorderId = uniquePreorderIds[i];
+          const override =
+            (params.preorderItemOverrides || []).find(
+              (o) => String(o.preorderId || '') === preorderId
+            ) || (params.preorderItemOverrides || [])[i];
+          const productId = String(override?.productId || '').trim();
+          if (productId) {
+            const productRef = adminDb.collection(COLLECTIONS.PRODUCTS).doc(productId);
+            productSnapsByIndex[i] = await tx.get(productRef);
+          }
+        }
+      }
+
+      const now = getNow();
+      const nowIso = now.toISOString();
       const allocations: PreorderPaymentAllocationItemDto[] = [];
       const updatedBookings: PreorderBookingDto[] = [];
       let totalPreorderAdvance = 0;
@@ -810,18 +1164,184 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       for (let i = 0; i < uniquePreorderIds.length; i++) {
         const snap = preorderSnaps[i];
         const preorderId = uniquePreorderIds[i];
+        const override =
+          (params.preorderItemOverrides || []).find(
+            (o) => String(o.preorderId || '') === preorderId
+          ) || (params.preorderItemOverrides || [])[i];
+
         if (!snap.exists) {
-          throw new PreorderDomainError(
-            'NOT_FOUND',
-            `Pre-order booking '${preorderId}' not found.`,
-            404
+          const productSnap = productSnapsByIndex[i];
+          if (!override || !override.productId || !productSnap || !productSnap.exists) {
+            throw new PreorderDomainError(
+              'NOT_FOUND',
+              `Pre-order booking '${preorderId}' not found.`,
+              404
+            );
+          }
+
+          const productData = productSnap.data() || {};
+          if (!isProductPreorderEligible(productData)) {
+            throw new PreorderDomainError(
+              'PRODUCT_NOT_PREORDERABLE',
+              'This product is not eligible for pre-order booking.',
+              403
+            );
+          }
+
+          const finalQty = Math.max(1, Number(override.quantity || 1));
+          const pricing = computeAuthoritativePricing(productData, finalQty);
+          const { paymentType, paymentTypeLabel } = normalizePaymentType(
+            override.paymentType || 'full'
           );
+          const advanceCalc = validateAndComputeAdvance({
+            onlinePriceSnapshot: pricing.onlinePriceSnapshot,
+            quantity: finalQty,
+            paymentType,
+            rawBookingAdvance: override.bookingAdvance,
+            config,
+          });
+          const giftWrap = normalizeGiftWrap(override.giftWrap);
+          const specialSuggestion = sanitizeNotes(
+            override.specialSuggestion,
+            config.maxSpecialSuggestionLength
+          );
+          const expectedDeliveryDate = validateFutureDeliveryDate(
+            override.expectedDeliveryDate,
+            now,
+            config.timezoneOffsetMinutes
+          );
+          const preferredCourierAgent = validatePreferredCourierAgent(
+            override.preferredCourierAgent || 'India Post',
+            config.defaultCourierAgents
+          );
+          const candidateAddress =
+            override.deliveryAddress ??
+            override.shippingAddress ??
+            params.deliveryAddress ??
+            params.shippingAddress;
+          const addrNorm = normalizeDeliveryAddress(candidateAddress);
+
+          const nextPaymentStatus: PreorderPaymentStatus =
+            paymentType === 'full' || advanceCalc.remainingBalance <= 0
+              ? 'paid'
+              : 'partially_paid';
+
+          const rawIdemKey = String(
+            override.idempotencyKey || `chk_${checkoutReference}_${preorderId}`
+          ).trim();
+          const idemDocId = `${userId}__${rawIdemKey}`;
+          const idemRef = adminDb.collection(COLLECTIONS.IDEMPOTENCY).doc(idemDocId);
+
+          const imageUrl =
+            productData.imageUrl ||
+            productData.image ||
+            (Array.isArray(productData.images) && productData.images.length > 0
+              ? productData.images[0]
+              : null) ||
+            null;
+
+          const createdRecord = {
+            preorderId,
+            userId,
+            customerId: String(override.customerId || params.customerId || userId),
+            customerDisplayName: String(
+              override.customerDisplayName ||
+                params.customerDisplayName ||
+                'LeafyEarth Customer'
+            ),
+            productId: String(override.productId),
+            productNameSnapshot: String(productData.name || override.productName || ''),
+            skuSnapshot: String(productData.sku || ''),
+            packingSizeSnapshot: String(productData.packingSize || productData.unit || ''),
+            imageUrlSnapshot: imageUrl ? String(imageUrl) : null,
+            quantity: finalQty,
+            onlinePriceSnapshot: pricing.onlinePriceSnapshot,
+            mrpSnapshot: pricing.mrpSnapshot,
+            gstPercentageSnapshot: pricing.gstPercentageSnapshot,
+            totalProductValue: advanceCalc.totalProductValue,
+            paymentType,
+            paymentTypeLabel,
+            bookingAdvance: advanceCalc.bookingAdvance,
+            remainingBalance: advanceCalc.remainingBalance,
+            giftWrap,
+            specialSuggestion,
+            expectedDeliveryDate,
+            preferredCourierAgent,
+            ...addrNorm,
+            currency: config.currency,
+            bookingStatus: 'confirmed' as PreorderBookingStatus,
+            status: 'confirmed' as PreorderBookingStatus,
+            paymentStatus: nextPaymentStatus,
+            paymentReference,
+            checkoutReference,
+            invoiceId: params.invoiceId || checkoutReference,
+            idempotencyKey: rawIdemKey,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          };
+
+          const dto = toBookingDto(createdRecord);
+
+          // Write to `preorders`, `preorder_idempotency`, and `preorder_events` ONLY now that payment succeeded
+          tx.set(preorderRefs[i], createdRecord);
+          tx.set(idemRef, {
+            preorderId,
+            userId,
+            idempotencyKey: rawIdemKey,
+            checkoutReference,
+            paymentReference,
+            createdAt: nowIso,
+          });
+
+          const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
+          const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+          tx.set(eventRef, {
+            eventId,
+            preorderId,
+            actorId: userId || dto.userId,
+            actorRole: 'system',
+            eventType: 'preorder.payment_confirmed',
+            oldStatus: null,
+            newStatus: 'confirmed',
+            paymentStatus: nextPaymentStatus,
+            paymentReference,
+            checkoutReference,
+            productId: dto.productId,
+            productName: dto.productNameSnapshot,
+            quantity: dto.quantity,
+            paymentType: dto.paymentType,
+            bookingAdvance: dto.bookingAdvance,
+            remainingBalance: dto.remainingBalance,
+            totalProductValue: dto.totalProductValue,
+            expectedDeliveryDate: dto.expectedDeliveryDate,
+            preferredCourierAgent: dto.preferredCourierAgent,
+            deliveryAddress: addrNorm.deliveryAddress,
+            occurredAt: nowIso,
+          });
+
+          totalPreorderAdvance = roundMoney(totalPreorderAdvance + dto.bookingAdvance);
+          allocations.push({
+            preorderId: dto.preorderId,
+            productId: dto.productId,
+            productName: dto.productNameSnapshot,
+            quantity: dto.quantity,
+            onlinePriceSnapshot: dto.onlinePriceSnapshot,
+            totalProductValue: dto.totalProductValue,
+            paymentType: dto.paymentType,
+            paymentTypeLabel: dto.paymentTypeLabel,
+            bookingAdvance: dto.bookingAdvance,
+            remainingBalance: dto.remainingBalance,
+            giftWrap: dto.giftWrap,
+            specialSuggestion: dto.specialSuggestion,
+            expectedDeliveryDate: dto.expectedDeliveryDate,
+            preferredCourierAgent: dto.preferredCourierAgent,
+          });
+          updatedBookings.push(dto);
+          continue;
         }
+
         const data = snap.data() || {};
         const baseDto = toBookingDto(data);
-        const override = (params.preorderItemOverrides || []).find(
-          (o) => String(o.preorderId || '') === preorderId
-        );
         const isBalancePayment = Boolean(override?.isBalancePayment);
         const finalQty =
           !isBalancePayment &&
@@ -859,12 +1379,29 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             ? 'paid'
             : 'partially_paid';
 
+        const candidateAddress =
+          override?.deliveryAddress ??
+          override?.shippingAddress ??
+          params.deliveryAddress ??
+          params.shippingAddress;
+        const addrNorm =
+          candidateAddress !== undefined
+            ? normalizeDeliveryAddress(candidateAddress)
+            : normalizeDeliveryAddress(data.deliveryAddress ?? data.shippingAddress ?? data);
+
+        const rawIdemKey = String(
+          data.idempotencyKey || override?.idempotencyKey || `chk_${checkoutReference}_${preorderId}`
+        ).trim();
+        const idemDocId = `${userId || baseDto.userId}__${rawIdemKey}`;
+        const idemRef = adminDb.collection(COLLECTIONS.IDEMPOTENCY).doc(idemDocId);
+
         const updatedRecord = {
           ...data,
           quantity: finalQty,
           totalProductValue: advanceCalc.totalProductValue,
           bookingAdvance: advanceCalc.bookingAdvance,
           remainingBalance: advanceCalc.remainingBalance,
+          ...addrNorm,
           bookingStatus: (data.bookingStatus && data.bookingStatus !== 'pending_payment'
             ? data.bookingStatus
             : 'confirmed') as PreorderBookingStatus,
@@ -881,11 +1418,24 @@ export function createPreorderService(deps: PreorderServiceDeps) {
               }
             : {}),
           invoiceId: data.invoiceId || params.invoiceId || checkoutReference,
+          idempotencyKey: rawIdemKey,
           updatedAt: nowIso,
         };
         const dto = toBookingDto(updatedRecord);
 
         tx.set(preorderRefs[i], updatedRecord, { merge: true });
+        tx.set(
+          idemRef,
+          {
+            preorderId,
+            userId: userId || dto.userId,
+            idempotencyKey: rawIdemKey,
+            checkoutReference: updatedRecord.checkoutReference,
+            paymentReference,
+            createdAt: data.createdAt || nowIso,
+          },
+          { merge: true }
+        );
 
         const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
         const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
@@ -904,6 +1454,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
           checkoutReference,
           bookingAdvance: isBalancePayment ? balancePaidAmount : dto.bookingAdvance,
           remainingBalance: dto.remainingBalance,
+          deliveryAddress: addrNorm.deliveryAddress,
           occurredAt: nowIso,
         });
 
@@ -958,23 +1509,47 @@ export function createPreorderService(deps: PreorderServiceDeps) {
 
   /**
    * 5. Record Failed / Cancelled Checkout Payment (Section 12).
-   * Ensures failed or cancelled payments NEVER mark pre-order bookings as confirmed or paid.
+   * - Restricted: NEVER writes or adds records to `preorders` or `preorder_idempotency` when payment
+   *   generation or payment verification is cancelled or failed.
+   * - Updates/writes the cancelled or failed payment details into `preorder_events`.
    */
   async function failPreorderPaymentsForCheckout(params: {
     checkoutReference: string;
     paymentReference?: string | null;
     userId: string;
     regularSalesAmount?: number;
-    preorderIds: string[];
+    preorderIds?: string[];
+    preorderItems?: Array<Record<string, any>>;
+    outcome?: 'cancelled' | 'failed';
     reason?: string;
-  }): Promise<{ bookings: PreorderBookingDto[] }> {
+    deliveryAddress?: unknown;
+    shippingAddress?: unknown;
+  }): Promise<{ bookings: PreorderBookingDto[]; events: Array<Record<string, any>> }> {
     const checkoutReference = String(params.checkoutReference || '').trim();
+    const rawItems = Array.isArray(params.preorderItems) ? params.preorderItems : [];
     const uniquePreorderIds = Array.from(
-      new Set((params.preorderIds || []).map((id) => String(id || '').trim()).filter(Boolean))
+      new Set(
+        [
+          ...(params.preorderIds || []),
+          ...rawItems.map((it) => it?.preorderId || it?.bookingReference),
+        ]
+          .map((id) => String(id || '').trim())
+          .filter(Boolean)
+      )
     );
-    if (!checkoutReference || uniquePreorderIds.length === 0) {
-      return { bookings: [] };
+    if (!checkoutReference || (uniquePreorderIds.length === 0 && rawItems.length === 0)) {
+      return { bookings: [], events: [] };
     }
+
+    const outcome: 'cancelled' | 'failed' =
+      params.outcome === 'cancelled' ||
+      String(params.reason || '')
+        .toLowerCase()
+        .includes('cancel')
+        ? 'cancelled'
+        : 'failed';
+    const eventType =
+      outcome === 'cancelled' ? 'preorder.payment_cancelled' : 'preorder.payment_failed';
 
     const allocRef = adminDb.collection(COLLECTIONS.PAYMENT_ALLOCATIONS).doc(checkoutReference);
 
@@ -983,41 +1558,119 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       const preorderRefs = uniquePreorderIds.map((id) =>
         adminDb.collection(COLLECTIONS.PREORDERS).doc(id)
       );
-      const preorderSnaps = await Promise.all(preorderRefs.map((ref) => tx.get(ref)));
+      const preorderSnaps =
+        preorderRefs.length > 0
+          ? await Promise.all(preorderRefs.map((ref) => tx.get(ref)))
+          : [];
 
-      // Never downgrade an already confirmed/paid booking
+      // Never downgrade an already confirmed/paid checkout allocation
       if (allocSnap.exists && allocSnap.data()?.paymentStatus === 'paid') {
         return {
           bookings: preorderSnaps
             .filter((s) => s.exists)
             .map((s) => toBookingDto(s.data() || {})),
+          events: [],
         };
       }
 
       const nowIso = getNow().toISOString();
-      const updatedBookings: PreorderBookingDto[] = [];
+      const existingBookings: PreorderBookingDto[] = [];
+      const recordedEvents: Array<Record<string, any>> = [];
       let totalPreorderAdvance = 0;
 
-      for (let i = 0; i < uniquePreorderIds.length; i++) {
+      const addrNorm = normalizeDeliveryAddress(
+        params.deliveryAddress ?? params.shippingAddress
+      );
+
+      const itemCount = Math.max(uniquePreorderIds.length, rawItems.length);
+      for (let i = 0; i < itemCount; i++) {
+        const preorderId =
+          uniquePreorderIds[i] ||
+          String(
+            rawItems[i]?.preorderId ||
+              rawItems[i]?.bookingReference ||
+              `po_${checkoutReference}_${i + 1}`
+          ).trim();
         const snap = preorderSnaps[i];
-        if (!snap.exists) continue;
-        const data = snap.data() || {};
-        if (data.paymentStatus === 'paid' || data.paymentStatus === 'partially_paid') {
-          updatedBookings.push(toBookingDto(data));
-          continue;
+        const rawItem =
+          rawItems.find(
+            (it) => String(it?.preorderId || it?.bookingReference || '') === preorderId
+          ) ||
+          rawItems[i] ||
+          {};
+
+        let dto: PreorderBookingDto | null = null;
+        if (snap && snap.exists) {
+          dto = toBookingDto(snap.data() || {});
+          existingBookings.push(dto);
         }
-        const updatedRecord = {
-          ...data,
-          bookingStatus: 'pending_payment' as PreorderBookingStatus,
-          status: 'pending_payment' as PreorderBookingStatus,
-          paymentStatus: 'failed' as PreorderPaymentStatus,
+
+        const itemAdvance = roundMoney(
+          Number(rawItem.bookingAdvance ?? dto?.bookingAdvance ?? 0)
+        );
+        const itemRemainingBalance = roundMoney(
+          Number(rawItem.remainingBalance ?? dto?.remainingBalance ?? 0)
+        );
+        const itemTotalValue = roundMoney(
+          Number(rawItem.totalProductValue ?? dto?.totalProductValue ?? 0)
+        );
+        const itemQty = Math.max(1, Number(rawItem.quantity ?? dto?.quantity ?? 1));
+        const itemAddressNorm =
+          rawItem.deliveryAddress || rawItem.shippingAddress
+            ? normalizeDeliveryAddress(rawItem.deliveryAddress ?? rawItem.shippingAddress)
+            : addrNorm;
+
+        totalPreorderAdvance = roundMoney(totalPreorderAdvance + itemAdvance);
+
+        const cleanRef = checkoutReference.replace(/[^a-zA-Z0-9_-]/g, '');
+        const cleanPoId = preorderId.replace(/[^a-zA-Z0-9_-]/g, '');
+        const eventId = `poe_${cleanRef}_${cleanPoId}`;
+        const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+        const eventPayload = {
+          eventId,
+          preorderId,
           checkoutReference,
+          paymentReference: params.paymentReference || null,
+          actorId: params.userId,
+          actorRole: 'customer',
+          eventType,
+          outcome,
+          paymentStatus: outcome,
+          bookingStatus: dto ? dto.bookingStatus : 'unconfirmed',
+          reason: sanitizeNotes(
+            params.reason ||
+              (outcome === 'cancelled'
+                ? 'Payment generation or checkout cancelled by user.'
+                : 'Payment generation or verification failed.'),
+            300
+          ),
+          productId: String(rawItem.productId || rawItem.id || dto?.productId || ''),
+          productName: String(
+            rawItem.productName || rawItem.name || dto?.productNameSnapshot || ''
+          ),
+          quantity: itemQty,
+          paymentType: String(rawItem.paymentType || dto?.paymentType || 'full'),
+          bookingAdvance: itemAdvance,
+          remainingBalance: itemRemainingBalance,
+          totalProductValue: itemTotalValue,
+          giftWrap: Boolean(rawItem.giftWrap ?? dto?.giftWrap ?? false),
+          specialSuggestion: sanitizeNotes(
+            rawItem.specialSuggestion ?? dto?.specialSuggestion ?? '',
+            config.maxSpecialSuggestionLength
+          ),
+          expectedDeliveryDate: String(
+            rawItem.expectedDeliveryDate || dto?.expectedDeliveryDate || ''
+          ),
+          preferredCourierAgent: String(
+            rawItem.preferredCourierAgent || dto?.preferredCourierAgent || ''
+          ),
+          deliveryAddress: itemAddressNorm.deliveryAddress ?? dto?.deliveryAddress ?? null,
+          occurredAt: nowIso,
           updatedAt: nowIso,
         };
-        tx.set(preorderRefs[i], updatedRecord, { merge: true });
-        const dto = toBookingDto(updatedRecord);
-        totalPreorderAdvance = roundMoney(totalPreorderAdvance + dto.bookingAdvance);
-        updatedBookings.push(dto);
+
+        tx.set(eventRef, eventPayload, { merge: true });
+        recordedEvents.push(eventPayload);
       }
 
       const regularSalesAmount = roundMoney(Math.max(0, Number(params.regularSalesAmount || 0)));
@@ -1032,6 +1685,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
           totalPreorderAdvance,
           customerGrandTotalPayable: roundMoney(regularSalesAmount + totalPreorderAdvance),
           paymentStatus: 'failed' as PreorderPaymentStatus,
+          outcome,
           preorderIds: uniquePreorderIds,
           failureReason: sanitizeNotes(params.reason, 300),
           createdAt: allocSnap.exists
@@ -1042,7 +1696,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
         { merge: true }
       );
 
-      return { bookings: updatedBookings };
+      return { bookings: existingBookings, events: recordedEvents };
     });
   }
 
@@ -1270,6 +1924,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
     listEligibleProducts,
     listCourierAgents,
     createPreorder,
+    updatePreorderDetails,
     confirmPreorderPaymentsForCheckout,
     failPreorderPaymentsForCheckout,
     getPreorderById,

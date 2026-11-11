@@ -3023,32 +3023,55 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
   }
 
   // Confirm Pre-Order Bookings & Record Payment Allocation (Section 8.3 & Section 12)
+  // Restricted: Records in `preorders`, `preorder_idempotency`, and `preorder_events` are created ONLY here after successful payment!
   if (preorderItemsInput.length > 0) {
     try {
-      const resolvedPreorderIds: string[] = [];
       const userId = String(tx.orderPayload?.customerId || tx.customerId || '').trim();
       const customerName = String(tx.orderPayload?.customerName || tx.customerName || 'LeafyEarth Customer').trim();
+      const checkoutDeliveryAddress =
+        tx.orderPayload?.shippingAddress ||
+        tx.orderPayload?.deliveryAddress ||
+        tx.shippingAddress ||
+        null;
 
-      for (const poItem of preorderItemsInput) {
-        if (poItem.preorderId) {
-          resolvedPreorderIds.push(String(poItem.preorderId));
-        } else {
-          const created = await preorderService.createPreorder({
-            userId,
-            customerId: userId,
-            customerDisplayName: customerName,
-            productId: String(poItem.productId || poItem.id || ''),
-            quantity: Number(poItem.quantity || 1),
-            paymentType: poItem.paymentType || 'full',
-            bookingAdvance: poItem.bookingAdvance,
-            giftWrap: Boolean(poItem.giftWrap),
-            specialSuggestion: poItem.specialSuggestion || '',
-            expectedDeliveryDate: poItem.expectedDeliveryDate,
-            preferredCourierAgent: poItem.preferredCourierAgent || 'Standard Courier',
-            idempotencyKey: `chk_${tx.id}_${poItem.productId || poItem.id}`,
-          });
-          resolvedPreorderIds.push(created.booking.preorderId);
-        }
+      const resolvedPreorderIds: string[] = [];
+      const preparedOverrides: any[] = [];
+
+      for (let idx = 0; idx < preorderItemsInput.length; idx++) {
+        const poItem = preorderItemsInput[idx];
+        const itemProductId = String(poItem.productId || poItem.id || '').trim();
+        const itemIdemKey = String(
+          poItem.idempotencyKey || `chk_${tx.id || tx.orderId}_${itemProductId}_${idx}`
+        ).trim();
+        const resolvedId = poItem.preorderId
+          ? String(poItem.preorderId)
+          : `po_${crypto
+              .createHash('sha256')
+              .update(`${userId}__${itemIdemKey}`)
+              .digest('hex')
+              .slice(0, 24)}`;
+
+        resolvedPreorderIds.push(resolvedId);
+        preparedOverrides.push({
+          preorderId: resolvedId,
+          productId: itemProductId,
+          productName: String(poItem.productName || poItem.name || ''),
+          quantity: Number(poItem.quantity || 1),
+          paymentType: poItem.paymentType || 'full',
+          bookingAdvance: Number(poItem.bookingAdvance || 0),
+          giftWrap: Boolean(poItem.giftWrap),
+          specialSuggestion: poItem.specialSuggestion || '',
+          expectedDeliveryDate: poItem.expectedDeliveryDate,
+          preferredCourierAgent: poItem.preferredCourierAgent || 'India Post',
+          idempotencyKey: itemIdemKey,
+          customerId: userId,
+          customerDisplayName: customerName,
+          deliveryAddress: poItem.deliveryAddress || poItem.shippingAddress || checkoutDeliveryAddress,
+          isBalancePayment: Boolean(
+            poItem.isPreorderBalancePayment ||
+              String(poItem.paymentType || '').toLowerCase() === 'balance'
+          ),
+        });
       }
 
       if (!order && resolvedPreorderIds.length > 0) {
@@ -3065,21 +3088,14 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
           checkoutReference: String(tx.id || tx.orderId),
           paymentReference: String(tx.transactionReference || tx.razorpayPaymentId || tx.id),
           userId,
+          customerId: userId,
+          customerDisplayName: customerName,
           regularSalesOrderId: order ? String(order.id) : null,
           regularSalesAmount: order ? Number(order.totalValue || 0) : 0,
           preorderIds: resolvedPreorderIds,
+          deliveryAddress: checkoutDeliveryAddress,
           invoiceId: generatedInvoiceId,
-          preorderItemOverrides: preorderItemsInput
-            .filter((p: any) => p.preorderId)
-            .map((p: any) => ({
-              preorderId: String(p.preorderId),
-              quantity: Number(p.quantity || 1),
-              bookingAdvance: Number(p.bookingAdvance || 0),
-              isBalancePayment: Boolean(
-                p.isPreorderBalancePayment ||
-                  String(p.paymentType || '').toLowerCase() === 'balance'
-              ),
-            })),
+          preorderItemOverrides: preparedOverrides,
         });
       }
     } catch (poErr) {
@@ -3426,7 +3442,7 @@ export async function calculateGSTForOrderItems(
     const specialSuggestion = sanitizePreorderNotes(item.specialSuggestion, 500);
     const expectedDeliveryDate = validateFutureDeliveryDate(item.expectedDeliveryDate);
     const preferredCourierAgent = validatePreferredCourierAgent(
-      item.preferredCourierAgent || 'Standard Courier'
+      item.preferredCourierAgent || 'India Post'
     );
 
     totalPreorderBookingAdvance = roundPreorderMoney(
@@ -3892,11 +3908,26 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
     const finalAmount = gstCalc.customerGrandTotalPayable;
     const amountInPaise = Math.round(finalAmount * 100);
     const transactionId = orderData.id;
+    const checkoutDeliveryAddress = orderData.shippingAddress || orderData.deliveryAddress || null;
+    const preorderItemsForCheckout = Array.isArray(gstCalc.preorderItems) ? gstCalc.preorderItems : [];
+    const preorderIdsForCheckout = preorderItemsForCheckout.map((p: any) => p.preorderId).filter(Boolean);
 
     const { keyId, keySecret } = await getRazorpayCredentials('Live');
 
     if (!keyId || keyId.length < 5 || !keySecret || keySecret.length < 5) {
       console.error("[Razorpay API] Invalid or missing live Razorpay credentials.");
+      if (preorderItemsForCheckout.length > 0) {
+        await preorderService.failPreorderPaymentsForCheckout({
+          checkoutReference: String(transactionId),
+          userId: String(authenticatedUser.uid),
+          regularSalesAmount: Number(gstCalc.regularInvoiceGrandTotal || 0),
+          preorderIds: preorderIdsForCheckout,
+          preorderItems: preorderItemsForCheckout,
+          outcome: 'failed',
+          deliveryAddress: checkoutDeliveryAddress,
+          reason: 'Razorpay Payment Gateway live credentials not configured during payment generation.',
+        }).catch(() => {});
+      }
       return res.status(400).json({
         error: "Razorpay Payment Gateway live credentials not configured. Please set RAZORPAY_LIVE_KEY_ID and RAZORPAY_LIVE_KEY_SECRET in Google Cloud Secret Manager or environment variables."
       });
@@ -3929,12 +3960,36 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
       } else {
         const errText = await rzpResponse.text();
         console.error("[Razorpay API] Error creating Razorpay Order from API:", rzpResponse.status, errText);
+        if (preorderItemsForCheckout.length > 0) {
+          await preorderService.failPreorderPaymentsForCheckout({
+            checkoutReference: String(transactionId),
+            userId: String(authenticatedUser.uid),
+            regularSalesAmount: Number(gstCalc.regularInvoiceGrandTotal || 0),
+            preorderIds: preorderIdsForCheckout,
+            preorderItems: preorderItemsForCheckout,
+            outcome: 'failed',
+            deliveryAddress: checkoutDeliveryAddress,
+            reason: `Razorpay Order creation failed (${rzpResponse.status}): ${errText}`,
+          }).catch(() => {});
+        }
         return res.status(rzpResponse.status).json({
           error: `Razorpay Order creation failed (${rzpResponse.status}): ${errText}`
         });
       }
     } catch (rzpErr: any) {
       console.error("[Razorpay API] Exception creating Razorpay Order:", rzpErr);
+      if (preorderItemsForCheckout.length > 0) {
+        await preorderService.failPreorderPaymentsForCheckout({
+          checkoutReference: String(transactionId),
+          userId: String(authenticatedUser.uid),
+          regularSalesAmount: Number(gstCalc.regularInvoiceGrandTotal || 0),
+          preorderIds: preorderIdsForCheckout,
+          preorderItems: preorderItemsForCheckout,
+          outcome: 'failed',
+          deliveryAddress: checkoutDeliveryAddress,
+          reason: `Razorpay API connection error: ${rzpErr.message}`,
+        }).catch(() => {});
+      }
       return res.status(500).json({ error: `Razorpay API connection error: ${rzpErr.message}` });
     }
 
@@ -3951,7 +4006,8 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
       regularSalesAmount: gstCalc.regularInvoiceGrandTotal,
       totalPreorderBookingAdvance: gstCalc.totalPreorderBookingAdvance,
       customerGrandTotalPayable: gstCalc.customerGrandTotalPayable,
-      preorderIds: (gstCalc.preorderItems || []).map((p: any) => p.preorderId).filter(Boolean),
+      preorderIds: preorderIdsForCheckout,
+      preorderItems: preorderItemsForCheckout,
       amountPaise: amountInPaise,
       currency: "INR",
       status: "PAYMENT_CREATED",
@@ -3975,6 +4031,9 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
     };
 
     await saveCollectionDoc('payments', tx);
+
+    // Note: Do NOT add or update records in `preorders`, `preorder_idempotency`, or `preorder_events` here.
+    // Persistence is restricted to `finalizeSuccessfulPayment` after payment verification succeeds.
 
     return res.json({
       success: true,
@@ -4176,30 +4235,47 @@ async function handleCreateCodOrder(req: any, res: any) {
 
     if (preorderProductsList.length > 0) {
       try {
-        const resolvedPreorderIds: string[] = [];
         const userId = String(authenticatedUser?.uid || orderData.customerId || '').trim();
         const customerName = String(orderData.customerName || 'LeafyEarth Customer').trim();
+        const codDeliveryAddress = orderData.shippingAddress || orderData.deliveryAddress || null;
+        const resolvedPreorderIds: string[] = [];
+        const preparedOverrides: any[] = [];
 
-        for (const poItem of preorderProductsList) {
-          if (poItem.preorderId) {
-            resolvedPreorderIds.push(String(poItem.preorderId));
-          } else {
-            const created = await preorderService.createPreorder({
-              userId,
-              customerId: userId,
-              customerDisplayName: customerName,
-              productId: String(poItem.productId || poItem.id || ''),
-              quantity: Number(poItem.quantity || 1),
-              paymentType: poItem.paymentType || 'full',
-              bookingAdvance: poItem.bookingAdvance,
-              giftWrap: Boolean(poItem.giftWrap),
-              specialSuggestion: poItem.specialSuggestion || '',
-              expectedDeliveryDate: poItem.expectedDeliveryDate,
-              preferredCourierAgent: poItem.preferredCourierAgent || 'Standard Courier',
-              idempotencyKey: `cod_${transactionId}_${poItem.productId || poItem.id}`,
-            });
-            resolvedPreorderIds.push(created.booking.preorderId);
-          }
+        for (let idx = 0; idx < preorderProductsList.length; idx++) {
+          const poItem = preorderProductsList[idx];
+          const itemProductId = String(poItem.productId || poItem.id || '').trim();
+          const itemIdemKey = String(
+            poItem.idempotencyKey || `cod_${transactionId}_${itemProductId}_${idx}`
+          ).trim();
+          const resolvedId = poItem.preorderId
+            ? String(poItem.preorderId)
+            : `po_${crypto
+                .createHash('sha256')
+                .update(`${userId}__${itemIdemKey}`)
+                .digest('hex')
+                .slice(0, 24)}`;
+
+          resolvedPreorderIds.push(resolvedId);
+          preparedOverrides.push({
+            preorderId: resolvedId,
+            productId: itemProductId,
+            productName: String(poItem.productName || poItem.name || ''),
+            quantity: Number(poItem.quantity || 1),
+            paymentType: poItem.paymentType || 'full',
+            bookingAdvance: Number(poItem.bookingAdvance || 0),
+            giftWrap: Boolean(poItem.giftWrap),
+            specialSuggestion: poItem.specialSuggestion || '',
+            expectedDeliveryDate: poItem.expectedDeliveryDate,
+            preferredCourierAgent: poItem.preferredCourierAgent || 'India Post',
+            idempotencyKey: itemIdemKey,
+            customerId: userId,
+            customerDisplayName: customerName,
+            deliveryAddress: poItem.deliveryAddress || poItem.shippingAddress || codDeliveryAddress,
+            isBalancePayment: Boolean(
+              poItem.isPreorderBalancePayment ||
+                String(poItem.paymentType || '').toLowerCase() === 'balance'
+            ),
+          });
         }
 
         let codInvoiceId: string | null = order ? `INV-${order.orderNumber || order.id}` : null;
@@ -4213,21 +4289,14 @@ async function handleCreateCodOrder(req: any, res: any) {
             checkoutReference: String(transactionId),
             paymentReference: `COD-${transactionId}`,
             userId,
+            customerId: userId,
+            customerDisplayName: customerName,
             regularSalesOrderId: order ? String(order.id) : null,
             regularSalesAmount: order ? Number(order.totalValue || 0) : 0,
             preorderIds: resolvedPreorderIds,
+            deliveryAddress: codDeliveryAddress,
             invoiceId: codInvoiceId,
-            preorderItemOverrides: preorderProductsList
-              .filter((p: any) => p.preorderId)
-              .map((p: any) => ({
-                preorderId: String(p.preorderId),
-                quantity: Number(p.quantity || 1),
-                bookingAdvance: Number(p.bookingAdvance || 0),
-                isBalancePayment: Boolean(
-                  p.isPreorderBalancePayment ||
-                    String(p.paymentType || '').toLowerCase() === 'balance'
-                ),
-              })),
+            preorderItemOverrides: preparedOverrides,
           });
         }
       } catch (poErr) {
@@ -4255,6 +4324,133 @@ app.post("/api/orders", (req: any, res: any, next: any) => {
     return handleCreateCodOrder(req, res);
   }
   next();
+});
+
+async function recordPreorderFailureOrCancellationForTx(
+  tx: any,
+  userId: string,
+  outcome: 'cancelled' | 'failed',
+  reason: string,
+  paymentReference?: string | null
+) {
+  if (!tx) return;
+  const rawProducts = Array.isArray(tx.orderPayload?.products) ? tx.orderPayload.products : [];
+  const preorderItems =
+    Array.isArray(tx.preorderItems) && tx.preorderItems.length > 0
+      ? tx.preorderItems
+      : rawProducts.filter((p: any) => Boolean(p?.isPreorder));
+  const preorderIds = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(tx.preorderIds) ? tx.preorderIds : []),
+        ...preorderItems.map((p: any) => p?.preorderId || p?.bookingReference),
+      ]
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    )
+  );
+  if (preorderIds.length === 0 && preorderItems.length === 0) return;
+
+  const deliveryAddress =
+    tx.orderPayload?.shippingAddress ||
+    tx.orderPayload?.deliveryAddress ||
+    tx.shippingAddress ||
+    null;
+
+  await preorderService
+    .failPreorderPaymentsForCheckout({
+      checkoutReference: String(tx.id || tx.orderId || ''),
+      paymentReference: paymentReference || tx.transactionReference || tx.razorpayPaymentId || null,
+      userId: String(userId || tx.orderPayload?.customerId || tx.customerId || ''),
+      regularSalesAmount: Number(tx.regularSalesAmount || 0),
+      preorderIds,
+      preorderItems,
+      outcome,
+      deliveryAddress,
+      reason,
+    })
+    .catch((err) => {
+      console.warn('[Preorder Failure/Cancel Event Warning]:', err?.message || err);
+    });
+}
+
+app.post("/api/payment/razorpay/outcome", async (req: any, res: any) => {
+  try {
+    const { transactionId, razorpay_order_id, razorpay_payment_id, outcome, reason } = req.body || {};
+    if (!transactionId && !razorpay_order_id) {
+      return res.status(400).json({ error: "Missing transactionId or razorpay_order_id" });
+    }
+
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) {
+      return res.status(401).json({ error: "Authenticated customer required" });
+    }
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find(
+      (p: any) =>
+        (transactionId && p.id === transactionId) ||
+        (razorpay_order_id && p.razorpayOrderId === razorpay_order_id)
+    );
+    if (!tx) {
+      return res.status(404).json({ error: "Payment transaction record not found" });
+    }
+
+    if (
+      tx.orderPayload?.customerId &&
+      tx.orderPayload.customerId !== authenticatedUser.uid &&
+      tx.customerId !== authenticatedUser.uid
+    ) {
+      return res.status(403).json({ error: "Payment transaction does not belong to authenticated user" });
+    }
+
+    if (tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success') {
+      return res.json({ success: true, transactionId: tx.id, status: 'Success' });
+    }
+
+    const normalizedOutcome: 'cancelled' | 'failed' =
+      String(outcome || '').toLowerCase() === 'cancelled' ? 'cancelled' : 'failed';
+    const nextStatus = normalizedOutcome === 'cancelled' ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+    const cleanReason = String(
+      reason ||
+        (normalizedOutcome === 'cancelled'
+          ? 'Payment cancelled by customer during Razorpay checkout.'
+          : 'Payment failed during Razorpay checkout.')
+    ).trim();
+
+    tx.status = nextStatus;
+    tx.logs = Array.isArray(tx.logs) ? tx.logs : [];
+    tx.logs.push({
+      timestamp: new Date().toISOString(),
+      action: nextStatus,
+      details: cleanReason,
+    });
+    tx.statusHistory = Array.isArray(tx.statusHistory) ? tx.statusHistory : [];
+    tx.statusHistory.push({
+      status: nextStatus,
+      timestamp: new Date().toISOString(),
+      note: cleanReason,
+    });
+    tx.updatedAt = new Date().toISOString();
+    await saveCollectionDoc('payments', tx);
+
+    await recordPreorderFailureOrCancellationForTx(
+      tx,
+      String(authenticatedUser.uid),
+      normalizedOutcome,
+      cleanReason,
+      razorpay_payment_id || null
+    );
+
+    return res.json({
+      success: true,
+      transactionId: tx.id,
+      status: nextStatus,
+      outcome: normalizedOutcome,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to record payment outcome" });
+  }
 });
 
 app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
@@ -4297,6 +4493,13 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
         details: 'Missing Razorpay signature parameters or secret.'
       });
       await saveCollectionDoc('payments', tx);
+      await recordPreorderFailureOrCancellationForTx(
+        tx,
+        String(authenticatedUser.uid),
+        'failed',
+        'Missing Razorpay signature parameters or secret.',
+        razorpay_payment_id || null
+      );
       return res.status(400).json({ error: "Invalid or incomplete Razorpay payment signature parameters" });
     }
 
@@ -4313,16 +4516,13 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
         details: 'Razorpay HMAC signature mismatch.'
       });
       await saveCollectionDoc('payments', tx);
-      if (Array.isArray(tx.preorderIds) && tx.preorderIds.length > 0) {
-        await preorderService.failPreorderPaymentsForCheckout({
-          checkoutReference: String(tx.id),
-          paymentReference: razorpay_payment_id,
-          userId: String(authenticatedUser.uid),
-          regularSalesAmount: Number(tx.regularSalesAmount || 0),
-          preorderIds: tx.preorderIds,
-          reason: 'Razorpay signature verification failed',
-        }).catch(() => {});
-      }
+      await recordPreorderFailureOrCancellationForTx(
+        tx,
+        String(authenticatedUser.uid),
+        'failed',
+        'Razorpay signature verification failed',
+        razorpay_payment_id
+      );
       return res.status(400).json({ error: "Invalid Razorpay payment signature" });
     }
 
@@ -4348,16 +4548,13 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
             details: `S2S payment status verification failed. Status: ${paymentEntity.status}`
           });
           await saveCollectionDoc('payments', tx);
-          if (Array.isArray(tx.preorderIds) && tx.preorderIds.length > 0) {
-            await preorderService.failPreorderPaymentsForCheckout({
-              checkoutReference: String(tx.id),
-              paymentReference: razorpay_payment_id,
-              userId: String(authenticatedUser.uid),
-              regularSalesAmount: Number(tx.regularSalesAmount || 0),
-              preorderIds: tx.preorderIds,
-              reason: `S2S payment verification failed (${paymentEntity.status})`,
-            }).catch(() => {});
-          }
+          await recordPreorderFailureOrCancellationForTx(
+            tx,
+            String(authenticatedUser.uid),
+            'failed',
+            `S2S payment verification failed (${paymentEntity.status})`,
+            razorpay_payment_id
+          );
           // Razorpay-confirmed payment failure: WhatsApp-only template notification.
           sendPaymentOutcomeNotification({ db: adminDb }, 'Failed', String(tx.id || '')).catch(err =>
             console.error('Asynchronous sendPaymentOutcomeNotification failed:', err?.message || err));
@@ -4385,7 +4582,7 @@ app.post("/api/payment/razorpay/verify", async (req: any, res: any) => {
 
     await saveCollectionDoc('payments', tx);
 
-    // Idempotent business processing (Sales Order, Stock deduction, Commissions)
+    // Idempotent business processing (Sales Order, Stock deduction, Commissions, and Pre-Order Creation/Confirmation)
     await finalizeSuccessfulPayment(tx);
 
     return res.json({
@@ -4431,6 +4628,27 @@ app.post("/api/payment/razorpay/webhook", async (req: any, res: any) => {
         await saveCollectionDoc('payments', tx);
         await finalizeSuccessfulPayment(tx);
       }
+    } else if (event === "payment.failed" && payload?.payment?.entity) {
+      const paymentEntity = payload.payment.entity;
+      const orderId = paymentEntity.order_id;
+      const payments = await getCollectionDocs('payments');
+      const tx = payments.find((p: any) => p.razorpayOrderId === orderId || p.id === paymentEntity.notes?.receipt);
+      if (tx && tx.status !== 'Paid' && tx.status !== 'Success') {
+        tx.status = 'PAYMENT_FAILED';
+        tx.logs.push({
+          timestamp: new Date().toISOString(),
+          action: 'WEBHOOK_FAILED',
+          details: `Payment failed event received via Razorpay Webhook. Payment ID: ${paymentEntity.id}`
+        });
+        await saveCollectionDoc('payments', tx);
+        await recordPreorderFailureOrCancellationForTx(
+          tx,
+          String(tx.orderPayload?.customerId || tx.customerId || ''),
+          'failed',
+          paymentEntity.error_description || 'Payment failed via Razorpay webhook',
+          paymentEntity.id
+        );
+      }
     }
 
     return res.json({ status: "ok" });
@@ -4464,6 +4682,16 @@ async function handleRazorpayCallback(req: any, res: any) {
 
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
       console.warn("[Razorpay Callback] Missing payment parameters in callback.");
+      if (tx && tx.status !== 'Paid' && tx.status !== 'Success') {
+        tx.status = 'PAYMENT_CANCELLED';
+        await saveCollectionDoc('payments', tx);
+        await recordPreorderFailureOrCancellationForTx(
+          tx,
+          String(tx.orderPayload?.customerId || tx.customerId || ''),
+          'cancelled',
+          'Payment callback cancelled or missing payment parameters.'
+        );
+      }
       return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=cancelled`);
     }
 
@@ -4471,6 +4699,15 @@ async function handleRazorpayCallback(req: any, res: any) {
 
     if (!keySecret) {
       console.error("[Razorpay Callback] Live key secret not available for verification.");
+      if (tx && tx.status !== 'Paid' && tx.status !== 'Success') {
+        await recordPreorderFailureOrCancellationForTx(
+          tx,
+          String(tx.orderPayload?.customerId || tx.customerId || ''),
+          'failed',
+          'Razorpay callback live key secret not available for verification.',
+          razorpay_payment_id
+        );
+      }
       return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=failed`);
     }
 
@@ -4490,6 +4727,13 @@ async function handleRazorpayCallback(req: any, res: any) {
           details: 'HMAC signature mismatch in Razorpay net banking callback.'
         });
         await saveCollectionDoc('payments', tx);
+        await recordPreorderFailureOrCancellationForTx(
+          tx,
+          String(tx.orderPayload?.customerId || tx.customerId || ''),
+          'failed',
+          'HMAC signature mismatch in Razorpay callback.',
+          razorpay_payment_id
+        );
       }
       return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=failed`);
     }
@@ -4505,6 +4749,15 @@ async function handleRazorpayCallback(req: any, res: any) {
         const pStatus = (paymentEntity.status || '').toString().toLowerCase();
         if (pStatus !== 'captured' && pStatus !== 'authorized') {
           console.error(`[Razorpay Callback] S2S payment status invalid: ${pStatus}`);
+          if (tx) {
+            await recordPreorderFailureOrCancellationForTx(
+              tx,
+              String(tx.orderPayload?.customerId || tx.customerId || ''),
+              'failed',
+              `Razorpay callback S2S payment status invalid: ${pStatus}`,
+              razorpay_payment_id
+            );
+          }
           return res.redirect(303, `/payment-result?txnid=${encodeURIComponent(targetTxnId)}&payment_status=failed`);
         }
       }

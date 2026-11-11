@@ -32,29 +32,27 @@ class PreorderApiClient {
     );
   }
 
+  static const List<String> allowedCourierAgents = [
+    'Amazon Shipping',
+    'Delhivery',
+    'India Post',
+    'DTDC',
+  ];
+
   Future<List<String>> getCourierAgents() async {
     try {
       final res = Map<String, dynamic>.from(
         await _api.get('/api/v1/preorders/couriers'),
       );
+      final allowedLower =
+          allowedCourierAgents.map((e) => e.toLowerCase()).toSet();
       final list = ((res['courierAgents'] as List?) ?? const [])
           .map((e) => '$e'.trim())
-          .where((e) => e.isNotEmpty)
+          .where((e) => e.isNotEmpty && allowedLower.contains(e.toLowerCase()))
           .toList();
       if (list.isNotEmpty) return list;
     } catch (_) {}
-    return const [
-      'India Post',
-      'DTDC',
-      'BlueDart',
-      'Delhivery',
-      'Professional Couriers',
-      'ST Courier',
-      'Trackon',
-      'Ekart',
-      'XpressBees',
-      'Standard Courier',
-    ];
+    return allowedCourierAgents;
   }
 
   Future<({PreorderBooking booking, bool idempotentReplay})> createPreorder({
@@ -67,6 +65,7 @@ class PreorderApiClient {
     required String expectedDeliveryDate,
     required String preferredCourierAgent,
     required String idempotencyKey,
+    Map<String, dynamic>? deliveryAddress,
   }) async {
     final res = Map<String, dynamic>.from(
       await _api.post('/api/v1/preorders', {
@@ -78,6 +77,7 @@ class PreorderApiClient {
         'specialSuggestion': specialSuggestion,
         'expectedDeliveryDate': expectedDeliveryDate,
         'preferredCourierAgent': preferredCourierAgent,
+        if (deliveryAddress != null) 'deliveryAddress': deliveryAddress,
         'idempotencyKey': idempotencyKey,
       }),
     );
@@ -86,6 +86,36 @@ class PreorderApiClient {
           Map<String, dynamic>.from(res['preorder'] as Map)),
       idempotentReplay: res['idempotentReplay'] == true,
     );
+  }
+
+  Future<PreorderBooking> updatePreorder({
+    required String preorderId,
+    Map<String, dynamic>? deliveryAddress,
+    int? quantity,
+    PreorderPaymentOption? paymentOption,
+    double? bookingAdvance,
+    bool? giftWrap,
+    String? specialSuggestion,
+    String? expectedDeliveryDate,
+    String? preferredCourierAgent,
+  }) async {
+    final encoded = Uri.encodeComponent(preorderId);
+    final res = Map<String, dynamic>.from(
+      await _api.post('/api/v1/preorders/$encoded/update', {
+        if (deliveryAddress != null) 'deliveryAddress': deliveryAddress,
+        if (quantity != null) 'quantity': quantity,
+        if (paymentOption != null) 'paymentType': paymentOption.wireValue,
+        if (bookingAdvance != null) 'bookingAdvance': bookingAdvance,
+        if (giftWrap != null) 'giftWrap': giftWrap,
+        if (specialSuggestion != null) 'specialSuggestion': specialSuggestion,
+        if (expectedDeliveryDate != null)
+          'expectedDeliveryDate': expectedDeliveryDate,
+        if (preferredCourierAgent != null)
+          'preferredCourierAgent': preferredCourierAgent,
+      }),
+    );
+    return PreorderBooking.fromJson(
+        Map<String, dynamic>.from(res['preorder'] as Map));
   }
 
   Future<PreorderBooking> getPreorderById(String preorderId) async {

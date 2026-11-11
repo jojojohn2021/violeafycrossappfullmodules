@@ -105,6 +105,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
 
     ref.read(selectedAddressProvider.notifier).state = address;
+
     final hasRegularItems = cart.any((item) => !item.isPreorder);
     final res = hasRegularItems
         ? await ref.read(shoppingRepositoryProvider).getDeliveryCharge(address.pincode)

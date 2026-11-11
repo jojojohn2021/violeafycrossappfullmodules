@@ -26,6 +26,7 @@ class PreorderRepository {
     required String expectedDeliveryDate,
     required String preferredCourierAgent,
     required String idempotencyKey,
+    Map<String, dynamic>? deliveryAddress,
   }) =>
       _apiClient.createPreorder(
         productId: productId,
@@ -37,6 +38,30 @@ class PreorderRepository {
         expectedDeliveryDate: expectedDeliveryDate,
         preferredCourierAgent: preferredCourierAgent,
         idempotencyKey: idempotencyKey,
+        deliveryAddress: deliveryAddress,
+      );
+
+  Future<PreorderBooking> updateBooking({
+    required String preorderId,
+    Map<String, dynamic>? deliveryAddress,
+    int? quantity,
+    PreorderPaymentOption? paymentOption,
+    double? bookingAdvance,
+    bool? giftWrap,
+    String? specialSuggestion,
+    String? expectedDeliveryDate,
+    String? preferredCourierAgent,
+  }) =>
+      _apiClient.updatePreorder(
+        preorderId: preorderId,
+        deliveryAddress: deliveryAddress,
+        quantity: quantity,
+        paymentOption: paymentOption,
+        bookingAdvance: bookingAdvance,
+        giftWrap: giftWrap,
+        specialSuggestion: specialSuggestion,
+        expectedDeliveryDate: expectedDeliveryDate,
+        preferredCourierAgent: preferredCourierAgent,
       );
 
   Future<PreorderBooking> fetchBooking(String preorderId) =>

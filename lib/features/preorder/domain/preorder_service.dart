@@ -10,16 +10,10 @@ class PreorderService {
   PreorderService(this._repository);
 
   static const List<String> defaultCourierAgents = [
+    'Amazon Shipping',
+    'Delhivery',
     'India Post',
     'DTDC',
-    'BlueDart',
-    'Delhivery',
-    'Professional Couriers',
-    'ST Courier',
-    'Trackon',
-    'Ekart',
-    'XpressBees',
-    'Standard Courier',
   ];
 
   /// Strict client-side guard: only products with `preorderactive == true` (Boolean) are eligible.
@@ -84,6 +78,7 @@ class PreorderService {
     required String expectedDeliveryDate,
     required String preferredCourierAgent,
     required String idempotencyKey,
+    Map<String, dynamic>? deliveryAddress,
   }) =>
       _repository.submitPreorder(
         productId: productId,
@@ -95,6 +90,30 @@ class PreorderService {
         expectedDeliveryDate: expectedDeliveryDate,
         preferredCourierAgent: preferredCourierAgent,
         idempotencyKey: idempotencyKey,
+        deliveryAddress: deliveryAddress,
+      );
+
+  Future<PreorderBooking> updatePreorderBooking({
+    required String preorderId,
+    Map<String, dynamic>? deliveryAddress,
+    int? quantity,
+    PreorderPaymentOption? paymentOption,
+    double? bookingAdvance,
+    bool? giftWrap,
+    String? specialSuggestion,
+    String? expectedDeliveryDate,
+    String? preferredCourierAgent,
+  }) =>
+      _repository.updateBooking(
+        preorderId: preorderId,
+        deliveryAddress: deliveryAddress,
+        quantity: quantity,
+        paymentOption: paymentOption,
+        bookingAdvance: bookingAdvance,
+        giftWrap: giftWrap,
+        specialSuggestion: specialSuggestion,
+        expectedDeliveryDate: expectedDeliveryDate,
+        preferredCourierAgent: preferredCourierAgent,
       );
 
   Future<PreorderBooking> getBookingById(String preorderId) =>

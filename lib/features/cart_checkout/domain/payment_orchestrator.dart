@@ -76,6 +76,21 @@ class PaymentOrchestrator {
     }
 
     final outcome = (callbackData?['outcome'] as PaymentOutcome?) ?? PaymentOutcome.cancelled;
+    try {
+      await _apiClient.post('/api/payment/razorpay/outcome', {
+        'transactionId': txnid,
+        'razorpay_order_id': orderId,
+        'razorpay_payment_id': callbackData?['razorpay_payment_id']?.toString(),
+        'outcome': outcome == PaymentOutcome.cancelled ? 'cancelled' : 'failed',
+        'reason': callbackData?['error']?.toString() ??
+            callbackData?['reason']?.toString() ??
+            (outcome == PaymentOutcome.cancelled
+                ? 'Payment cancelled by customer during checkout.'
+                : 'Payment failed during checkout.'),
+      });
+    } catch (e) {
+      debugPrint('[PaymentOrchestrator] Outcome reporting warning: $e');
+    }
     return PaymentResult(outcome: outcome, transactionId: txnid);
   }
 

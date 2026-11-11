@@ -194,6 +194,8 @@ export function registerPreorderRoutes(app: Express, deps: PreorderRouteDeps) {
         'specialSuggestion',
         'expectedDeliveryDate',
         'preferredCourierAgent',
+        'deliveryAddress',
+        'shippingAddress',
         'idempotencyKey',
       ]);
 
@@ -201,6 +203,36 @@ export function registerPreorderRoutes(app: Express, deps: PreorderRouteDeps) {
       if (findCustomerByAuthUser) {
         try {
           customer = await findCustomerByAuthUser(user);
+        } catch (_) {}
+      }
+
+      let resolvedAddress: any = req.body.deliveryAddress ?? req.body.shippingAddress ?? null;
+      if (!resolvedAddress) {
+        try {
+          const addrSnap = await adminDb.collection('customer_delivery_addresses').get();
+          const candidateIds = new Set(
+            [user.uid, customer?.id, customer?.authUid, customer?.customerId].filter(Boolean)
+          );
+          const matchingAddresses = (addrSnap.docs || [])
+            .map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }))
+            .filter((a: any) => candidateIds.has(String(a.customerId || a.userId || '')));
+          if (matchingAddresses.length > 0) {
+            const defaultAddr =
+              matchingAddresses.find((a: any) => a.isDefault === true) || matchingAddresses[0];
+            resolvedAddress = defaultAddr;
+          } else if (customer && (customer.address || customer.pincode || customer.state)) {
+            resolvedAddress = {
+              id: customer.id,
+              name: customer.name || user.name || '',
+              mobileNumber: customer.mobileNumber || user.phone_number || '',
+              email: customer.email || user.email || '',
+              addressLine: customer.address || '',
+              city: customer.city || customer.district || '',
+              district: customer.district || '',
+              state: customer.state || '',
+              pincode: String(customer.pincode || ''),
+            };
+          }
         } catch (_) {}
       }
 
@@ -217,6 +249,7 @@ export function registerPreorderRoutes(app: Express, deps: PreorderRouteDeps) {
         specialSuggestion: req.body.specialSuggestion,
         expectedDeliveryDate: req.body.expectedDeliveryDate,
         preferredCourierAgent: req.body.preferredCourierAgent,
+        deliveryAddress: resolvedAddress,
         idempotencyKey: String(req.body.idempotencyKey || ''),
       });
 
@@ -266,6 +299,49 @@ export function registerPreorderRoutes(app: Express, deps: PreorderRouteDeps) {
       return handleRouteError(res, requestId, err, 'getPreorderById');
     }
   });
+
+  // 5b. PATCH / PUT /api/v1/preorders/:id (and POST /api/v1/preorders/:id/update)
+  // Updates pre-order item fields in the `preorders` table including deliveryAddress for future reference.
+  const updatePreorderHandler = async (req: Request, res: Response) => {
+    const requestId = makeRequestId(req);
+    try {
+      const user = await requireAuthUser(req, res, requestId);
+      if (!user) return;
+      assertAllowedKeys(req.body, [
+        'deliveryAddress',
+        'shippingAddress',
+        'quantity',
+        'paymentType',
+        'bookingAdvance',
+        'giftWrap',
+        'specialSuggestion',
+        'expectedDeliveryDate',
+        'preferredCourierAgent',
+      ]);
+      const isAdmin = await checkIsAdmin(user);
+      const preorder = await service.updatePreorderDetails({
+        preorderId: String(req.params.id || ''),
+        requesterUid: String(user.uid),
+        isAdmin,
+        deliveryAddress: req.body.deliveryAddress,
+        shippingAddress: req.body.shippingAddress,
+        quantity: req.body.quantity,
+        paymentType: req.body.paymentType,
+        bookingAdvance: req.body.bookingAdvance,
+        giftWrap: req.body.giftWrap,
+        specialSuggestion: req.body.specialSuggestion,
+        expectedDeliveryDate: req.body.expectedDeliveryDate,
+        preferredCourierAgent: req.body.preferredCourierAgent,
+      });
+      return res.status(200).json({ preorder, requestId });
+    } catch (err) {
+      return handleRouteError(res, requestId, err, 'updatePreorderDetails');
+    }
+  };
+
+  app.patch('/api/v1/preorders/:id', updatePreorderHandler);
+  app.put('/api/v1/preorders/:id', updatePreorderHandler);
+  app.post('/api/v1/preorders/:id/update', updatePreorderHandler);
 
   // 6. POST /api/v1/preorders/:id/cancel
   app.post('/api/v1/preorders/:id/cancel', async (req: Request, res: Response) => {

@@ -77,8 +77,54 @@ class _PreorderBookingDetailsSectionState
   PreorderAdvanceValidationResult get _advanceResult =>
       _computeAdvanceResult(_quantity);
 
+  void _syncBookedPreorderInCart({
+    required SalesProduct? existingCartItem,
+    int? quantityOverride,
+    String? courierOverride,
+  }) {
+    if (existingCartItem == null) return;
+    final effectiveQty = quantityOverride ?? _quantity;
+    final calc = _computeAdvanceResult(effectiveQty);
+    final expectedDateStr =
+        PreorderAdvanceValidator.formatDateYyyyMmDd(_expectedDeliveryDate);
+    final sanitizedSuggestion = _specialSuggestionController.text
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .trim();
+    final updatedItem = SalesProduct(
+      productId: existingCartItem.productId,
+      productName: existingCartItem.productName,
+      imageUrl: existingCartItem.imageUrl,
+      quantity: effectiveQty,
+      price: calc.bookingAdvance,
+      gstPercentage: existingCartItem.gstPercentage,
+      hsnCode: existingCartItem.hsnCode,
+      brandOwner: existingCartItem.brandOwner,
+      unit: existingCartItem.unit,
+      packingSize: existingCartItem.packingSize,
+      isPreorder: true,
+      preorderId: existingCartItem.preorderId,
+      onlinePriceSnapshot: existingCartItem.onlinePriceSnapshot ?? _onlinePrice,
+      totalProductValue: calc.totalProductValue,
+      paymentType: _paymentOption.wireValue,
+      paymentTypeLabel: _paymentOption.displayLabel,
+      bookingAdvance: calc.bookingAdvance,
+      remainingBalance: calc.remainingBalance,
+      giftWrap: _giftWrap,
+      specialSuggestion: sanitizedSuggestion,
+      expectedDeliveryDate: expectedDateStr,
+      preferredCourierAgent: courierOverride ?? _preferredCourierAgent,
+    );
+    ref.read(cartProvider.notifier).addPreorderToCart(updatedItem);
+  }
+
   void _updateBookedQuantity(int currentQty, int nextQty) {
     final notifier = ref.read(cartProvider.notifier);
+    final cart = ref.read(cartProvider);
+    final cartIdx = cart.indexWhere(
+      (item) => item.isPreorder && item.productId == widget.product.id,
+    );
+    final existingCartItem = cartIdx >= 0 ? cart[cartIdx] : null;
+
     if (nextQty <= 0) {
       notifier.removeFromCart(widget.product.id);
       setState(() {
@@ -104,6 +150,10 @@ class _PreorderBookingDetailsSectionState
       _formError = null;
     });
     notifier.updateQuantity(widget.product.id, nextQty);
+    _syncBookedPreorderInCart(
+      existingCartItem: existingCartItem,
+      quantityOverride: nextQty,
+    );
   }
 
   Future<void> _pickExpectedDeliveryDate() async {
@@ -176,6 +226,7 @@ class _PreorderBookingDetailsSectionState
     final idemKey = PreorderService.generateIdempotencyKey(widget.product.id);
 
     try {
+      final selectedAddress = ref.read(selectedAddressProvider);
       final result =
           await ref.read(preorderServiceProvider).createPreorderBooking(
                 productId: widget.product.id,
@@ -187,6 +238,7 @@ class _PreorderBookingDetailsSectionState
                 expectedDeliveryDate: expectedDateStr,
                 preferredCourierAgent: _preferredCourierAgent,
                 idempotencyKey: idemKey,
+                deliveryAddress: selectedAddress?.toJson(),
               );
 
       if (!mounted) return;
@@ -241,12 +293,7 @@ class _PreorderBookingDetailsSectionState
     final effectiveQty = cartQty > 0 ? cartQty : _quantity;
 
     final advanceCalc = _computeAdvanceResult(effectiveQty);
-    final couriersAsync = ref.watch(preorderCourierAgentsProvider);
-    final courierOptions = couriersAsync.maybeWhen(
-      data: (list) =>
-          list.isNotEmpty ? list : PreorderService.defaultCourierAgents,
-      orElse: () => PreorderService.defaultCourierAgents,
-    );
+    const courierOptions = PreorderService.defaultCourierAgents;
     if (!courierOptions.contains(_preferredCourierAgent)) {
       _preferredCourierAgent = courierOptions.first;
     }
@@ -826,6 +873,13 @@ class _PreorderBookingDetailsSectionState
             onChanged: (val) {
               if (val != null) {
                 setState(() => _preferredCourierAgent = val);
+                if (existingPreorderCartItem != null) {
+                  _syncBookedPreorderInCart(
+                    existingCartItem: existingPreorderCartItem,
+                    quantityOverride: effectiveQty,
+                    courierOverride: val,
+                  );
+                }
               }
             },
           ),

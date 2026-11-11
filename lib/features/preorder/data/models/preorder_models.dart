@@ -414,6 +414,92 @@ class PreorderEligibleProduct {
   }
 }
 
+class PreorderDeliveryAddress {
+  final String? id;
+  final String name;
+  final String mobileNumber;
+  final String? email;
+  final String addressLine;
+  final String city;
+  final String district;
+  final String state;
+  final String pincode;
+  final String formattedAddress;
+
+  const PreorderDeliveryAddress({
+    this.id,
+    this.name = '',
+    this.mobileNumber = '',
+    this.email,
+    this.addressLine = '',
+    this.city = '',
+    this.district = '',
+    this.state = '',
+    this.pincode = '',
+    this.formattedAddress = '',
+  });
+
+  bool get isNotEmpty =>
+      addressLine.isNotEmpty ||
+      city.isNotEmpty ||
+      district.isNotEmpty ||
+      state.isNotEmpty ||
+      pincode.isNotEmpty ||
+      formattedAddress.isNotEmpty;
+
+  String get displaySummary {
+    if (formattedAddress.isNotEmpty) return formattedAddress;
+    final parts = [
+      addressLine,
+      city,
+      district,
+      state,
+    ].where((p) => p.trim().isNotEmpty).toList();
+    var line = parts.join(', ');
+    if (pincode.trim().isNotEmpty) {
+      line = line.isNotEmpty ? '$line - $pincode' : pincode;
+    }
+    if (name.trim().isNotEmpty) {
+      final header = mobileNumber.trim().isNotEmpty
+          ? '$name ($mobileNumber)'
+          : name;
+      line = line.isNotEmpty ? '$header, $line' : header;
+    }
+    return line;
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (id != null && id!.isNotEmpty) 'id': id,
+        'name': name,
+        'mobileNumber': mobileNumber,
+        if (email != null && email!.isNotEmpty) 'email': email,
+        'addressLine': addressLine,
+        'city': city,
+        'district': district,
+        'state': state,
+        'pincode': pincode,
+        'formattedAddress': displaySummary,
+      };
+
+  factory PreorderDeliveryAddress.fromJson(Map<String, dynamic> json) {
+    return PreorderDeliveryAddress(
+      id: json['id']?.toString(),
+      name: '${json['name'] ?? json['deliveryAddressName'] ?? ''}',
+      mobileNumber:
+          '${json['mobileNumber'] ?? json['deliveryAddressMobile'] ?? ''}',
+      email: (json['email'] ?? json['deliveryAddressEmail'])?.toString(),
+      addressLine:
+          '${json['addressLine'] ?? json['deliveryAddressLine'] ?? json['address'] ?? ''}',
+      city: '${json['city'] ?? json['deliveryCity'] ?? ''}',
+      district: '${json['district'] ?? json['deliveryDistrict'] ?? ''}',
+      state: '${json['state'] ?? json['deliveryState'] ?? ''}',
+      pincode: '${json['pincode'] ?? json['deliveryPincode'] ?? ''}',
+      formattedAddress:
+          '${json['formattedAddress'] ?? json['formattedDeliveryAddress'] ?? ''}',
+    );
+  }
+}
+
 class PreorderBooking {
   final String preorderId;
   final String userId;
@@ -437,6 +523,8 @@ class PreorderBooking {
   final String specialSuggestion;
   final String expectedDeliveryDate;
   final String preferredCourierAgent;
+  final PreorderDeliveryAddress? deliveryAddress;
+  final String formattedDeliveryAddress;
   final String currency;
   final PreorderBookingStatus bookingStatus;
   final PreorderPaymentStatus paymentStatus;
@@ -471,6 +559,8 @@ class PreorderBooking {
     required this.specialSuggestion,
     required this.expectedDeliveryDate,
     required this.preferredCourierAgent,
+    this.deliveryAddress,
+    this.formattedDeliveryAddress = '',
     required this.currency,
     required this.bookingStatus,
     required this.paymentStatus,
@@ -500,6 +590,22 @@ class PreorderBooking {
     final balance = (json['remainingBalance'] as num?)?.toDouble() ??
         roundPreorderCurrency((totalVal - advance).clamp(0.0, totalVal));
 
+    PreorderDeliveryAddress? parsedAddress;
+    final rawAddr = json['deliveryAddress'] ?? json['shippingAddress'];
+    if (rawAddr is Map) {
+      final candidate = PreorderDeliveryAddress.fromJson(
+        Map<String, dynamic>.from(rawAddr),
+      );
+      if (candidate.isNotEmpty) {
+        parsedAddress = candidate;
+      }
+    } else {
+      final flatCandidate = PreorderDeliveryAddress.fromJson(json);
+      if (flatCandidate.isNotEmpty) {
+        parsedAddress = flatCandidate;
+      }
+    }
+
     return PreorderBooking(
       preorderId: '${json['preorderId'] ?? ''}',
       userId: '${json['userId'] ?? ''}',
@@ -527,7 +633,10 @@ class PreorderBooking {
       expectedDeliveryDate:
           '${json['expectedDeliveryDate'] ?? json['dateLocalSnapshot'] ?? ''}',
       preferredCourierAgent:
-          '${json['preferredCourierAgent'] ?? 'Standard Courier'}',
+          '${json['preferredCourierAgent'] ?? 'India Post'}',
+      deliveryAddress: parsedAddress,
+      formattedDeliveryAddress: parsedAddress?.displaySummary ??
+          '${json['formattedDeliveryAddress'] ?? ''}',
       currency: '${json['currency'] ?? 'INR'}',
       bookingStatus: PreorderBookingStatus.fromString(
         json['bookingStatus']?.toString() ?? json['status']?.toString(),

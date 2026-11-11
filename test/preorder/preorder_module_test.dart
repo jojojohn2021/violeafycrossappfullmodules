@@ -179,6 +179,7 @@ void main() {
       expect(find.text('Gift Wrap'), findsOneWidget);
       expect(find.text('Expected Date of Delivery'), findsOneWidget);
       expect(find.text('Preferred Courier Agent'), findsOneWidget);
+      expect(find.text('Amazon Shipping'), findsOneWidget);
       expect(find.text('PRE-ORDER BOOKING'), findsOneWidget);
     });
 

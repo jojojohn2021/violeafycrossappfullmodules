@@ -138,7 +138,14 @@ test('Courier agent, payment type, and gift wrap validation', () => {
   assert.equal(normalizeGiftWrap(false), false);
   assert.equal(normalizeGiftWrap('No'), false);
 
+  assert.equal(validatePreferredCourierAgent('Amazon Shipping'), 'Amazon Shipping');
+  assert.equal(validatePreferredCourierAgent('Delhivery'), 'Delhivery');
   assert.equal(validatePreferredCourierAgent('India Post'), 'India Post');
+  assert.equal(validatePreferredCourierAgent('DTDC'), 'DTDC');
+  assert.throws(
+    () => validatePreferredCourierAgent('BlueDart'),
+    (err: unknown) => err instanceof PreorderDomainError && err.code === 'VALIDATION_ERROR'
+  );
   assert.throws(
     () => validatePreferredCourierAgent(''),
     (err: unknown) => err instanceof PreorderDomainError && err.code === 'VALIDATION_ERROR'
@@ -301,18 +308,213 @@ test('Payment verification confirms preorders (paid vs partially_paid), writes p
   assert.equal(store.preorders['PO-PARTIAL-1'].bookingAdvance, 1000);
   assert.equal(store.preorders['PO-PARTIAL-1'].remainingBalance, 0);
 
-  // Failed payment on a pending booking never marks confirmed/paid
-  store.preorders['PO-FAIL-1'] = {
-    preorderId: 'PO-FAIL-1',
-    bookingStatus: 'pending_payment',
-    paymentStatus: 'unpaid',
-  };
-  await service.failPreorderPaymentsForCheckout({
+  // Updating pre-order item via updatePreorderDetails stores deliveryAddress in preorders table
+  const updatedDto = await service.updatePreorderDetails({
+    preorderId: 'PO-FULL-1',
+    requesterUid: 'user-1',
+    deliveryAddress: {
+      id: 'addr-1',
+      name: 'Jojo',
+      mobileNumber: '9876543210',
+      addressLine: 'Kallettumkara',
+      city: 'Thrissur',
+      district: 'Thrissur',
+      state: 'Kerala',
+      pincode: '680683',
+    },
+    preferredCourierAgent: 'Amazon Shipping',
+  });
+  assert.equal(updatedDto.preferredCourierAgent, 'Amazon Shipping');
+  assert.equal(updatedDto.deliveryPincode, '680683');
+  assert.equal(updatedDto.deliveryState, 'Kerala');
+  assert.equal(store.preorders['PO-FULL-1'].deliveryAddressLine, 'Kallettumkara');
+  assert.equal(store.preorders['PO-FULL-1'].deliveryPincode, '680683');
+
+  // Failed or cancelled payment NEVER writes to preorders or preorder_idempotency, and updates preorder_events
+  const preordersCountBeforeFail = Object.keys(store.preorders).length;
+  store.preorder_idempotency = store.preorder_idempotency || {};
+  const idemCountBeforeFail = Object.keys(store.preorder_idempotency).length;
+
+  const failRes = await service.failPreorderPaymentsForCheckout({
     checkoutReference: 'ORD-FAIL-1',
     paymentReference: 'pay_fail_1',
-    preorderIds: ['PO-FAIL-1'],
+    userId: 'user-1',
+    preorderIds: ['PO-UNPAID-1'],
+    preorderItems: [
+      {
+        preorderId: 'PO-UNPAID-1',
+        productId: 'prod-1',
+        productName: 'Almond Oil',
+        quantity: 2,
+        paymentType: 'partial',
+        bookingAdvance: 200,
+        remainingBalance: 800,
+        totalProductValue: 1000,
+        expectedDeliveryDate: '2026-12-01',
+        preferredCourierAgent: 'DTDC',
+      },
+    ],
+    outcome: 'failed',
     reason: 'Signature mismatch',
   });
-  assert.equal(store.preorders['PO-FAIL-1'].bookingStatus, 'pending_payment');
-  assert.equal(store.preorders['PO-FAIL-1'].paymentStatus, 'failed');
+  assert.equal(Object.keys(store.preorders).length, preordersCountBeforeFail);
+  assert.equal(store.preorders['PO-UNPAID-1'], undefined);
+  assert.equal(Object.keys(store.preorder_idempotency).length, idemCountBeforeFail);
+  assert.equal(failRes.events.length, 1);
+  assert.equal(failRes.events[0].eventType, 'preorder.payment_failed');
+  assert.equal(failRes.events[0].paymentStatus, 'failed');
+  assert.equal(failRes.events[0].reason, 'Signature mismatch');
+  assert.ok(store.preorder_events['poe_ORD-FAIL-1_PO-UNPAID-1']);
+});
+
+test('Pre-payment createPreorder does NOT add records to preorders, preorder_idempotency, or preorder_events; records are created ONLY after successful payment', async () => {
+  const store: Record<string, Record<string, any>> = {
+    products: {
+      'prod-plum-1': {
+        id: 'prod-plum-1',
+        name: 'Plum Cake - Rum Soaked',
+        sku: 'PLUM-900',
+        packingSize: '900 gm',
+        onlinePrice: 1699,
+        offerPrice: 1699,
+        mrp: 1799,
+        gstPercentage: 12,
+        preorderactive: true,
+      },
+    },
+    preorders: {},
+    preorder_idempotency: {},
+    preorder_events: {},
+    payment_allocations: {},
+    sales_orders: {},
+  };
+
+  const mockDb: any = {
+    collection: (colName: string) => ({
+      doc: (docId: string) => ({
+        _col: colName,
+        _id: docId,
+      }),
+    }),
+    runTransaction: async (fn: (tx: any) => Promise<any>) => {
+      const tx = {
+        get: async (ref: { _col: string; _id: string }) => {
+          const docData = store[ref._col]?.[ref._id];
+          return {
+            exists: Boolean(docData),
+            data: () => docData,
+          };
+        },
+        set: (ref: { _col: string; _id: string }, data: any, opts?: { merge?: boolean }) => {
+          store[ref._col] = store[ref._col] || {};
+          store[ref._col][ref._id] = opts?.merge
+            ? { ...(store[ref._col][ref._id] || {}), ...data }
+            : data;
+        },
+      };
+      return fn(tx);
+    },
+  };
+
+  const now = new Date('2026-11-11T10:00:00+05:30');
+  const service = createPreorderService({ adminDb: mockDb, now: () => now });
+
+  // 1. Pre-Order Booking clicked on Product Details -> validates & returns DTO, but writes NOTHING to DB tables
+  const created = await service.createPreorder({
+    userId: 'user-99',
+    customerId: 'user-99',
+    customerDisplayName: 'Jojo',
+    productId: 'prod-plum-1',
+    quantity: 1,
+    paymentType: 'partial',
+    bookingAdvance: 200,
+    giftWrap: false,
+    specialSuggestion: 'Pack carefully',
+    expectedDeliveryDate: '2026-11-20',
+    preferredCourierAgent: 'India Post',
+    idempotencyKey: 'idem_user99_plum1',
+  });
+
+  assert.ok(created.booking.preorderId.startsWith('po_'));
+  assert.equal(created.booking.bookingAdvance, 200);
+  assert.equal(created.booking.remainingBalance, 1499);
+  assert.equal(Object.keys(store.preorders).length, 0);
+  assert.equal(Object.keys(store.preorder_idempotency).length, 0);
+  assert.equal(Object.keys(store.preorder_events).length, 0);
+
+  // 2. If payment generation or checkout is cancelled -> updates ONLY preorder_events, NOT preorders or preorder_idempotency
+  await service.failPreorderPaymentsForCheckout({
+    checkoutReference: 'TXN-CANCEL-101',
+    userId: 'user-99',
+    preorderIds: [created.booking.preorderId],
+    preorderItems: [
+      {
+        preorderId: created.booking.preorderId,
+        productId: 'prod-plum-1',
+        productName: 'Plum Cake - Rum Soaked',
+        quantity: 1,
+        paymentType: 'partial',
+        bookingAdvance: 200,
+        remainingBalance: 1499,
+        totalProductValue: 1699,
+        expectedDeliveryDate: '2026-11-20',
+        preferredCourierAgent: 'India Post',
+      },
+    ],
+    outcome: 'cancelled',
+    reason: 'Payment cancelled by customer during checkout.',
+  });
+
+  assert.equal(Object.keys(store.preorders).length, 0);
+  assert.equal(Object.keys(store.preorder_idempotency).length, 0);
+  assert.equal(Object.keys(store.preorder_events).length, 1);
+  const cancelEvent = Object.values(store.preorder_events)[0];
+  assert.equal(cancelEvent.eventType, 'preorder.payment_cancelled');
+  assert.equal(cancelEvent.paymentStatus, 'cancelled');
+  assert.equal(cancelEvent.preorderId, created.booking.preorderId);
+
+  // 3. When payment succeeds -> creates records in preorders, preorder_idempotency, and preorder_events
+  const confirmed = await service.confirmPreorderPaymentsForCheckout({
+    checkoutReference: 'TXN-SUCCESS-102',
+    paymentReference: 'pay_rzp_live_102',
+    userId: 'user-99',
+    customerId: 'user-99',
+    customerDisplayName: 'Jojo',
+    regularSalesOrderId: null,
+    regularSalesAmount: 0,
+    preorderIds: [created.booking.preorderId],
+    deliveryAddress: {
+      name: 'Jojo',
+      mobileNumber: '9876543210',
+      addressLine: 'Kallettumkara',
+      city: 'Thrissur',
+      district: 'Thrissur',
+      state: 'Kerala',
+      pincode: '680683',
+    },
+    preorderItemOverrides: [
+      {
+        preorderId: created.booking.preorderId,
+        productId: 'prod-plum-1',
+        productName: 'Plum Cake - Rum Soaked',
+        quantity: 1,
+        paymentType: 'partial',
+        bookingAdvance: 200,
+        giftWrap: false,
+        specialSuggestion: 'Pack carefully',
+        expectedDeliveryDate: '2026-11-20',
+        preferredCourierAgent: 'India Post',
+        idempotencyKey: 'idem_user99_plum1',
+      },
+    ],
+  });
+
+  assert.equal(confirmed.bookings.length, 1);
+  assert.equal(Object.keys(store.preorders).length, 1);
+  assert.equal(Object.keys(store.preorder_idempotency).length, 1);
+  assert.equal(store.preorders[created.booking.preorderId].bookingStatus, 'confirmed');
+  assert.equal(store.preorders[created.booking.preorderId].paymentStatus, 'partially_paid');
+  assert.equal(store.preorders[created.booking.preorderId].deliveryPincode, '680683');
+  assert.ok(store.preorder_idempotency['user-99__idem_user99_plum1']);
+  assert.equal(Object.keys(store.preorder_events).length, 2); // 1 cancelled + 1 confirmed
 });

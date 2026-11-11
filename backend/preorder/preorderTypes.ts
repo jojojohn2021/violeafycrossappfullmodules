@@ -75,16 +75,10 @@ const envInt = (key: string, fallback: number): number => {
 };
 
 export const DEFAULT_COURIER_AGENTS: string[] = [
+  'Amazon Shipping',
+  'Delhivery',
   'India Post',
   'DTDC',
-  'BlueDart',
-  'Delhivery',
-  'Professional Couriers',
-  'ST Courier',
-  'Trackon',
-  'Ekart',
-  'XpressBees',
-  'Standard Courier',
 ];
 
 export const DEFAULT_PREORDER_CONFIG: PreorderConfig = {
@@ -109,6 +103,19 @@ export const ALLOWED_STATUS_TRANSITIONS: Record<PreorderBookingStatus, PreorderB
   cancelled: [],
 };
 
+export interface PreorderDeliveryAddressDto {
+  id?: string;
+  name: string;
+  mobileNumber: string;
+  email?: string;
+  addressLine: string;
+  city: string;
+  district: string;
+  state: string;
+  pincode: string;
+  formattedAddress?: string;
+}
+
 export interface PreorderBookingDto {
   preorderId: string;
   userId: string;
@@ -132,6 +139,17 @@ export interface PreorderBookingDto {
   specialSuggestion: string;
   expectedDeliveryDate: string; // YYYY-MM-DD (future date)
   preferredCourierAgent: string;
+  deliveryAddress: PreorderDeliveryAddressDto | null;
+  shippingAddress: PreorderDeliveryAddressDto | null;
+  deliveryAddressName: string;
+  deliveryAddressMobile: string;
+  deliveryAddressEmail: string;
+  deliveryAddressLine: string;
+  deliveryCity: string;
+  deliveryDistrict: string;
+  deliveryState: string;
+  deliveryPincode: string;
+  formattedDeliveryAddress: string;
   currency: string;
   bookingStatus: PreorderBookingStatus;
   /** Alias for bookingStatus for UI convenience */

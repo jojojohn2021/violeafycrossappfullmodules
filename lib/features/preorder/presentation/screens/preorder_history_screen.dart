@@ -285,6 +285,8 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
 
       final balanceAmount = booking.remainingBalance;
       final orderId = 'BAL-${booking.preorderId}-${DateTime.now().millisecondsSinceEpoch}';
+      final deliveryAddressJson =
+          booking.deliveryAddress?.toJson() ?? ref.read(selectedAddressProvider)?.toJson();
 
       final orderData = <String, dynamic>{
         'id': orderId,
@@ -294,6 +296,8 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
         'customerEmail': customerEmail,
         'customerMobile': sanitizeMobileNumber(customerMobile),
         'customerCompany': '',
+        if (deliveryAddressJson != null) 'shippingAddress': deliveryAddressJson,
+        if (deliveryAddressJson != null) 'deliveryAddress': deliveryAddressJson,
         'isPreorderBalancePayment': true,
         'preorderId': booking.preorderId,
         'products': [
@@ -529,6 +533,11 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
                       ),
                       _DetailLine(label: 'Expected Date of Delivery', value: booking.expectedDeliveryDate),
                       _DetailLine(label: 'Preferred Courier Agent', value: booking.preferredCourierAgent),
+                      if (booking.formattedDeliveryAddress.isNotEmpty)
+                        _DetailLine(
+                          label: 'Delivery Address',
+                          value: booking.formattedDeliveryAddress,
+                        ),
                       const SizedBox(height: 18),
                       if (booking.remainingBalance > 0 &&
                           booking.bookingStatus != PreorderBookingStatus.cancelled) ...[
