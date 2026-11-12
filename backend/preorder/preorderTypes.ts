@@ -55,6 +55,13 @@ export type PreorderPaymentType = 'full' | 'partial';
 
 export type PreorderPaymentTypeLabel = 'Full Amount' | 'Partial Payment';
 
+export type PreorderConversionStatus =
+  | 'not_applicable'
+  | 'pending'
+  | 'processing'
+  | 'converted'
+  | 'failed';
+
 export interface PreorderConfig {
   timezone: string;
   timezoneOffsetMinutes: number; // +330 for Asia/Kolkata (IST)
@@ -133,7 +140,9 @@ export interface PreorderBookingDto {
   totalProductValue: number;
   paymentType: PreorderPaymentType;
   paymentTypeLabel: PreorderPaymentTypeLabel;
+  initialBookingAdvance: number;
   bookingAdvance: number;
+  totalVerifiedPaid: number;
   remainingBalance: number;
   giftWrap: boolean;
   specialSuggestion: string;
@@ -156,8 +165,15 @@ export interface PreorderBookingDto {
   status: PreorderBookingStatus;
   paymentStatus: PreorderPaymentStatus;
   paymentReference: string | null;
+  lastPaymentReference: string | null;
   checkoutReference: string | null;
   invoiceId: string | null;
+  salesOrderId: string | null;
+  salesOrderNumber: string | null;
+  salesInvoiceId: string | null;
+  conversionStatus: PreorderConversionStatus;
+  convertedAt: string | null;
+  conversionErrorCode: string | null;
   idempotencyKey: string;
   createdAt: string;
   updatedAt: string;

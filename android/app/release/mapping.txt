@@ -3,8 +3,8 @@
 # min_api: 24
 # common_typos_disable
 # {"id":"com.android.tools.r8.mapping","version":"2.2"}
-# pg_map_id: 9c0d2ba1c1dbee3aebce41790dc5b09336d9aca3dca12ffbf9c3936ae00ea978
-# pg_map_hash: SHA-256 9c0d2ba1c1dbee3aebce41790dc5b09336d9aca3dca12ffbf9c3936ae00ea978
+# pg_map_id: 4c65e3a42c47b37acadb3ebc3cae67e8e72ebe209e283da7277ff261c09fd26d
+# pg_map_hash: SHA-256 4c65e3a42c47b37acadb3ebc3cae67e8e72ebe209e283da7277ff261c09fd26d
 _COROUTINE.ArtificialStackFrames -> R8$$REMOVED$$CLASS$$0:
 # {"id":"sourceFile","fileName":"CoroutineDebugging.kt"}
 _COROUTINE.ArtificialStackFramesUnsafe -> w6:
@@ -296270,25 +296270,25 @@ com.google.firebase.firestore.LoadBundleTask$$ExternalSyntheticLambda0 -> w01:
     159:162:void com.google.firebase.storage.TaskListenerImpl.lambda$addListener$0(java.lang.Object):73:73 -> run
     159:162:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
     163:173:void LoadBundleTask$$ExternalSyntheticLambda0.run():0:0 -> run
-    174:176:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):599:599 -> run
+    174:176:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):604:604 -> run
     174:176:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    177:179:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):601:601 -> run
+    177:179:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):606:606 -> run
     177:179:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    180:184:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):602:602 -> run
+    180:184:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):607:607 -> run
     180:184:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    185:187:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):603:603 -> run
+    185:187:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):608:608 -> run
     185:187:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    188:194:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):604:604 -> run
+    188:194:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):609:609 -> run
     188:194:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    195:197:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):601:601 -> run
+    195:197:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):606:606 -> run
     195:197:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    198:202:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):602:602 -> run
+    198:202:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):607:607 -> run
     198:202:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    203:205:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):603:603 -> run
+    203:205:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):608:608 -> run
     203:205:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    206:207:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):604:605 -> run
+    206:207:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):609:610 -> run
     206:207:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
-    208:211:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):604:604 -> run
+    208:211:void com.tekartik.sqflite.SqflitePlugin.lambda$postOpenCloseTask$0(java.lang.Runnable,com.tekartik.sqflite.Database):609:609 -> run
     208:211:void LoadBundleTask$$ExternalSyntheticLambda0.run():0 -> run
     212:219:void LoadBundleTask$$ExternalSyntheticLambda0.run():0:0 -> run
     220:233:void com.csdcorp.speech_to_text.SpeechToTextPlugin.sendError$lambda$0(com.csdcorp.speech_to_text.SpeechToTextPlugin,org.json.JSONObject):796:796 -> run
@@ -386185,11 +386185,11 @@ com.tekartik.sqflite.SqflitePlugin -> s72:
     35:36:void <clinit>():68:68 -> <clinit>
     37:38:void <clinit>():69:69 -> <clinit>
     39:41:void <clinit>():75:75 -> <clinit>
-    1:9:void closeDatabase(com.tekartik.sqflite.Database):554:554 -> a
+    1:9:void closeDatabase(com.tekartik.sqflite.Database):559:559 -> a
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lyt;)V"}
-    10:20:void closeDatabase(com.tekartik.sqflite.Database):555:555 -> a
-    21:25:void closeDatabase(com.tekartik.sqflite.Database):557:557 -> a
-    26:53:void closeDatabase(com.tekartik.sqflite.Database):559:559 -> a
+    10:20:void closeDatabase(com.tekartik.sqflite.Database):560:560 -> a
+    21:25:void closeDatabase(com.tekartik.sqflite.Database):562:562 -> a
+    26:53:void closeDatabase(com.tekartik.sqflite.Database):564:564 -> a
     1:12:com.tekartik.sqflite.Database getDatabaseOrError(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):174:174 -> b
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lio/flutter/plugin/common/MethodCall;Lio/flutter/plugin/common/MethodChannel$Result;)Lyt;"}
     13:23:com.tekartik.sqflite.Database getDatabase(int):170:170 -> b
@@ -386200,29 +386200,29 @@ com.tekartik.sqflite.SqflitePlugin -> s72:
     6:16:java.util.Map makeOpenResult(int,boolean,boolean):135:135 -> c
     17:25:java.util.Map makeOpenResult(int,boolean,boolean):137:137 -> c
     26:33:java.util.Map makeOpenResult(int,boolean,boolean):140:140 -> c
-    1:3:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):594:594 -> d
+    1:3:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):599:599 -> d
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lyt;Ljava/lang/Runnable;)V"}
-    4:6:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):595:595 -> d
-    7:12:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):596:596 -> d
-    13:24:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):597:597 -> d
-    25:30:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):607:607 -> d
-    1:4:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):566:566 -> e
+    4:6:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):600:600 -> d
+    7:12:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):601:601 -> d
+    13:24:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):602:602 -> d
+    25:30:void postOpenCloseTask(com.tekartik.sqflite.Database,java.lang.Runnable):612:612 -> d
+    1:4:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):571:571 -> e
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lyt;)V"}
-    5:11:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):567:567 -> e
+    5:11:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):572:572 -> e
     12:17:com.tekartik.sqflite.DatabaseWorkerPool com.tekartik.sqflite.DatabaseWorkerPool.create(java.lang.String,int,int):48:48 -> e
-    12:17:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):567 -> e
+    12:17:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):572 -> e
     18:23:com.tekartik.sqflite.DatabaseWorkerPool com.tekartik.sqflite.DatabaseWorkerPool.create(java.lang.String,int,int):50:50 -> e
-    18:23:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):567 -> e
-    24:25:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):567:567 -> e
-    26:30:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):569:569 -> e
-    31:34:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):570:570 -> e
-    35:63:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):571:571 -> e
-    1:18:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):578:578 -> f
+    18:23:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):572 -> e
+    24:25:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):572:572 -> e
+    26:30:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):574:574 -> e
+    31:34:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):575:575 -> e
+    35:63:void startWorkerPoolIfNeeded(com.tekartik.sqflite.Database):576:576 -> e
+    1:18:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):583:583 -> f
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lyt;)V"}
-    19:23:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):579:579 -> f
-    24:38:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):580:580 -> f
-    39:44:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):582:582 -> f
-    45:47:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):583:583 -> f
+    19:23:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):584:584 -> f
+    24:38:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):585:585 -> f
+    39:44:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):587:587 -> f
+    45:47:void stopWorkerPoolIfUnused(com.tekartik.sqflite.Database):588:588 -> f
     1:8:void onAttachedToEngine(io.flutter.embedding.engine.plugins.FlutterPlugin$FlutterPluginBinding):147:147 -> onAttachedToEngine
     9:10:void onAttachedToEngine(android.content.Context,io.flutter.plugin.common.BinaryMessenger):151:151 -> onAttachedToEngine
     9:10:void onAttachedToEngine(io.flutter.embedding.engine.plugins.FlutterPlugin$FlutterPluginBinding):147 -> onAttachedToEngine
@@ -386235,240 +386235,240 @@ com.tekartik.sqflite.SqflitePlugin -> s72:
     2:3:void onDetachedFromEngine(io.flutter.embedding.engine.plugins.FlutterPlugin$FlutterPluginBinding):160:160 -> onDetachedFromEngine
     4:8:void onDetachedFromEngine(io.flutter.embedding.engine.plugins.FlutterPlugin$FlutterPluginBinding):161:161 -> onDetachedFromEngine
     9:11:void onDetachedFromEngine(io.flutter.embedding.engine.plugins.FlutterPlugin$FlutterPluginBinding):162:162 -> onDetachedFromEngine
-    7:204:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):612:612 -> onMethodCall
-    205:208:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):680:680 -> onMethodCall
-    209:212:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):709:709 -> onMethodCall
-    209:212:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):651 -> onMethodCall
-    213:214:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):710:710 -> onMethodCall
-    213:214:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):651 -> onMethodCall
-    215:220:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):711:711 -> onMethodCall
-    215:220:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):651 -> onMethodCall
-    221:226:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):712:712 -> onMethodCall
-    221:226:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):651 -> onMethodCall
-    227:230:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):714:714 -> onMethodCall
-    227:230:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):651 -> onMethodCall
-    231:250:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):615:615 -> onMethodCall
+    7:204:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):617:617 -> onMethodCall
+    205:208:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):685:685 -> onMethodCall
+    209:212:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):714:714 -> onMethodCall
+    209:212:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):656 -> onMethodCall
+    213:214:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):715:715 -> onMethodCall
+    213:214:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):656 -> onMethodCall
+    215:220:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):716:716 -> onMethodCall
+    215:220:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):656 -> onMethodCall
+    221:226:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):717:717 -> onMethodCall
+    221:226:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):656 -> onMethodCall
+    227:230:void onGetDatabasesPathCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):719:719 -> onMethodCall
+    227:230:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):656 -> onMethodCall
+    231:250:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):620:620 -> onMethodCall
     251:256:void onQueryCursorNextCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):203:203 -> onMethodCall
-    251:256:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):663 -> onMethodCall
+    251:256:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):668 -> onMethodCall
     257:267:void onQueryCursorNextCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):207:207 -> onMethodCall
-    257:267:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):663 -> onMethodCall
-    268:275:void onDatabaseExistsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):547:547 -> onMethodCall
-    268:275:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):667 -> onMethodCall
+    257:267:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):668 -> onMethodCall
+    268:275:void onDatabaseExistsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):552:552 -> onMethodCall
+    268:275:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
     276:284:boolean com.tekartik.sqflite.Database.existsDatabase(java.lang.String):138:138 -> onMethodCall
-    276:284:void onDatabaseExistsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):548 -> onMethodCall
-    276:284:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):667 -> onMethodCall
-    285:292:void onDatabaseExistsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):549:549 -> onMethodCall
-    285:292:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):667 -> onMethodCall
+    276:284:void onDatabaseExistsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):553 -> onMethodCall
+    276:284:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
+    285:292:void onDatabaseExistsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):554:554 -> onMethodCall
+    285:292:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
     293:298:void onQueryCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):189:189 -> onMethodCall
-    293:298:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):623 -> onMethodCall
+    293:298:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):628 -> onMethodCall
     299:309:void onQueryCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):193:193 -> onMethodCall
-    299:309:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):623 -> onMethodCall
+    299:309:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):628 -> onMethodCall
     310:319:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):289:289 -> onMethodCall
-    310:319:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    310:319:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     320:324:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):290:290 -> onMethodCall
-    320:324:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    320:324:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     325:332:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):294:294 -> onMethodCall
-    325:332:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    325:332:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     333:336:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):295:295 -> onMethodCall
-    333:336:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    333:336:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     337:343:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):296:296 -> onMethodCall
-    337:343:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    337:343:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     344:351:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):298:298 -> onMethodCall
-    344:351:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    344:351:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     352:356:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):299:299 -> onMethodCall
-    352:356:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    352:356:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     357:376:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):300:300 -> onMethodCall
-    357:376:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    357:376:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     377:382:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):301:301 -> onMethodCall
-    377:382:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    377:382:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     383:387:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):302:302 -> onMethodCall
-    383:387:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    383:387:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     388:394:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):303:303 -> onMethodCall
-    388:394:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    388:394:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     395:405:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):304:304 -> onMethodCall
-    395:405:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    395:405:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     406:409:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):305:305 -> onMethodCall
-    406:409:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    406:409:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     410:416:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):306:306 -> onMethodCall
-    410:416:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    410:416:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     417:430:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):308:308 -> onMethodCall
-    417:430:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    417:430:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     431:435:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):311:311 -> onMethodCall
-    431:435:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    431:435:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     436:439:void onDebugCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):314:314 -> onMethodCall
-    436:439:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):659 -> onMethodCall
+    436:439:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):664 -> onMethodCall
     440:445:void onBatchCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):218:218 -> onMethodCall
-    440:445:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):643 -> onMethodCall
+    440:445:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):648 -> onMethodCall
     446:456:void onBatchCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):222:222 -> onMethodCall
-    446:456:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):643 -> onMethodCall
+    446:456:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):648 -> onMethodCall
     457:466:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):343:343 -> onMethodCall
-    457:466:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    457:466:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     467:476:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):344:344 -> onMethodCall
-    467:476:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    467:476:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     477:487:boolean isInMemoryPath(java.lang.String):126:126 -> onMethodCall
     477:487:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):345 -> onMethodCall
-    477:487:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    477:487:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     488:508:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):347:347 -> onMethodCall
-    488:508:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    488:508:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     509:511:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):355:355 -> onMethodCall
-    509:511:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    509:511:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     512:519:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):356:356 -> onMethodCall
-    512:519:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    512:519:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     520:550:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):357:357 -> onMethodCall
-    520:550:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    520:550:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     551:560:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):359:359 -> onMethodCall
-    551:560:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    551:560:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     561:570:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):361:361 -> onMethodCall
-    561:570:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    561:570:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     571:576:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):363:363 -> onMethodCall
-    571:576:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    571:576:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     577:580:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):368:368 -> onMethodCall
-    577:580:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    577:580:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     581:586:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):364:364 -> onMethodCall
-    581:586:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    581:586:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     587:621:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):365:365 -> onMethodCall
-    587:621:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    587:621:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     622:627:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):368:368 -> onMethodCall
-    622:627:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    622:627:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     628:678:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):369:369 -> onMethodCall
-    628:678:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    628:678:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     679:693:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):371:371 -> onMethodCall
-    679:693:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    679:693:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     694:695:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):372:372 -> onMethodCall
-    694:695:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    694:695:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     696:701:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):376:376 -> onMethodCall
-    696:701:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    696:701:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     702:704:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):381:381 -> onMethodCall
-    702:704:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    702:704:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     705:710:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):382:382 -> onMethodCall
-    705:710:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    705:710:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     711:711:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):383:383 -> onMethodCall
-    711:711:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    711:711:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     712:721:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):386:386 -> onMethodCall
-    712:721:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    712:721:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     722:722:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):388:388 -> onMethodCall
-    722:722:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    722:722:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     723:725:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):390:390 -> onMethodCall
-    723:725:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    723:725:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     726:729:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):391:391 -> onMethodCall
-    726:729:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    726:729:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     730:733:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):392:392 -> onMethodCall
-    730:733:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    730:733:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     734:770:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):393:393 -> onMethodCall
-    734:770:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    734:770:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     771:783:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):398:398 -> onMethodCall
-    771:783:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
-    784:789:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):443:443 -> onMethodCall
-    784:789:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    771:783:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
+    784:789:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):448:448 -> onMethodCall
+    784:789:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     790:793:void onOpenDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):383:383 -> onMethodCall
-    790:793:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):639 -> onMethodCall
+    790:793:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):644 -> onMethodCall
     794:797:void onDebugModeCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):321:321 -> onMethodCall
-    794:797:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
+    794:797:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):677 -> onMethodCall
     798:807:void onDebugModeCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):322:322 -> onMethodCall
-    798:807:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
+    798:807:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):677 -> onMethodCall
     808:810:void onDebugModeCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):330:330 -> onMethodCall
-    808:810:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
+    808:810:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):677 -> onMethodCall
     811:812:void onDebugModeCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):334:334 -> onMethodCall
-    811:812:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
+    811:812:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):677 -> onMethodCall
     813:816:void onDebugModeCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):336:336 -> onMethodCall
-    813:816:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):672 -> onMethodCall
-    817:826:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):489:489 -> onMethodCall
-    817:826:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    827:829:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):492:492 -> onMethodCall
-    827:829:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    830:837:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):493:493 -> onMethodCall
-    830:837:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    838:868:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):494:494 -> onMethodCall
-    838:868:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    869:878:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):496:496 -> onMethodCall
-    869:878:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    879:888:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):498:498 -> onMethodCall
-    879:888:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    889:896:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):500:500 -> onMethodCall
-    889:896:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    897:904:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):501:501 -> onMethodCall
-    897:904:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    905:955:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):502:502 -> onMethodCall
-    905:955:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    956:958:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):507:507 -> onMethodCall
-    956:958:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    959:962:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):508:508 -> onMethodCall
-    959:962:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    963:963:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):512:512 -> onMethodCall
-    963:963:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    964:968:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):515:515 -> onMethodCall
-    964:968:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    969:972:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):537:537 -> onMethodCall
-    969:972:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    973:976:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):538:538 -> onMethodCall
-    973:976:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    977:980:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):541:541 -> onMethodCall
-    977:980:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
-    981:984:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):512:512 -> onMethodCall
-    981:984:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):655 -> onMethodCall
+    813:816:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):677 -> onMethodCall
+    817:826:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):494:494 -> onMethodCall
+    817:826:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    827:829:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):497:497 -> onMethodCall
+    827:829:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    830:837:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):498:498 -> onMethodCall
+    830:837:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    838:868:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):499:499 -> onMethodCall
+    838:868:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    869:878:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):501:501 -> onMethodCall
+    869:878:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    879:888:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):503:503 -> onMethodCall
+    879:888:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    889:896:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):505:505 -> onMethodCall
+    889:896:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    897:904:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):506:506 -> onMethodCall
+    897:904:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    905:955:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):507:507 -> onMethodCall
+    905:955:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    956:958:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):512:512 -> onMethodCall
+    956:958:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    959:962:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):513:513 -> onMethodCall
+    959:962:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    963:963:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):517:517 -> onMethodCall
+    963:963:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    964:968:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):520:520 -> onMethodCall
+    964:968:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    969:972:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):542:542 -> onMethodCall
+    969:972:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    973:976:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):543:543 -> onMethodCall
+    973:976:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    977:980:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):546:546 -> onMethodCall
+    977:980:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
+    981:984:void onDeleteDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):517:517 -> onMethodCall
+    981:984:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):660 -> onMethodCall
     985:990:void onSetLocaleCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):257:257 -> onMethodCall
-    985:990:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):676 -> onMethodCall
+    985:990:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):681 -> onMethodCall
     991:1001:void onSetLocaleCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):261:261 -> onMethodCall
-    991:1001:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):676 -> onMethodCall
+    991:1001:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):681 -> onMethodCall
     1002:1007:void onUpdateCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):278:278 -> onMethodCall
-    1002:1007:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):631 -> onMethodCall
+    1002:1007:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):636 -> onMethodCall
     1008:1018:void onUpdateCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):282:282 -> onMethodCall
-    1008:1018:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):631 -> onMethodCall
+    1008:1018:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):636 -> onMethodCall
     1019:1024:void onInsertCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):230:230 -> onMethodCall
-    1019:1024:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):627 -> onMethodCall
+    1019:1024:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):632 -> onMethodCall
     1025:1035:void onInsertCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):234:234 -> onMethodCall
-    1025:1035:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):627 -> onMethodCall
-    1036:1043:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):686:686 -> onMethodCall
-    1036:1043:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1044:1051:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):688:688 -> onMethodCall
-    1044:1051:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1052:1059:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):690:690 -> onMethodCall
-    1052:1059:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1060:1071:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):691:691 -> onMethodCall
-    1060:1071:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1072:1079:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):692:692 -> onMethodCall
-    1072:1079:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1080:1083:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):694:694 -> onMethodCall
-    1080:1083:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1084:1086:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):695:695 -> onMethodCall
-    1084:1086:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1087:1088:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):696:696 -> onMethodCall
-    1087:1088:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
+    1025:1035:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):632 -> onMethodCall
+    1036:1043:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):691:691 -> onMethodCall
+    1036:1043:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1044:1051:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):693:693 -> onMethodCall
+    1044:1051:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1052:1059:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):695:695 -> onMethodCall
+    1052:1059:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1060:1071:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):696:696 -> onMethodCall
+    1060:1071:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1072:1079:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):697:697 -> onMethodCall
+    1072:1079:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1080:1083:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):699:699 -> onMethodCall
+    1080:1083:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1084:1086:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):700:700 -> onMethodCall
+    1084:1086:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1087:1088:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):701:701 -> onMethodCall
+    1087:1088:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
     1089:1098:java.lang.Integer com.tekartik.sqflite.LogLevel.getLogLevel(io.flutter.plugin.common.MethodCall):14:14 -> onMethodCall
-    1089:1098:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):699 -> onMethodCall
-    1089:1098:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1099:1104:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):701:701 -> onMethodCall
-    1099:1104:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1105:1108:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):703:703 -> onMethodCall
-    1105:1108:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):647 -> onMethodCall
-    1109:1120:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):451:451 -> onMethodCall
-    1109:1120:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1121:1126:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):452:452 -> onMethodCall
-    1121:1126:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1127:1130:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):457:457 -> onMethodCall
-    1127:1130:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1131:1166:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):458:458 -> onMethodCall
-    1131:1166:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1167:1168:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):461:461 -> onMethodCall
-    1167:1168:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1169:1171:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):464:464 -> onMethodCall
-    1169:1171:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1172:1176:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):465:465 -> onMethodCall
-    1172:1176:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1177:1180:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):467:467 -> onMethodCall
-    1177:1180:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1181:1185:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):468:468 -> onMethodCall
-    1181:1185:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1186:1186:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):470:470 -> onMethodCall
-    1186:1186:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1187:1195:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):472:472 -> onMethodCall
-    1187:1195:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
-    1196:1199:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):470:470 -> onMethodCall
-    1196:1199:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):619 -> onMethodCall
+    1089:1098:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):704 -> onMethodCall
+    1089:1098:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1099:1104:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):706:706 -> onMethodCall
+    1099:1104:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1105:1108:void onOptionsCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):708:708 -> onMethodCall
+    1105:1108:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):652 -> onMethodCall
+    1109:1120:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):456:456 -> onMethodCall
+    1109:1120:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1121:1126:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):457:457 -> onMethodCall
+    1121:1126:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1127:1130:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):462:462 -> onMethodCall
+    1127:1130:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1131:1166:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):463:463 -> onMethodCall
+    1131:1166:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1167:1168:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):466:466 -> onMethodCall
+    1167:1168:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1169:1171:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):469:469 -> onMethodCall
+    1169:1171:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1172:1176:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):470:470 -> onMethodCall
+    1172:1176:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1177:1180:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):472:472 -> onMethodCall
+    1177:1180:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1181:1185:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):473:473 -> onMethodCall
+    1181:1185:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1186:1186:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):475:475 -> onMethodCall
+    1186:1186:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1187:1195:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):477:477 -> onMethodCall
+    1187:1195:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
+    1196:1199:void onCloseDatabaseCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):475:475 -> onMethodCall
+    1196:1199:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):624 -> onMethodCall
     1200:1206:void onExecuteCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):245:245 -> onMethodCall
-    1200:1206:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):635 -> onMethodCall
+    1200:1206:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):640 -> onMethodCall
     1207:1218:void onExecuteCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):249:249 -> onMethodCall
-    1207:1218:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):635 -> onMethodCall
+    1207:1218:void onMethodCall(io.flutter.plugin.common.MethodCall,io.flutter.plugin.common.MethodChannel$Result):640 -> onMethodCall
 com.tekartik.sqflite.SqflitePlugin$$ExternalSyntheticLambda0 -> o72:
 # {"id":"sourceFile","fileName":"R8$$SyntheticClass"}
 # {"id":"com.android.tools.r8.synthesized"}
@@ -386707,69 +386707,70 @@ com.tekartik.sqflite.SqflitePlugin$$ExternalSyntheticLambda4 -> p72:
     17:24:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):402:402 -> run
       # {"id":"com.android.tools.r8.residualsignature","signature":"()V"}
     25:29:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):405:405 -> run
-    30:38:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):406:406 -> run
-    39:44:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):407:407 -> run
-    45:50:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):408:408 -> run
-    51:56:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):409:409 -> run
-    57:73:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):410:410 -> run
-    74:75:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):411:411 -> run
-    76:84:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):419:419 -> run
-    85:86:void com.tekartik.sqflite.Database.openReadOnly():166:166 -> run
-    85:86:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):420 -> run
-      # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
+    30:35:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):408:408 -> run
+    36:40:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):410:410 -> run
+    41:46:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):411:411 -> run
+    47:52:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):412:412 -> run
+    53:58:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):413:413 -> run
+    59:75:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):414:414 -> run
+    76:77:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):415:415 -> run
+    78:86:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):424:424 -> run
     87:88:void com.tekartik.sqflite.Database.openReadOnly():166:166 -> run
-    87:88:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):420 -> run
-    89:91:void com.tekartik.sqflite.Database$1.<init>(com.tekartik.sqflite.Database):167:167 -> run
-    89:91:void com.tekartik.sqflite.Database.openReadOnly():166 -> run
-    89:91:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):420 -> run
-    92:98:void com.tekartik.sqflite.Database.openReadOnly():166:166 -> run
-    92:98:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):420 -> run
-    99:101:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):422:422 -> run
-    102:106:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):430:430 -> run
-    107:115:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):432:432 -> run
-    116:124:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):434:434 -> run
-    125:126:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):435:436 -> run
-    127:129:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):436:436 -> run
-    130:166:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):437:437 -> run
-    167:168:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):439:439 -> run
-    169:176:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):441:441 -> run
-    177:181:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):435:435 -> run
-    182:186:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):425:425 -> run
-    187:189:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):426:426 -> run
-    190:191:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):427:427 -> run
-    192:195:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):439:439 -> run
+    87:88:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):425 -> run
+      # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
+    89:90:void com.tekartik.sqflite.Database.openReadOnly():166:166 -> run
+    89:90:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):425 -> run
+    91:93:void com.tekartik.sqflite.Database$1.<init>(com.tekartik.sqflite.Database):167:167 -> run
+    91:93:void com.tekartik.sqflite.Database.openReadOnly():166 -> run
+    91:93:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):425 -> run
+    94:100:void com.tekartik.sqflite.Database.openReadOnly():166:166 -> run
+    94:100:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):425 -> run
+    101:103:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):427:427 -> run
+    104:108:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):435:435 -> run
+    109:117:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):437:437 -> run
+    118:126:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):439:439 -> run
+    127:128:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):440:441 -> run
+    129:131:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):441:441 -> run
+    132:168:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):442:442 -> run
+    169:170:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):444:444 -> run
+    171:178:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):446:446 -> run
+    179:183:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):440:440 -> run
+    184:188:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):430:430 -> run
+    189:191:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):431:431 -> run
+    192:193:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):432:432 -> run
+    194:197:void com.tekartik.sqflite.SqflitePlugin.lambda$onOpenDatabaseCall$0(boolean,java.lang.String,io.flutter.plugin.common.MethodChannel$Result,java.lang.Boolean,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodCall,boolean,int):444:444 -> run
 com.tekartik.sqflite.SqflitePlugin$1 -> q72:
 # {"id":"sourceFile","fileName":"SqflitePlugin.java"}
     com.tekartik.sqflite.Database val$database -> a
       # {"id":"com.android.tools.r8.residualsignature","signature":"Lyt;"}
     io.flutter.plugin.common.MethodChannel$Result val$result -> b
-    1:8:void <init>(com.tekartik.sqflite.SqflitePlugin,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodChannel$Result):472:472 -> <init>
+    1:8:void <init>(com.tekartik.sqflite.SqflitePlugin,com.tekartik.sqflite.Database,io.flutter.plugin.common.MethodChannel$Result):477:477 -> <init>
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ls72;Lyt;Lio/flutter/plugin/common/MethodChannel$Result;)V"}
-    1:3:void run():475:475 -> run
-    4:8:void run():476:476 -> run
-    9:9:void run():477:477 -> run
-    10:16:void run():479:479 -> run
-    17:20:void run():477:477 -> run
+    1:3:void run():480:480 -> run
+    4:8:void run():481:481 -> run
+    9:9:void run():482:482 -> run
+    10:16:void run():484:484 -> run
+    17:20:void run():482:482 -> run
 com.tekartik.sqflite.SqflitePlugin$2 -> r72:
 # {"id":"sourceFile","fileName":"SqflitePlugin.java"}
     com.tekartik.sqflite.Database val$openedDatabase -> a
       # {"id":"com.android.tools.r8.residualsignature","signature":"Lyt;"}
     java.lang.String val$path -> b
     io.flutter.plugin.common.MethodChannel$Result val$result -> c
-    1:10:void <init>(com.tekartik.sqflite.SqflitePlugin,com.tekartik.sqflite.Database,java.lang.String,io.flutter.plugin.common.MethodChannel$Result):515:515 -> <init>
+    1:10:void <init>(com.tekartik.sqflite.SqflitePlugin,com.tekartik.sqflite.Database,java.lang.String,io.flutter.plugin.common.MethodChannel$Result):520:520 -> <init>
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ls72;Lyt;Ljava/lang/String;Lio/flutter/plugin/common/MethodChannel$Result;)V"}
-    1:7:void run():518:518 -> run
-    8:11:void run():520:520 -> run
-    12:14:void run():521:521 -> run
-    15:22:void run():524:524 -> run
-    23:41:void run():525:525 -> run
-    42:43:void run():527:527 -> run
+    1:7:void run():523:523 -> run
+    8:11:void run():525:525 -> run
+    12:14:void run():526:526 -> run
+    15:22:void run():529:529 -> run
+    23:41:void run():530:530 -> run
+    42:43:void run():532:532 -> run
     44:53:void com.tekartik.sqflite.Database.deleteDatabase(java.lang.String):129:129 -> run
-    44:53:void run():527 -> run
-    54:80:void run():529:529 -> run
-    81:82:void run():531:532 -> run
-    83:88:void run():532:532 -> run
-    89:92:void run():531:531 -> run
+    44:53:void run():532 -> run
+    54:80:void run():534:534 -> run
+    81:82:void run():536:537 -> run
+    83:88:void run():537:537 -> run
+    89:92:void run():536:536 -> run
 com.tekartik.sqflite.SqlCommand -> t72:
 # {"id":"sourceFile","fileName":"SqlCommand.java"}
     java.lang.String sql -> a

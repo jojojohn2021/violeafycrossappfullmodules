@@ -193,6 +193,17 @@ class PreorderHistoryScreen extends ConsumerWidget {
                                     'Courier: ${booking.preferredCourierAgent} • Gift Wrap: ${booking.giftWrap ? "Yes" : "No"}',
                                     style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                   ),
+                                  if (booking.isConvertedToSalesOrder) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Sales Order: ${booking.salesOrderNumber ?? booking.salesOrderId} • PRE-ORDER',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primaryGreen,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -200,7 +211,9 @@ class PreorderHistoryScreen extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  'Adv: ₹${booking.bookingAdvance.toStringAsFixed(2)}',
+                                  booking.totalVerifiedPaid > booking.initialBookingAdvance
+                                      ? 'Paid: ₹${booking.totalVerifiedPaid.toStringAsFixed(2)}'
+                                      : 'Adv: ₹${booking.initialBookingAdvance.toStringAsFixed(2)}',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -248,7 +261,7 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
   bool _isPayingBalance = false;
 
   Future<void> _payRemainingBalance(PreorderBooking booking) async {
-    if (_isPayingBalance || booking.remainingBalance <= 0) return;
+    if (_isPayingBalance || !booking.canPayRemainingBalance) return;
 
     final user = firebase_auth.FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
@@ -283,14 +296,27 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
         customerName = 'LeafyEarth Customer';
       }
 
-      final balanceAmount = booking.remainingBalance;
-      final orderId = 'BAL-${booking.preorderId}-${DateTime.now().millisecondsSinceEpoch}';
       final deliveryAddressJson =
           booking.deliveryAddress?.toJson() ?? ref.read(selectedAddressProvider)?.toJson();
 
+      // Request authoritative balance checkout quote from backend
+      final quote = await ref.read(preorderServiceProvider).createBalanceCheckout(
+            preorderId: booking.preorderId,
+            deliveryAddress: deliveryAddressJson,
+          );
+
+      final balanceAmount = quote.payableAmount > 0 ? quote.payableAmount : booking.remainingBalance;
+      final serverOrderData = quote.orderData;
+      final orderId = (serverOrderData['id']?.toString().isNotEmpty == true)
+          ? serverOrderData['id'].toString()
+          : (quote.checkoutId.isNotEmpty
+              ? quote.checkoutId
+              : 'BAL-${booking.preorderId}-${DateTime.now().millisecondsSinceEpoch}');
+
       final orderData = <String, dynamic>{
+        ...serverOrderData,
         'id': orderId,
-        'orderNumber': booking.preorderId,
+        'orderNumber': serverOrderData['orderNumber'] ?? booking.preorderId,
         'customerId': user.uid,
         'customerName': customerName,
         'customerEmail': customerEmail,
@@ -300,39 +326,9 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
         if (deliveryAddressJson != null) 'deliveryAddress': deliveryAddressJson,
         'isPreorderBalancePayment': true,
         'preorderId': booking.preorderId,
-        'products': [
-          {
-            'productId': booking.productId,
-            'productName': booking.productNameSnapshot,
-            'imageUrl': booking.imageUrlSnapshot,
-            'quantity': booking.quantity,
-            'price': balanceAmount,
-            'isPreorder': true,
-            'isPreorderBalancePayment': true,
-            'preorderId': booking.preorderId,
-            'onlinePriceSnapshot': booking.onlinePriceSnapshot,
-            'totalProductValue': booking.totalProductValue,
-            'paymentType': 'balance',
-            'paymentTypeLabel': 'Remaining Balance Payment',
-            'bookingAdvance': balanceAmount,
-            'remainingBalance': 0.0,
-            'giftWrap': booking.giftWrap,
-            'specialSuggestion': booking.specialSuggestion,
-            'expectedDeliveryDate': booking.expectedDeliveryDate,
-            'preferredCourierAgent': booking.preferredCourierAgent,
-          },
-        ],
-        'subtotal': 0.0,
-        'deliveryFee': 0.0,
-        'regularInvoiceGrandTotal': 0.0,
         'totalPreorderBookingAdvance': balanceAmount,
         'customerGrandTotalPayable': balanceAmount,
         'totalValue': balanceAmount,
-        'paymentStatus': 'Pending',
-        'deliveryStatus': booking.bookingStatus.displayLabel,
-        'assignedTo': 'Logistics',
-        'createdAt': DateTime.now().toIso8601String(),
-        'paymentMethod': 'UPI',
         'salesPlatform': kIsWeb ? 'webleafyearth' : 'mobleafyearth',
       };
 
@@ -517,15 +513,37 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
                       _DetailLine(label: 'Payment Type', value: booking.paymentTypeLabel),
                       _DetailLine(
                         label: 'Booking Advance Paid',
-                        value: '₹${booking.bookingAdvance.toStringAsFixed(2)}',
+                        value: '₹${booking.initialBookingAdvance.toStringAsFixed(2)}',
                         highlight: true,
                       ),
+                      if (booking.totalVerifiedPaid > booking.initialBookingAdvance)
+                        _DetailLine(
+                          label: 'Total Verified Paid',
+                          value: '₹${booking.totalVerifiedPaid.toStringAsFixed(2)}',
+                          highlight: true,
+                        ),
                       _DetailLine(
                         label: 'Remaining Balance',
                         value: '₹${booking.remainingBalance.toStringAsFixed(2)}',
                       ),
                       _DetailLine(label: 'Payment Status', value: booking.paymentStatus.displayLabel),
                       _DetailLine(label: 'Booking Status', value: booking.bookingStatus.displayLabel),
+                      _DetailLine(
+                        label: 'Sales Order Conversion',
+                        value: booking.conversionStatusLabel,
+                        highlight: booking.isConvertedToSalesOrder,
+                      ),
+                      if (booking.isConvertedToSalesOrder) ...[
+                        _DetailLine(
+                          label: 'Linked Sales Order',
+                          value: booking.salesOrderNumber ?? booking.salesOrderId ?? '',
+                          highlight: true,
+                        ),
+                        const _DetailLine(
+                          label: 'Sales Delivery Status',
+                          value: 'PRE-ORDER',
+                        ),
+                      ],
                       _DetailLine(label: 'Gift Wrap', value: booking.giftWrap ? 'Yes' : 'No'),
                       _DetailLine(
                         label: 'Special Suggestion',
@@ -539,8 +557,7 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
                           value: booking.formattedDeliveryAddress,
                         ),
                       const SizedBox(height: 18),
-                      if (booking.remainingBalance > 0 &&
-                          booking.bookingStatus != PreorderBookingStatus.cancelled) ...[
+                      if (booking.canPayRemainingBalance) ...[
                         SizedBox(
                           width: double.infinity,
                           height: 46,

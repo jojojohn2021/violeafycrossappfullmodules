@@ -518,6 +518,8 @@ class PreorderBooking {
   final PreorderPaymentOption paymentOption;
   final String paymentTypeLabel;
   final double bookingAdvance;
+  final double initialBookingAdvance;
+  final double totalVerifiedPaid;
   final double remainingBalance;
   final bool giftWrap;
   final String specialSuggestion;
@@ -529,8 +531,15 @@ class PreorderBooking {
   final PreorderBookingStatus bookingStatus;
   final PreorderPaymentStatus paymentStatus;
   final String? paymentReference;
+  final String? lastPaymentReference;
   final String? checkoutReference;
   final String? invoiceId;
+  final String? salesOrderId;
+  final String? salesOrderNumber;
+  final String? salesInvoiceId;
+  final String conversionStatus;
+  final String? convertedAt;
+  final String? conversionErrorCode;
   final String idempotencyKey;
   final String createdAt;
   final String updatedAt;
@@ -554,6 +563,8 @@ class PreorderBooking {
     required this.paymentOption,
     required this.paymentTypeLabel,
     required this.bookingAdvance,
+    double? initialBookingAdvance,
+    double? totalVerifiedPaid,
     required this.remainingBalance,
     required this.giftWrap,
     required this.specialSuggestion,
@@ -565,15 +576,51 @@ class PreorderBooking {
     required this.bookingStatus,
     required this.paymentStatus,
     this.paymentReference,
+    this.lastPaymentReference,
     this.checkoutReference,
     this.invoiceId,
+    this.salesOrderId,
+    this.salesOrderNumber,
+    this.salesInvoiceId,
+    this.conversionStatus = 'not_applicable',
+    this.convertedAt,
+    this.conversionErrorCode,
     required this.idempotencyKey,
     required this.createdAt,
     required this.updatedAt,
     required this.canCancel,
-  });
+  })  : initialBookingAdvance = initialBookingAdvance ?? bookingAdvance,
+        totalVerifiedPaid = totalVerifiedPaid ?? bookingAdvance;
 
   PreorderBookingStatus get status => bookingStatus;
+
+  bool get isConvertedToSalesOrder =>
+      conversionStatus == 'converted' ||
+      (salesOrderId != null && salesOrderId!.trim().isNotEmpty);
+
+  bool get canPayRemainingBalance =>
+      remainingBalance > 0 &&
+      bookingStatus != PreorderBookingStatus.cancelled &&
+      paymentStatus != PreorderPaymentStatus.paid &&
+      !isConvertedToSalesOrder;
+
+  String get conversionStatusLabel {
+    if (isConvertedToSalesOrder) {
+      return 'Converted to Sales Order (PRE-ORDER)';
+    }
+    switch (conversionStatus) {
+      case 'failed':
+        return 'Conversion Pending Reconciliation';
+      case 'processing':
+      case 'pending':
+        return 'Converting to Sales Order...';
+      default:
+        if (remainingBalance > 0) {
+          return 'Awaiting Remaining Balance';
+        }
+        return 'Not Converted';
+    }
+  }
 
   factory PreorderBooking.fromJson(Map<String, dynamic> json) {
     final qty = (json['quantity'] as num?)?.toInt() ?? 1;
@@ -587,8 +634,19 @@ class PreorderBooking {
       json['paymentType']?.toString() ?? json['paymentTypeLabel']?.toString(),
     );
     final advance = (json['bookingAdvance'] as num?)?.toDouble() ?? totalVal;
+    final initialAdvance =
+        (json['initialBookingAdvance'] as num?)?.toDouble() ?? advance;
+    final payStatus = PreorderPaymentStatus.fromString(
+      json['paymentStatus']?.toString(),
+    );
+    final verifiedPaid = (json['totalVerifiedPaid'] as num?)?.toDouble() ??
+        (payStatus == PreorderPaymentStatus.paid
+            ? totalVal
+            : (payStatus == PreorderPaymentStatus.partiallyPaid
+                ? advance
+                : 0.0));
     final balance = (json['remainingBalance'] as num?)?.toDouble() ??
-        roundPreorderCurrency((totalVal - advance).clamp(0.0, totalVal));
+        roundPreorderCurrency((totalVal - verifiedPaid).clamp(0.0, totalVal));
 
     PreorderDeliveryAddress? parsedAddress;
     final rawAddr = json['deliveryAddress'] ?? json['shippingAddress'];
@@ -605,6 +663,31 @@ class PreorderBooking {
         parsedAddress = flatCandidate;
       }
     }
+
+    final rawSalesOrderId = json['salesOrderId']?.toString();
+    final salesOrderIdClean =
+        (rawSalesOrderId != null && rawSalesOrderId.trim().isNotEmpty)
+            ? rawSalesOrderId.trim()
+            : null;
+    final rawSalesOrderNumber = json['salesOrderNumber']?.toString();
+    final salesOrderNumberClean =
+        (rawSalesOrderNumber != null && rawSalesOrderNumber.trim().isNotEmpty)
+            ? rawSalesOrderNumber.trim()
+            : null;
+    final rawSalesInvoiceId = json['salesInvoiceId']?.toString();
+    final salesInvoiceIdClean =
+        (rawSalesInvoiceId != null && rawSalesInvoiceId.trim().isNotEmpty)
+            ? rawSalesInvoiceId.trim()
+            : null;
+    final rawConversionStatus =
+        (json['conversionStatus']?.toString() ?? '').trim().toLowerCase();
+    final effectiveConversionStatus = rawConversionStatus.isNotEmpty
+        ? rawConversionStatus
+        : (salesOrderIdClean != null
+            ? 'converted'
+            : (payStatus == PreorderPaymentStatus.paid && balance <= 0
+                ? 'pending'
+                : 'not_applicable'));
 
     return PreorderBooking(
       preorderId: '${json['preorderId'] ?? ''}',
@@ -626,6 +709,8 @@ class PreorderBooking {
       paymentTypeLabel:
           json['paymentTypeLabel']?.toString() ?? option.displayLabel,
       bookingAdvance: advance,
+      initialBookingAdvance: initialAdvance,
+      totalVerifiedPaid: verifiedPaid,
       remainingBalance: balance,
       giftWrap: json['giftWrap'] == true,
       specialSuggestion:
@@ -641,16 +726,68 @@ class PreorderBooking {
       bookingStatus: PreorderBookingStatus.fromString(
         json['bookingStatus']?.toString() ?? json['status']?.toString(),
       ),
-      paymentStatus: PreorderPaymentStatus.fromString(
-        json['paymentStatus']?.toString(),
-      ),
+      paymentStatus: payStatus,
       paymentReference: json['paymentReference']?.toString(),
+      lastPaymentReference: json['lastPaymentReference']?.toString(),
       checkoutReference: json['checkoutReference']?.toString(),
       invoiceId: json['invoiceId']?.toString(),
+      salesOrderId: salesOrderIdClean,
+      salesOrderNumber: salesOrderNumberClean,
+      salesInvoiceId: salesInvoiceIdClean,
+      conversionStatus: effectiveConversionStatus,
+      convertedAt: json['convertedAt']?.toString(),
+      conversionErrorCode: json['conversionErrorCode']?.toString(),
       idempotencyKey: '${json['idempotencyKey'] ?? ''}',
       createdAt: '${json['createdAt'] ?? ''}',
       updatedAt: '${json['updatedAt'] ?? ''}',
       canCancel: json['canCancel'] == true,
+    );
+  }
+}
+
+class PreorderBalanceCheckoutQuote {
+  final String preorderId;
+  final String checkoutId;
+  final double payableAmount;
+  final double totalProductValue;
+  final double initialBookingAdvance;
+  final double totalVerifiedPaid;
+  final double remainingBalance;
+  final String currency;
+  final Map<String, dynamic> orderData;
+
+  const PreorderBalanceCheckoutQuote({
+    required this.preorderId,
+    required this.checkoutId,
+    required this.payableAmount,
+    required this.totalProductValue,
+    required this.initialBookingAdvance,
+    required this.totalVerifiedPaid,
+    required this.remainingBalance,
+    required this.currency,
+    required this.orderData,
+  });
+
+  factory PreorderBalanceCheckoutQuote.fromJson(Map<String, dynamic> json) {
+    final payable = (json['payableAmount'] as num?)?.toDouble() ??
+        (json['remainingBalance'] as num?)?.toDouble() ??
+        0.0;
+    return PreorderBalanceCheckoutQuote(
+      preorderId: '${json['preorderId'] ?? ''}',
+      checkoutId: '${json['checkoutId'] ?? ''}',
+      payableAmount: payable,
+      totalProductValue:
+          (json['totalProductValue'] as num?)?.toDouble() ?? payable,
+      initialBookingAdvance:
+          (json['initialBookingAdvance'] as num?)?.toDouble() ?? 0.0,
+      totalVerifiedPaid:
+          (json['totalVerifiedPaid'] as num?)?.toDouble() ?? 0.0,
+      remainingBalance:
+          (json['remainingBalance'] as num?)?.toDouble() ?? payable,
+      currency: '${json['currency'] ?? 'INR'}',
+      orderData: json['orderData'] is Map
+          ? Map<String, dynamic>.from(json['orderData'] as Map)
+          : const <String, dynamic>{},
     );
   }
 }

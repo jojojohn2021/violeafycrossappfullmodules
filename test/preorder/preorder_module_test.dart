@@ -396,4 +396,97 @@ void main() {
       expect(summary.customerGrandTotalPayable, 500.0);
     });
   });
+
+  group('PreorderBooking payment-to-sales conversion model & eligibility states', () {
+    test('Partially paid booking (₹169.90 on ₹1,699.00) enables canPayRemainingBalance and is not converted', () {
+      final partialBooking = PreorderBooking.fromJson({
+        'preorderId': 'po_5a29d53c9cfa6c58976666b9',
+        'userId': 'u1',
+        'customerId': 'u1',
+        'customerDisplayName': 'Swapna',
+        'productId': 'prod-plum',
+        'productNameSnapshot': 'Plum Cake - Rum Soaked',
+        'skuSnapshot': 'PLUM-900',
+        'packingSizeSnapshot': '900 gm',
+        'quantity': 1,
+        'onlinePriceSnapshot': 1699.0,
+        'mrpSnapshot': 1699.0,
+        'gstPercentageSnapshot': 12.0,
+        'totalProductValue': 1699.0,
+        'paymentType': 'partial',
+        'paymentTypeLabel': 'Partial Payment',
+        'bookingAdvance': 169.90,
+        'initialBookingAdvance': 169.90,
+        'totalVerifiedPaid': 169.90,
+        'remainingBalance': 1529.10,
+        'giftWrap': false,
+        'specialSuggestion': '',
+        'expectedDeliveryDate': '2026-12-09',
+        'preferredCourierAgent': 'DTDC',
+        'currency': 'INR',
+        'bookingStatus': 'confirmed',
+        'paymentStatus': 'partially_paid',
+        'conversionStatus': 'not_applicable',
+        'idempotencyKey': 'idem_1',
+        'createdAt': '2026-11-11T00:00:00Z',
+        'updatedAt': '2026-11-11T00:00:00Z',
+        'canCancel': false,
+      });
+
+      expect(partialBooking.initialBookingAdvance, 169.90);
+      expect(partialBooking.totalVerifiedPaid, 169.90);
+      expect(partialBooking.remainingBalance, 1529.10);
+      expect(partialBooking.isConvertedToSalesOrder, isFalse);
+      expect(partialBooking.canPayRemainingBalance, isTrue);
+      expect(partialBooking.conversionStatusLabel, 'Awaiting Remaining Balance');
+    });
+
+    test('Fully paid & converted booking (₹1,699.00) disables canPayRemainingBalance and exposes linked sales order', () {
+      final convertedBooking = PreorderBooking.fromJson({
+        'preorderId': 'po_5a29d53c9cfa6c58976666b9',
+        'userId': 'u1',
+        'customerId': 'u1',
+        'customerDisplayName': 'Swapna',
+        'productId': 'prod-plum',
+        'productNameSnapshot': 'Plum Cake - Rum Soaked',
+        'skuSnapshot': 'PLUM-900',
+        'packingSizeSnapshot': '900 gm',
+        'quantity': 1,
+        'onlinePriceSnapshot': 1699.0,
+        'mrpSnapshot': 1699.0,
+        'gstPercentageSnapshot': 12.0,
+        'totalProductValue': 1699.0,
+        'paymentType': 'partial',
+        'paymentTypeLabel': 'Partial Payment',
+        'bookingAdvance': 1699.0,
+        'initialBookingAdvance': 169.90,
+        'totalVerifiedPaid': 1699.0,
+        'remainingBalance': 0.0,
+        'giftWrap': false,
+        'specialSuggestion': '',
+        'expectedDeliveryDate': '2026-12-09',
+        'preferredCourierAgent': 'DTDC',
+        'currency': 'INR',
+        'bookingStatus': 'confirmed',
+        'paymentStatus': 'paid',
+        'salesOrderId': 'SO-PO-po_5a29d53c9cfa6c58976666b9',
+        'salesOrderNumber': 'SO-PO-po_5a29d53c9cfa6c58976666b9',
+        'salesInvoiceId': 'INV-SO-PO-po_5a29d53c9cfa6c58976666b9',
+        'conversionStatus': 'converted',
+        'convertedAt': '2026-11-12T10:00:00Z',
+        'idempotencyKey': 'idem_1',
+        'createdAt': '2026-11-11T00:00:00Z',
+        'updatedAt': '2026-11-12T10:00:00Z',
+        'canCancel': false,
+      });
+
+      expect(convertedBooking.initialBookingAdvance, 169.90);
+      expect(convertedBooking.totalVerifiedPaid, 1699.0);
+      expect(convertedBooking.remainingBalance, 0.0);
+      expect(convertedBooking.isConvertedToSalesOrder, isTrue);
+      expect(convertedBooking.canPayRemainingBalance, isFalse);
+      expect(convertedBooking.salesOrderId, 'SO-PO-po_5a29d53c9cfa6c58976666b9');
+      expect(convertedBooking.conversionStatusLabel, 'Converted to Sales Order (PRE-ORDER)');
+    });
+  });
 }

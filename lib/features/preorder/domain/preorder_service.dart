@@ -130,4 +130,18 @@ class PreorderService {
     String? reason,
   }) =>
       _repository.cancelBooking(preorderId: preorderId, reason: reason);
+
+  Future<Map<String, dynamic>> getBalanceQuote(String preorderId) =>
+      _repository.fetchBalanceQuote(preorderId);
+
+  Future<PreorderBalanceCheckoutQuote> createBalanceCheckout({
+    required String preorderId,
+    Map<String, dynamic>? deliveryAddress,
+    String? idempotencyKey,
+  }) =>
+      _repository.createBalanceCheckout(
+        preorderId: preorderId,
+        deliveryAddress: deliveryAddress,
+        idempotencyKey: idempotencyKey,
+      );
 }

@@ -21,6 +21,9 @@ export interface PreorderRouteDeps {
   findCustomerByAuthUser?: (user: any) => Promise<any | null>;
   config?: PreorderConfig;
   now?: () => Date;
+  onSalesOrderCreated?: (
+    salesOrder: Record<string, any>
+  ) => Promise<{ invoiceId?: string | null } | void>;
 }
 
 const rateBuckets = new Map<string, number[]>();
@@ -81,6 +84,7 @@ export function registerPreorderRoutes(app: Express, deps: PreorderRouteDeps) {
     adminDb,
     config: deps.config || DEFAULT_PREORDER_CONFIG,
     now: deps.now,
+    onSalesOrderCreated: deps.onSalesOrderCreated,
   });
 
   const isAnonOrMissing = (user: any): boolean =>
@@ -392,6 +396,105 @@ export function registerPreorderRoutes(app: Express, deps: PreorderRouteDeps) {
 
   app.patch('/api/v1/admin/preorders/:id/status', adminStatusHandler);
   app.post('/api/v1/admin/preorders/:id/status', adminStatusHandler);
+
+  // 8. GET /api/v1/preorders/:id/balance
+  // Returns server-authoritative outstanding balance, cumulative verified paid, payment status, and conversion status.
+  app.get('/api/v1/preorders/:id/balance', async (req: Request, res: Response) => {
+    const requestId = makeRequestId(req);
+    try {
+      const user = await requireAuthUser(req, res, requestId);
+      if (!user) return;
+      const isAdmin = await checkIsAdmin(user);
+      const quote = await service.getPreorderBalanceQuote({
+        preorderId: String(req.params.id || ''),
+        requesterUid: String(user.uid),
+        isAdmin,
+      });
+      return res.status(200).json({ ...quote, requestId });
+    } catch (err) {
+      return handleRouteError(res, requestId, err, 'getPreorderBalanceQuote');
+    }
+  });
+
+  // 9. POST /api/v1/preorders/:id/balance-checkout
+  // Generates an idempotent server-authoritative balance checkout payload for the current remaining balance.
+  app.post('/api/v1/preorders/:id/balance-checkout', async (req: Request, res: Response) => {
+    const requestId = makeRequestId(req);
+    try {
+      const user = await requireAuthUser(req, res, requestId);
+      if (!user) return;
+      if (isRateLimited(`balchk:${user.uid}`, 20, 60_000)) {
+        return sendError(
+          res,
+          requestId,
+          'RATE_LIMITED',
+          'Too many balance checkout attempts. Please wait a moment.',
+          429
+        );
+      }
+
+      if (req.body && Object.keys(req.body).length > 0) {
+        assertAllowedKeys(req.body, [
+          'deliveryAddress',
+          'shippingAddress',
+          'idempotencyKey',
+          'customerDisplayName',
+          'customerEmail',
+          'customerMobile',
+        ]);
+      }
+
+      let customer: any = null;
+      if (findCustomerByAuthUser) {
+        try {
+          customer = await findCustomerByAuthUser(user);
+        } catch (_) {}
+      }
+
+      const checkout = await service.createPreorderBalanceCheckout({
+        preorderId: String(req.params.id || ''),
+        requesterUid: String(user.uid),
+        customerDisplayName: String(
+          req.body?.customerDisplayName || customer?.name || user.name || 'LeafyEarth Customer'
+        ).trim(),
+        customerEmail: String(req.body?.customerEmail || customer?.email || user.email || '').trim(),
+        customerMobile: String(
+          req.body?.customerMobile || customer?.mobileNumber || user.phone_number || ''
+        ).trim(),
+        deliveryAddress: req.body?.deliveryAddress ?? req.body?.shippingAddress,
+        idempotencyKey: req.body?.idempotencyKey ? String(req.body.idempotencyKey) : undefined,
+      });
+
+      return res.status(200).json({ ...checkout, requestId });
+    } catch (err) {
+      return handleRouteError(res, requestId, err, 'createPreorderBalanceCheckout');
+    }
+  });
+
+  // 10. POST /api/v1/admin/preorders/:id/reconcile
+  // Protected admin recovery endpoint to retry/repair conversion of an already verified fully-paid pre-order.
+  app.post('/api/v1/admin/preorders/:id/reconcile', async (req: Request, res: Response) => {
+    const requestId = makeRequestId(req);
+    try {
+      const user = await requireAuthUser(req, res, requestId);
+      if (!user) return;
+      const isAdmin = await checkIsAdmin(user);
+      if (!isAdmin) {
+        return sendError(res, requestId, 'FORBIDDEN', 'Administrator role is required.', 403);
+      }
+      if (req.body && Object.keys(req.body).length > 0) {
+        assertAllowedKeys(req.body, ['note']);
+      }
+      const result = await service.reconcilePreorderConversion({
+        preorderId: String(req.params.id || ''),
+        adminUid: String(user.uid),
+        note: req.body?.note ? String(req.body.note) : undefined,
+      });
+      return res.status(200).json({ ...result, requestId });
+    } catch (err) {
+      return handleRouteError(res, requestId, err, 'reconcilePreorderConversion');
+    }
+  });
 
   return service;
 }

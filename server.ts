@@ -111,6 +111,10 @@ const preorderService = registerPreorderRoutes(app as any, {
   adminDb,
   getAuthenticatedUser: (req: any) => getAuthenticatedUser(req),
   findCustomerByAuthUser: (user: any) => findCustomerByAuthUser(user),
+  onSalesOrderCreated: async (salesOrder: Record<string, any>) => {
+    const inv = await ensureInvoiceForOrder(salesOrder);
+    return { invoiceId: inv.invoiceId };
+  },
 });
 app.get("/api/data", async (req: any, res: any) => {
   try {
@@ -3371,7 +3375,17 @@ export async function calculateGSTForOrderItems(
       let effectiveBalance = dto.remainingBalance;
 
       if (isBalancePayment) {
-        if (dto.remainingBalance <= 0) {
+        if (dto.bookingStatus === 'cancelled') {
+          throw new Error(
+            `Cancelled pre-order booking '${dto.preorderId}' cannot accept balance payment.`
+          );
+        }
+        if (
+          dto.conversionStatus === 'converted' ||
+          dto.salesOrderId ||
+          dto.paymentStatus === 'paid' ||
+          dto.remainingBalance <= 0
+        ) {
           throw new Error(
             `No remaining balance is due for pre-order booking '${dto.preorderId}'.`
           );

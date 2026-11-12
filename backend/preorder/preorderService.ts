@@ -19,6 +19,7 @@ import {
   type PreorderBookingDto,
   type PreorderBookingStatus,
   type PreorderConfig,
+  type PreorderConversionStatus,
   type PreorderDeliveryAddressDto,
   PreorderDomainError,
   type PreorderPaymentAllocationItemDto,
@@ -30,6 +31,7 @@ import {
 export const COLLECTIONS = {
   PRODUCTS: 'products',
   PREORDERS: 'preorders',
+  SALES_ORDERS: 'sales_orders',
   PAYMENT_ALLOCATIONS: 'payment_allocations',
   IDEMPOTENCY: 'preorder_idempotency',
   EVENTS: 'preorder_events',
@@ -500,7 +502,15 @@ export function calculateCheckoutFinancials(params: {
 /** Checks whether a booking can currently be cancelled by the customer. */
 export function canCustomerCancelBooking(booking: {
   bookingStatus: PreorderBookingStatus;
+  conversionStatus?: PreorderConversionStatus;
+  salesOrderId?: string | null;
 }): { allowed: boolean; reason?: string } {
+  if (booking.conversionStatus === 'converted' || booking.salesOrderId) {
+    return {
+      allowed: false,
+      reason: 'Bookings already converted to a sales order cannot be cancelled directly.',
+    };
+  }
   if (!['pending_payment', 'confirmed'].includes(booking.bookingStatus)) {
     return {
       allowed: false,
@@ -562,6 +572,9 @@ export interface PreorderServiceDeps {
   adminDb: any;
   config?: PreorderConfig;
   now?: () => Date;
+  onSalesOrderCreated?: (
+    salesOrder: Record<string, any>
+  ) => Promise<{ invoiceId?: string | null } | void>;
 }
 
 export function createPreorderService(deps: PreorderServiceDeps) {
@@ -585,15 +598,54 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       Number(data.totalProductValue ?? data.totalSnapshot ?? onlinePriceSnapshot * quantity)
     );
     const bookingAdvance = roundMoney(Number(data.bookingAdvance ?? totalProductValue));
+    const initialBookingAdvance = roundMoney(
+      Number(data.initialBookingAdvance ?? bookingAdvance)
+    );
+    const totalVerifiedPaid = roundMoney(
+      data.totalVerifiedPaid !== undefined && data.totalVerifiedPaid !== null
+        ? Number(data.totalVerifiedPaid)
+        : rawPaymentStatus === 'paid'
+        ? totalProductValue
+        : rawPaymentStatus === 'partially_paid'
+        ? bookingAdvance
+        : 0
+    );
     const remainingBalance = roundMoney(
-      Number(data.remainingBalance ?? Math.max(0, totalProductValue - bookingAdvance))
+      data.remainingBalance !== undefined && data.remainingBalance !== null
+        ? Math.max(0, Number(data.remainingBalance))
+        : Math.max(
+            0,
+            totalProductValue -
+              (rawPaymentStatus === 'unpaid' ? bookingAdvance : totalVerifiedPaid)
+          )
     );
 
-    const cancelCheck = canCustomerCancelBooking({ bookingStatus: rawBookingStatus });
+    const salesOrderId = data.salesOrderId ? String(data.salesOrderId) : null;
+    const salesOrderNumber = data.salesOrderNumber ? String(data.salesOrderNumber) : null;
+    const salesInvoiceId = data.salesInvoiceId ? String(data.salesInvoiceId) : null;
+    const conversionStatus: PreorderConversionStatus = data.conversionStatus
+      ? (String(data.conversionStatus) as PreorderConversionStatus)
+      : salesOrderId
+      ? 'converted'
+      : rawPaymentStatus === 'paid' && remainingBalance <= 0
+      ? 'pending'
+      : 'not_applicable';
+
+    const cancelCheck = canCustomerCancelBooking({
+      bookingStatus: rawBookingStatus,
+      conversionStatus,
+      salesOrderId,
+    });
 
     const addrNorm = normalizeDeliveryAddress(
       data.deliveryAddress ?? data.shippingAddress ?? data
     );
+
+    const lastPaymentReference =
+      data.lastPaymentReference ||
+      data.balancePaymentReference ||
+      data.paymentReference ||
+      null;
 
     return {
       preorderId: String(data.preorderId || data.id),
@@ -613,6 +665,8 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       paymentType,
       paymentTypeLabel,
       bookingAdvance,
+      initialBookingAdvance,
+      totalVerifiedPaid,
       remainingBalance,
       giftWrap: Boolean(data.giftWrap),
       specialSuggestion: String(data.specialSuggestion ?? data.notes ?? ''),
@@ -634,8 +688,15 @@ export function createPreorderService(deps: PreorderServiceDeps) {
       status: rawBookingStatus,
       paymentStatus: rawPaymentStatus,
       paymentReference: data.paymentReference ? String(data.paymentReference) : null,
+      lastPaymentReference: lastPaymentReference ? String(lastPaymentReference) : null,
       checkoutReference: data.checkoutReference ? String(data.checkoutReference) : null,
       invoiceId: data.invoiceId ? String(data.invoiceId) : null,
+      salesOrderId,
+      salesOrderNumber,
+      salesInvoiceId,
+      conversionStatus,
+      convertedAt: data.convertedAt ? String(data.convertedAt) : null,
+      conversionErrorCode: data.conversionErrorCode ? String(data.conversionErrorCode) : null,
       idempotencyKey: String(data.idempotencyKey || ''),
       createdAt: String(data.createdAt || ''),
       updatedAt: String(data.updatedAt || ''),
@@ -1056,16 +1117,489 @@ export function createPreorderService(deps: PreorderServiceDeps) {
   }
 
   /**
-   * 4. Confirm Pre-Order Payments on Verified Checkout Payment (Section 8.3 & Section 12).
+   * 3c. Shared Idempotent Pre-Order -> Normal Sales Order Conversion Service (Sections 3, 4, 6, 7, 8, 10).
+   *
+   * Unified Server-Side Business Rule:
+   *   outstandingBalance = max(0, roundMoney(authoritativeTotalProductValue - netVerifiedPaymentsAllocatedToPreorder))
+   *   Eligible ONLY IF:
+   *     - authoritativeTotalProductValue > 0
+   *     - netVerifiedPaid >= authoritativeTotalProductValue && outstandingBalance === 0
+   *     - paymentStatus === 'paid'
+   *     - bookingStatus !== 'cancelled'
+   *
+   * Creates a canonical `sales_orders` record with `deliveryStatus = "PRE-ORDER"`,
+   * deducts product stock in `products/{productId}`, writes conversion idempotency lock
+   * `preorder_idempotency/conv__{preorderId}`, appends `preorder_events`, and invokes
+   * `deps.onSalesOrderCreated` for downstream invoice & referral commission generation.
+   */
+  async function convertFullyPaidPreorderToSalesOrder(params: {
+    preorderId: string;
+    actorId?: string;
+    actorRole?: 'system' | 'admin' | 'customer';
+    note?: string;
+  }): Promise<{
+    converted: boolean;
+    idempotentReplay: boolean;
+    reason?: string;
+    booking: PreorderBookingDto;
+    salesOrderId: string | null;
+    salesOrderNumber: string | null;
+    salesOrder: Record<string, any> | null;
+  }> {
+    const preorderId = String(params.preorderId || '').trim();
+    if (!isValidId(preorderId)) {
+      throw new PreorderDomainError('VALIDATION_ERROR', 'Invalid preorder ID.', 400);
+    }
+
+    const preorderRef = adminDb.collection(COLLECTIONS.PREORDERS).doc(preorderId);
+    const convIdemRef = adminDb.collection(COLLECTIONS.IDEMPOTENCY).doc(`conv__${preorderId}`);
+
+    let txOutcome: {
+      converted: boolean;
+      idempotentReplay: boolean;
+      needsDownstreamHook: boolean;
+      reason?: string;
+      bookingRecord: Record<string, any>;
+      salesOrderId: string | null;
+      salesOrderNumber: string | null;
+      salesOrder: Record<string, any> | null;
+    };
+
+    try {
+      txOutcome = await adminDb.runTransaction(async (tx: any) => {
+        const [preorderSnap, convIdemSnap] = await Promise.all([
+          tx.get(preorderRef),
+          tx.get(convIdemRef),
+        ]);
+
+        if (!preorderSnap.exists) {
+          throw new PreorderDomainError('NOT_FOUND', 'Pre-order booking not found.', 404);
+        }
+
+        const data = preorderSnap.data() || {};
+        const deterministicSalesOrderId = data.salesOrderId
+          ? String(data.salesOrderId)
+          : `SO-PO-${preorderId}`;
+        const deterministicSalesOrderNumber = data.salesOrderNumber
+          ? String(data.salesOrderNumber)
+          : `SO-2026-PO-${preorderId.replace(/^po_/, '').slice(0, 6).toUpperCase()}`;
+
+        const salesOrderRef = adminDb
+          .collection(COLLECTIONS.SALES_ORDERS)
+          .doc(deterministicSalesOrderId);
+        const productId = String(data.productId || '').trim();
+        const productRef = productId
+          ? adminDb.collection(COLLECTIONS.PRODUCTS).doc(productId)
+          : null;
+
+        const [salesOrderSnap, productSnap] = await Promise.all([
+          tx.get(salesOrderRef),
+          productRef ? tx.get(productRef) : Promise.resolve({ exists: false, data: () => ({}) }),
+        ]);
+
+        const nowIso = getNow().toISOString();
+
+        // 1. Idempotency check: if sales_orders doc already exists or conversion lock exists
+        if (
+          salesOrderSnap.exists ||
+          convIdemSnap.exists ||
+          (data.conversionStatus === 'converted' && data.salesOrderId)
+        ) {
+          const existingSalesOrder = salesOrderSnap.exists ? salesOrderSnap.data() || null : null;
+          const wasFailedDownstream = data.conversionStatus === 'failed';
+          const linkedRecord = {
+            ...data,
+            salesOrderId: deterministicSalesOrderId,
+            salesOrderNumber:
+              existingSalesOrder?.orderNumber || deterministicSalesOrderNumber,
+            conversionStatus: 'converted' as PreorderConversionStatus,
+            convertedAt: data.convertedAt || nowIso,
+            conversionErrorCode: null,
+            updatedAt: data.updatedAt || nowIso,
+          };
+
+          if (
+            data.conversionStatus !== 'converted' ||
+            data.salesOrderId !== deterministicSalesOrderId
+          ) {
+            tx.set(preorderRef, linkedRecord, { merge: true });
+          }
+
+          return {
+            converted: true,
+            idempotentReplay: !wasFailedDownstream,
+            needsDownstreamHook: Boolean(
+              deps.onSalesOrderCreated &&
+                existingSalesOrder &&
+                (!linkedRecord.salesInvoiceId || wasFailedDownstream)
+            ),
+            bookingRecord: linkedRecord,
+            salesOrderId: deterministicSalesOrderId,
+            salesOrderNumber: linkedRecord.salesOrderNumber,
+            salesOrder: existingSalesOrder,
+          };
+        }
+
+        // 2. Unified Server-Side Eligibility Check (Section 3)
+        const rawBookingStatus = String(
+          data.bookingStatus || data.status || 'pending_payment'
+        ) as PreorderBookingStatus;
+        const rawPaymentStatus = String(data.paymentStatus || 'unpaid') as PreorderPaymentStatus;
+        const onlinePriceSnapshot = roundMoney(
+          Number(data.onlinePriceSnapshot ?? data.unitPriceSnapshot ?? 0)
+        );
+        const quantity = Math.max(1, Number(data.quantity || 1));
+        const authoritativeTotal = roundMoney(
+          Number(data.totalProductValue ?? onlinePriceSnapshot * quantity)
+        );
+        const verifiedPaid = roundMoney(
+          data.totalVerifiedPaid !== undefined && data.totalVerifiedPaid !== null
+            ? Number(data.totalVerifiedPaid)
+            : rawPaymentStatus === 'paid'
+            ? Number(data.bookingAdvance ?? authoritativeTotal)
+            : rawPaymentStatus === 'partially_paid'
+            ? Number(data.bookingAdvance ?? 0)
+            : 0
+        );
+        const outstandingBalance = roundMoney(Math.max(0, authoritativeTotal - verifiedPaid));
+
+        const isEligible =
+          rawBookingStatus !== 'cancelled' &&
+          rawPaymentStatus === 'paid' &&
+          authoritativeTotal > 0 &&
+          verifiedPaid >= authoritativeTotal - 0.001 &&
+          outstandingBalance === 0;
+
+        if (!isEligible) {
+          return {
+            converted: false,
+            idempotentReplay: false,
+            needsDownstreamHook: false,
+            reason:
+              rawBookingStatus === 'cancelled'
+                ? 'Cannot convert a cancelled pre-order booking.'
+                : `Pre-order booking has an outstanding balance of ₹${outstandingBalance.toFixed(
+                    2
+                  )} (paymentStatus: ${rawPaymentStatus}). Only fully paid bookings can be converted to sales orders.`,
+            bookingRecord: data,
+            salesOrderId: null,
+            salesOrderNumber: null,
+            salesOrder: null,
+          };
+        }
+
+        // 3. Build canonical `sales_orders` record with `deliveryStatus = "PRE-ORDER"`
+        const productData = productSnap.exists ? productSnap.data() || {} : {};
+        const gstRate = roundMoney(
+          Number(data.gstPercentageSnapshot ?? productData.gstPercentage ?? 18)
+        );
+        const hsnCode = String(productData.hsnCode || productData.hsn || '1234').trim();
+        const gstInclusiveAmount = authoritativeTotal;
+        const taxableValue =
+          gstRate > 0
+            ? roundMoney(gstInclusiveAmount / (1 + gstRate / 100))
+            : gstInclusiveAmount;
+        const gstAmount = roundMoney(gstInclusiveAmount - taxableValue);
+        const hsnGstSummary = [
+          {
+            hsnCode,
+            gstRate,
+            taxableValue,
+            gstAmount,
+            totalAmount: gstInclusiveAmount,
+          },
+        ];
+
+        const addrNorm = normalizeDeliveryAddress(
+          data.deliveryAddress ?? data.shippingAddress ?? data
+        );
+
+        const convertedLineItem = {
+          id: productId,
+          productId,
+          productName: String(data.productNameSnapshot || productData.name || ''),
+          name: String(data.productNameSnapshot || productData.name || ''),
+          sku: String(data.skuSnapshot || productData.sku || ''),
+          packingSize: String(
+            data.packingSizeSnapshot || productData.packingSize || productData.unit || ''
+          ),
+          unit: String(productData.unit || data.packingSizeSnapshot || ''),
+          brandOwner: String(productData.brandOwner || productData.brandOwnerName || ''),
+          imageUrl:
+            data.imageUrlSnapshot || productData.imageUrl || productData.image || '',
+          quantity,
+          price: onlinePriceSnapshot,
+          unitPrice: onlinePriceSnapshot,
+          mrp: roundMoney(
+            Number(data.mrpSnapshot || productData.mrp || onlinePriceSnapshot)
+          ),
+          gstPercentage: gstRate,
+          hsnCode,
+          taxableValue,
+          gstAmount,
+          gstInclusiveAmount,
+          lineTotal: gstInclusiveAmount,
+          isPreorder: false,
+          convertedFromPreorderId: preorderId,
+          giftWrap: Boolean(data.giftWrap),
+          specialSuggestion: String(data.specialSuggestion || ''),
+          expectedDeliveryDate: String(data.expectedDeliveryDate || ''),
+          preferredCourierAgent: String(data.preferredCourierAgent || 'India Post'),
+        };
+
+        const salesOrderRecord: Record<string, any> = {
+          id: deterministicSalesOrderId,
+          orderNumber: deterministicSalesOrderNumber,
+          preorderId,
+          isConvertedPreorder: true,
+          customerId: String(data.customerId || data.userId || ''),
+          userId: String(data.userId || ''),
+          customerName: String(
+            addrNorm.deliveryAddressName ||
+              data.customerDisplayName ||
+              'LeafyEarth Customer'
+          ),
+          customerMobile: String(addrNorm.deliveryAddressMobile || ''),
+          customerEmail: String(addrNorm.deliveryAddressEmail || ''),
+          shippingAddress: addrNorm.shippingAddress,
+          deliveryAddress: addrNorm.deliveryAddress,
+          products: [convertedLineItem],
+          totalTaxableValue: taxableValue,
+          totalGstAmount: gstAmount,
+          hsnGstSummary,
+          gstByHsn: hsnGstSummary,
+          deliveryFee: 0,
+          discount: 0,
+          totalValue: authoritativeTotal,
+          grandTotal: authoritativeTotal,
+          paymentMethod: 'Razorpay',
+          paymentStatus: 'Paid',
+          orderStatus: 'Confirmed',
+          deliveryStatus: 'PRE-ORDER',
+          preferredCourierAgent: String(data.preferredCourierAgent || 'India Post'),
+          expectedDeliveryDate: String(data.expectedDeliveryDate || ''),
+          giftWrap: Boolean(data.giftWrap),
+          specialSuggestion: String(data.specialSuggestion || ''),
+          paymentReference: String(
+            data.lastPaymentReference ||
+              data.balancePaymentReference ||
+              data.paymentReference ||
+              ''
+          ),
+          checkoutReference: String(
+            data.balanceCheckoutReference || data.checkoutReference || ''
+          ),
+          initialBookingAdvance: roundMoney(
+            Number(data.initialBookingAdvance ?? data.bookingAdvance ?? authoritativeTotal)
+          ),
+          totalVerifiedPaid: verifiedPaid,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        // 4. Deduct inventory stock in `products/{productId}` if product exists
+        if (productSnap.exists && productRef) {
+          const currentStock = Number(
+            productData.stock ?? productData.availableStock ?? 0
+          );
+          const currentUnitsSold = Number(productData.unitsSold ?? 0);
+          const currentRevenue = Number(productData.revenue ?? 0);
+          tx.set(
+            productRef,
+            {
+              ...productData,
+              stock: Math.max(0, currentStock - quantity),
+              unitsSold: currentUnitsSold + quantity,
+              revenue: roundMoney(currentRevenue + authoritativeTotal),
+              updatedAt: nowIso,
+            },
+            { merge: true }
+          );
+        }
+
+        // 5. Persist `sales_orders/{salesOrderId}`, conversion idempotency lock, updated `preorders/{preorderId}`, and audit event
+        tx.set(salesOrderRef, salesOrderRecord);
+        tx.set(convIdemRef, {
+          preorderId,
+          salesOrderId: deterministicSalesOrderId,
+          salesOrderNumber: deterministicSalesOrderNumber,
+          userId: String(data.userId || ''),
+          convertedAt: nowIso,
+        });
+
+        const convertedBookingRecord: Record<string, any> = {
+          ...data,
+          paymentStatus: 'paid' as PreorderPaymentStatus,
+          totalVerifiedPaid: verifiedPaid,
+          bookingAdvance: verifiedPaid,
+          remainingBalance: 0,
+          salesOrderId: deterministicSalesOrderId,
+          salesOrderNumber: deterministicSalesOrderNumber,
+          conversionStatus: 'converted' as PreorderConversionStatus,
+          convertedAt: nowIso,
+          conversionErrorCode: null,
+          updatedAt: nowIso,
+        };
+        tx.set(preorderRef, convertedBookingRecord, { merge: true });
+
+        const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
+        const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+        tx.set(eventRef, {
+          eventId,
+          preorderId,
+          salesOrderId: deterministicSalesOrderId,
+          salesOrderNumber: deterministicSalesOrderNumber,
+          actorId: params.actorId || String(data.userId || 'system'),
+          actorRole: params.actorRole || 'system',
+          eventType: 'preorder.converted_to_sales_order',
+          oldStatus: rawBookingStatus,
+          newStatus: convertedBookingRecord.bookingStatus || rawBookingStatus,
+          paymentStatus: 'paid',
+          conversionStatus: 'converted',
+          deliveryStatus: 'PRE-ORDER',
+          totalProductValue: authoritativeTotal,
+          totalVerifiedPaid: verifiedPaid,
+          remainingBalance: 0,
+          note: sanitizeNotes(params.note, 300),
+          occurredAt: nowIso,
+        });
+
+        return {
+          converted: true,
+          idempotentReplay: false,
+          needsDownstreamHook: Boolean(deps.onSalesOrderCreated),
+          bookingRecord: convertedBookingRecord,
+          salesOrderId: deterministicSalesOrderId,
+          salesOrderNumber: deterministicSalesOrderNumber,
+          salesOrder: salesOrderRecord,
+        };
+      });
+    } catch (err: any) {
+      if (err instanceof PreorderDomainError) {
+        throw err;
+      }
+      // Record recoverable conversion failure on `preorders` and `preorder_events`
+      const nowIso = getNow().toISOString();
+      const errorCode = String(err?.code || err?.message || 'CONVERSION_ERROR').slice(0, 120);
+      try {
+        await adminDb.runTransaction(async (tx: any) => {
+          const snap = await tx.get(preorderRef);
+          if (!snap.exists) return;
+          tx.set(
+            preorderRef,
+            {
+              conversionStatus: 'failed' as PreorderConversionStatus,
+              conversionErrorCode: errorCode,
+              updatedAt: nowIso,
+            },
+            { merge: true }
+          );
+          const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
+          const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+          tx.set(eventRef, {
+            eventId,
+            preorderId,
+            actorId: params.actorId || 'system',
+            actorRole: params.actorRole || 'system',
+            eventType: 'preorder.conversion_failed',
+            conversionStatus: 'failed',
+            conversionErrorCode: errorCode,
+            occurredAt: nowIso,
+          });
+        });
+      } catch (_) {}
+      throw err;
+    }
+
+    // 6. Execute downstream sales transaction hook (tax invoice & referral commissions)
+    if (txOutcome.converted && txOutcome.needsDownstreamHook && txOutcome.salesOrder && deps.onSalesOrderCreated) {
+      try {
+        const hookRes = await deps.onSalesOrderCreated(txOutcome.salesOrder);
+        if (hookRes && hookRes.invoiceId) {
+          const nowIso = getNow().toISOString();
+          txOutcome.bookingRecord = {
+            ...txOutcome.bookingRecord,
+            salesInvoiceId: String(hookRes.invoiceId),
+            conversionStatus: 'converted' as PreorderConversionStatus,
+            conversionErrorCode: null,
+            updatedAt: nowIso,
+          };
+          await adminDb.runTransaction(async (tx: any) => {
+            tx.set(
+              preorderRef,
+              {
+                salesInvoiceId: String(hookRes.invoiceId),
+                conversionStatus: 'converted' as PreorderConversionStatus,
+                conversionErrorCode: null,
+                updatedAt: nowIso,
+              },
+              { merge: true }
+            );
+          });
+        }
+      } catch (hookErr: any) {
+        const nowIso = getNow().toISOString();
+        const errorCode = String(
+          hookErr?.code || hookErr?.message || 'DOWNSTREAM_SALES_HOOK_FAILED'
+        ).slice(0, 120);
+        txOutcome.bookingRecord = {
+          ...txOutcome.bookingRecord,
+          conversionStatus: 'failed' as PreorderConversionStatus,
+          conversionErrorCode: errorCode,
+          updatedAt: nowIso,
+        };
+        await adminDb.runTransaction(async (tx: any) => {
+          tx.set(
+            preorderRef,
+            {
+              conversionStatus: 'failed' as PreorderConversionStatus,
+              conversionErrorCode: errorCode,
+              updatedAt: nowIso,
+            },
+            { merge: true }
+          );
+          const eventId = `poe_${crypto.randomBytes(12).toString('hex')}`;
+          const eventRef = adminDb.collection(COLLECTIONS.EVENTS).doc(eventId);
+          tx.set(eventRef, {
+            eventId,
+            preorderId,
+            salesOrderId: txOutcome.salesOrderId,
+            actorId: params.actorId || 'system',
+            actorRole: params.actorRole || 'system',
+            eventType: 'preorder.conversion_failed',
+            conversionStatus: 'failed',
+            conversionErrorCode: errorCode,
+            occurredAt: nowIso,
+          });
+        });
+      }
+    }
+
+    return {
+      converted: txOutcome.converted,
+      idempotentReplay: txOutcome.idempotentReplay,
+      reason: txOutcome.reason,
+      booking: toBookingDto(txOutcome.bookingRecord),
+      salesOrderId: txOutcome.salesOrderId,
+      salesOrderNumber: txOutcome.salesOrderNumber,
+      salesOrder: txOutcome.salesOrder,
+    };
+  }
+
+  /**
+   * 4. Confirm Pre-Order Payments on Verified Checkout Payment (Sections 3, 4, 5, 6, 8.3 & 12).
    * - Idempotent: repeated calls with the same `checkoutReference` return existing allocation without double-counting.
    * - Creates or updates each `preorders/{preorderId}` ONLY after successful payment verification:
    *     - `bookingStatus = 'confirmed'`
-   *     - `paymentStatus = 'paid'` (if `paymentType === 'full'` or `remainingBalance === 0`)
-   *     - `paymentStatus = 'partially_paid'` (if `paymentType === 'partial'` and `remainingBalance > 0`)
+   *     - `paymentStatus = 'paid'` (when `remainingBalance === 0` and `totalVerifiedPaid >= totalProductValue`)
+   *     - `paymentStatus = 'partially_paid'` (when `remainingBalance > 0`)
    *     - `paymentReference`, `checkoutReference`, `invoiceId`, and `deliveryAddress`
    * - Writes `preorder_idempotency` and `preorder_events` ONLY after successful payment verification.
-   * - Writes `payment_allocations/{checkoutReference}`
-   * - NEVER inserts or modifies `sales_orders`.
+   * - Writes `payment_allocations/{checkoutReference}`.
+   * - Automatically invokes `convertFullyPaidPreorderToSalesOrder` for any booking that is now
+   *   fully paid (`paymentStatus === 'paid' && remainingBalance === 0`), creating the normal
+   *   `sales_orders` record with `deliveryStatus = "PRE-ORDER"`. Partially paid bookings remain
+   *   exclusively in `preorders`.
    */
   async function confirmPreorderPaymentsForCheckout(params: {
     checkoutReference: string;
@@ -1119,7 +1653,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
 
     const allocRef = adminDb.collection(COLLECTIONS.PAYMENT_ALLOCATIONS).doc(checkoutReference);
 
-    return adminDb.runTransaction(async (tx: any) => {
+    const txResult = await adminDb.runTransaction(async (tx: any) => {
       const allocSnap = await tx.get(allocRef);
       const preorderRefs = uniquePreorderIds.map((id) =>
         adminDb.collection(COLLECTIONS.PREORDERS).doc(id)
@@ -1221,10 +1755,15 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             params.shippingAddress;
           const addrNorm = normalizeDeliveryAddress(candidateAddress);
 
-          const nextPaymentStatus: PreorderPaymentStatus =
-            paymentType === 'full' || advanceCalc.remainingBalance <= 0
-              ? 'paid'
-              : 'partially_paid';
+          const isFullyPaid =
+            advanceCalc.remainingBalance <= 0 &&
+            advanceCalc.bookingAdvance >= advanceCalc.totalProductValue - 0.001;
+          const nextPaymentStatus: PreorderPaymentStatus = isFullyPaid
+            ? 'paid'
+            : 'partially_paid';
+          const nextConversionStatus: PreorderConversionStatus = isFullyPaid
+            ? 'pending'
+            : 'not_applicable';
 
           const rawIdemKey = String(
             override.idempotencyKey || `chk_${checkoutReference}_${preorderId}`
@@ -1262,6 +1801,8 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             paymentType,
             paymentTypeLabel,
             bookingAdvance: advanceCalc.bookingAdvance,
+            initialBookingAdvance: advanceCalc.bookingAdvance,
+            totalVerifiedPaid: advanceCalc.bookingAdvance,
             remainingBalance: advanceCalc.remainingBalance,
             giftWrap,
             specialSuggestion,
@@ -1273,8 +1814,15 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             status: 'confirmed' as PreorderBookingStatus,
             paymentStatus: nextPaymentStatus,
             paymentReference,
+            lastPaymentReference: paymentReference,
             checkoutReference,
             invoiceId: params.invoiceId || checkoutReference,
+            salesOrderId: null,
+            salesOrderNumber: null,
+            salesInvoiceId: null,
+            conversionStatus: nextConversionStatus,
+            convertedAt: null,
+            conversionErrorCode: null,
             idempotencyKey: rawIdemKey,
             createdAt: nowIso,
             updatedAt: nowIso,
@@ -1304,6 +1852,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             oldStatus: null,
             newStatus: 'confirmed',
             paymentStatus: nextPaymentStatus,
+            conversionStatus: nextConversionStatus,
             paymentReference,
             checkoutReference,
             productId: dto.productId,
@@ -1311,6 +1860,8 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             quantity: dto.quantity,
             paymentType: dto.paymentType,
             bookingAdvance: dto.bookingAdvance,
+            initialBookingAdvance: dto.initialBookingAdvance,
+            totalVerifiedPaid: dto.totalVerifiedPaid,
             remainingBalance: dto.remainingBalance,
             totalProductValue: dto.totalProductValue,
             expectedDeliveryDate: dto.expectedDeliveryDate,
@@ -1351,15 +1902,42 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             ? Number(override.quantity)
             : baseDto.quantity;
 
+        const previousVerifiedPaid = roundMoney(
+          Number(
+            data.totalVerifiedPaid ??
+              data.initialBookingAdvance ??
+              data.bookingAdvance ??
+              0
+          )
+        );
+        const preservedInitialAdvance = roundMoney(
+          Number(data.initialBookingAdvance ?? data.bookingAdvance ?? previousVerifiedPaid)
+        );
+
+        const requestedBalancePayment =
+          isBalancePayment &&
+          override?.bookingAdvance !== undefined &&
+          Number.isFinite(Number(override.bookingAdvance)) &&
+          Number(override.bookingAdvance) > 0
+            ? roundMoney(Number(override.bookingAdvance))
+            : roundMoney(Math.max(0, baseDto.remainingBalance));
+
         const balancePaidAmount = isBalancePayment
-          ? roundMoney(Math.max(0, baseDto.remainingBalance))
+          ? roundMoney(Math.min(baseDto.remainingBalance, requestedBalancePayment))
           : 0;
 
         const advanceCalc = isBalancePayment
           ? {
               totalProductValue: baseDto.totalProductValue,
-              bookingAdvance: baseDto.totalProductValue,
-              remainingBalance: 0,
+              bookingAdvance: roundMoney(
+                Math.min(baseDto.totalProductValue, previousVerifiedPaid + balancePaidAmount)
+              ),
+              remainingBalance: roundMoney(
+                Math.max(
+                  0,
+                  baseDto.totalProductValue - (previousVerifiedPaid + balancePaidAmount)
+                )
+              ),
             }
           : validateAndComputeAdvance({
               onlinePriceSnapshot: baseDto.onlinePriceSnapshot,
@@ -1374,10 +1952,17 @@ export function createPreorderService(deps: PreorderServiceDeps) {
               config,
             });
 
-        const nextPaymentStatus: PreorderPaymentStatus =
-          isBalancePayment || baseDto.paymentType === 'full' || advanceCalc.remainingBalance <= 0
-            ? 'paid'
-            : 'partially_paid';
+        const isFullySettled =
+          advanceCalc.remainingBalance <= 0 &&
+          advanceCalc.bookingAdvance >= advanceCalc.totalProductValue - 0.001;
+        const nextPaymentStatus: PreorderPaymentStatus = isFullySettled
+          ? 'paid'
+          : 'partially_paid';
+        const nextConversionStatus: PreorderConversionStatus = isFullySettled
+          ? data.conversionStatus === 'converted'
+            ? 'converted'
+            : 'pending'
+          : 'not_applicable';
 
         const candidateAddress =
           override?.deliveryAddress ??
@@ -1400,6 +1985,10 @@ export function createPreorderService(deps: PreorderServiceDeps) {
           quantity: finalQty,
           totalProductValue: advanceCalc.totalProductValue,
           bookingAdvance: advanceCalc.bookingAdvance,
+          initialBookingAdvance: isBalancePayment
+            ? preservedInitialAdvance
+            : advanceCalc.bookingAdvance,
+          totalVerifiedPaid: advanceCalc.bookingAdvance,
           remainingBalance: advanceCalc.remainingBalance,
           ...addrNorm,
           bookingStatus: (data.bookingStatus && data.bookingStatus !== 'pending_payment'
@@ -1409,7 +1998,10 @@ export function createPreorderService(deps: PreorderServiceDeps) {
             ? data.bookingStatus
             : 'confirmed') as PreorderBookingStatus,
           paymentStatus: nextPaymentStatus,
-          paymentReference,
+          paymentReference: isBalancePayment
+            ? data.paymentReference || paymentReference
+            : paymentReference,
+          lastPaymentReference: paymentReference,
           checkoutReference: data.checkoutReference || checkoutReference,
           ...(isBalancePayment
             ? {
@@ -1418,6 +2010,7 @@ export function createPreorderService(deps: PreorderServiceDeps) {
               }
             : {}),
           invoiceId: data.invoiceId || params.invoiceId || checkoutReference,
+          conversionStatus: nextConversionStatus,
           idempotencyKey: rawIdemKey,
           updatedAt: nowIso,
         };
@@ -1450,9 +2043,12 @@ export function createPreorderService(deps: PreorderServiceDeps) {
           oldStatus: dto.bookingStatus,
           newStatus: updatedRecord.bookingStatus,
           paymentStatus: nextPaymentStatus,
+          conversionStatus: nextConversionStatus,
           paymentReference,
           checkoutReference,
           bookingAdvance: isBalancePayment ? balancePaidAmount : dto.bookingAdvance,
+          initialBookingAdvance: dto.initialBookingAdvance,
+          totalVerifiedPaid: dto.totalVerifiedPaid,
           remainingBalance: dto.remainingBalance,
           deliveryAddress: addrNorm.deliveryAddress,
           occurredAt: nowIso,
@@ -1505,6 +2101,33 @@ export function createPreorderService(deps: PreorderServiceDeps) {
         idempotentReplay: false,
       };
     });
+
+    // Automatically convert any fully paid pre-order booking to a normal sales order (`deliveryStatus = "PRE-ORDER"`).
+    // Partially paid bookings (`paymentStatus === 'partially_paid'`, `remainingBalance > 0`) are never converted.
+    const finalBookings: PreorderBookingDto[] = [];
+    for (const booking of txResult.bookings) {
+      if (
+        booking.paymentStatus === 'paid' &&
+        booking.remainingBalance <= 0 &&
+        booking.totalVerifiedPaid >= booking.totalProductValue - 0.001 &&
+        booking.conversionStatus !== 'converted'
+      ) {
+        const convRes = await convertFullyPaidPreorderToSalesOrder({
+          preorderId: booking.preorderId,
+          actorId: userId || booking.userId,
+          actorRole: 'system',
+        });
+        finalBookings.push(convRes.booking);
+      } else {
+        finalBookings.push(booking);
+      }
+    }
+
+    return {
+      allocation: txResult.allocation,
+      bookings: finalBookings,
+      idempotentReplay: txResult.idempotentReplay,
+    };
   }
 
   /**
@@ -1920,14 +2543,275 @@ export function createPreorderService(deps: PreorderServiceDeps) {
     });
   }
 
+  /**
+   * 10. GET /api/v1/preorders/:id/balance
+   * Returns the authoritative server-side outstanding balance, cumulative verified paid amount,
+   * payment status, conversion status, and linked sales order reference (Section 9).
+   */
+  async function getPreorderBalanceQuote(params: {
+    preorderId: string;
+    requesterUid: string;
+    isAdmin: boolean;
+  }) {
+    const { preorderId, requesterUid, isAdmin } = params;
+    if (!isValidId(preorderId)) {
+      throw new PreorderDomainError('VALIDATION_ERROR', 'Invalid preorder ID.', 400);
+    }
+
+    const snap = await adminDb.collection(COLLECTIONS.PREORDERS).doc(preorderId).get();
+    if (!snap.exists) {
+      throw new PreorderDomainError('NOT_FOUND', 'Pre-order booking not found.', 404);
+    }
+
+    const data = snap.data() || {};
+    if (!isAdmin && data.userId !== requesterUid && data.customerId !== requesterUid) {
+      throw new PreorderDomainError(
+        'FORBIDDEN',
+        'You do not have permission to view this pre-order balance.',
+        403
+      );
+    }
+
+    const dto = toBookingDto(data);
+    const authoritativeTotal = roundMoney(dto.onlinePriceSnapshot * dto.quantity);
+    const verifiedPaid = roundMoney(dto.totalVerifiedPaid);
+    const outstandingBalance = roundMoney(Math.max(0, authoritativeTotal - verifiedPaid));
+    const canPayBalance =
+      dto.bookingStatus !== 'cancelled' &&
+      dto.paymentStatus === 'partially_paid' &&
+      outstandingBalance > 0 &&
+      dto.conversionStatus !== 'converted' &&
+      !dto.salesOrderId;
+
+    return {
+      preorderId: dto.preorderId,
+      productId: dto.productId,
+      productName: dto.productNameSnapshot,
+      quantity: dto.quantity,
+      onlinePriceSnapshot: dto.onlinePriceSnapshot,
+      totalProductValue: authoritativeTotal,
+      initialBookingAdvance: dto.initialBookingAdvance,
+      totalVerifiedPaid: verifiedPaid,
+      remainingBalance: outstandingBalance,
+      currency: dto.currency,
+      paymentStatus: dto.paymentStatus,
+      bookingStatus: dto.bookingStatus,
+      conversionStatus: dto.conversionStatus,
+      salesOrderId: dto.salesOrderId,
+      salesOrderNumber: dto.salesOrderNumber,
+      salesInvoiceId: dto.salesInvoiceId,
+      canPayBalance,
+      preorder: dto,
+    };
+  }
+
+  /**
+   * 11. POST /api/v1/preorders/:id/balance-checkout
+   * Creates an idempotent server-generated payable quote & checkout order payload for the
+   * current authoritative remaining balance (Sections 6 & 9).
+   */
+  async function createPreorderBalanceCheckout(params: {
+    preorderId: string;
+    requesterUid: string;
+    customerDisplayName?: string;
+    customerEmail?: string;
+    customerMobile?: string;
+    deliveryAddress?: unknown;
+    shippingAddress?: unknown;
+    idempotencyKey?: string;
+  }) {
+    const { preorderId, requesterUid } = params;
+    if (!isValidId(preorderId)) {
+      throw new PreorderDomainError('VALIDATION_ERROR', 'Invalid preorder ID.', 400);
+    }
+
+    const preorderRef = adminDb.collection(COLLECTIONS.PREORDERS).doc(preorderId);
+    return adminDb.runTransaction(async (tx: any) => {
+      const snap = await tx.get(preorderRef);
+      if (!snap.exists) {
+        throw new PreorderDomainError('NOT_FOUND', 'Pre-order booking not found.', 404);
+      }
+
+      const data = snap.data() || {};
+      if (data.userId !== requesterUid && data.customerId !== requesterUid) {
+        throw new PreorderDomainError(
+          'FORBIDDEN',
+          'You do not have permission to initiate balance payment for this pre-order.',
+          403
+        );
+      }
+
+      const dto = toBookingDto(data);
+      if (dto.bookingStatus === 'cancelled') {
+        throw new PreorderDomainError(
+          'CONFLICT',
+          'Cancelled pre-order booking cannot accept a remaining balance payment.',
+          409
+        );
+      }
+      if (
+        dto.conversionStatus === 'converted' ||
+        dto.salesOrderId ||
+        dto.paymentStatus === 'paid' ||
+        dto.remainingBalance <= 0
+      ) {
+        throw new PreorderDomainError(
+          'CONFLICT',
+          'This pre-order booking is already fully paid and has no remaining balance.',
+          409
+        );
+      }
+
+      const nowIso = getNow().toISOString();
+      const rawAddressInput = params.deliveryAddress ?? params.shippingAddress;
+      const addrNorm =
+        rawAddressInput !== undefined
+          ? normalizeDeliveryAddress(rawAddressInput)
+          : normalizeDeliveryAddress(data.deliveryAddress ?? data.shippingAddress ?? data);
+
+      let activeRecord = data;
+      if (rawAddressInput !== undefined && addrNorm.deliveryAddress) {
+        activeRecord = {
+          ...data,
+          ...addrNorm,
+          updatedAt: nowIso,
+        };
+        tx.set(preorderRef, activeRecord, { merge: true });
+      }
+
+      const activeDto = toBookingDto(activeRecord);
+      const authoritativeBalance = roundMoney(
+        Math.max(0, activeDto.totalProductValue - activeDto.totalVerifiedPaid)
+      );
+      if (authoritativeBalance <= 0) {
+        throw new PreorderDomainError(
+          'CONFLICT',
+          'No remaining balance is due for this pre-order booking.',
+          409
+        );
+      }
+
+      const cleanIdem = String(params.idempotencyKey || '')
+        .replace(/[^A-Za-z0-9_-]/g, '')
+        .slice(0, 32);
+      const checkoutId = cleanIdem
+        ? `BAL-${activeDto.preorderId}-${cleanIdem}`
+        : `BAL-${activeDto.preorderId}-${getNow().getTime()}`;
+
+      const orderData = {
+        id: checkoutId,
+        customerId: requesterUid,
+        customerName:
+          params.customerDisplayName ||
+          activeDto.deliveryAddressName ||
+          activeDto.customerDisplayName ||
+          'LeafyEarth Customer',
+        customerEmail: params.customerEmail || activeDto.deliveryAddressEmail || '',
+        customerMobile: params.customerMobile || activeDto.deliveryAddressMobile || '',
+        shippingAddress: activeDto.shippingAddress || activeDto.deliveryAddress,
+        deliveryAddress: activeDto.deliveryAddress,
+        deliveryFee: 0,
+        discount: 0,
+        regularInvoiceGrandTotal: 0,
+        totalPreorderBookingAdvance: authoritativeBalance,
+        customerGrandTotalPayable: authoritativeBalance,
+        totalValue: authoritativeBalance,
+        paymentMethod: 'Razorpay',
+        paymentStatus: 'Pending',
+        orderStatus: 'Pending',
+        deliveryStatus: 'Pending',
+        products: [
+          {
+            id: activeDto.productId,
+            productId: activeDto.productId,
+            productName: activeDto.productNameSnapshot,
+            imageUrl: activeDto.imageUrlSnapshot,
+            quantity: activeDto.quantity,
+            price: authoritativeBalance,
+            unitPrice: activeDto.onlinePriceSnapshot,
+            packingSize: activeDto.packingSizeSnapshot,
+            gstPercentage: activeDto.gstPercentageSnapshot,
+            isPreorder: true,
+            isPreorderBalancePayment: true,
+            preorderId: activeDto.preorderId,
+            bookingReference: activeDto.preorderId,
+            onlinePriceSnapshot: activeDto.onlinePriceSnapshot,
+            totalProductValue: activeDto.totalProductValue,
+            paymentType: 'balance',
+            paymentTypeLabel: 'Remaining Balance Payment',
+            bookingAdvance: authoritativeBalance,
+            remainingBalance: 0,
+            giftWrap: activeDto.giftWrap,
+            specialSuggestion: activeDto.specialSuggestion,
+            expectedDeliveryDate: activeDto.expectedDeliveryDate,
+            preferredCourierAgent: activeDto.preferredCourierAgent,
+            deliveryAddress: activeDto.deliveryAddress,
+          },
+        ],
+      };
+
+      return {
+        checkoutId,
+        preorderId: activeDto.preorderId,
+        payableAmount: authoritativeBalance,
+        totalProductValue: activeDto.totalProductValue,
+        initialBookingAdvance: activeDto.initialBookingAdvance,
+        totalVerifiedPaid: activeDto.totalVerifiedPaid,
+        remainingBalance: authoritativeBalance,
+        currency: activeDto.currency,
+        orderData,
+        preorder: activeDto,
+      };
+    });
+  }
+
+  /**
+   * 12. POST /api/v1/admin/preorders/:id/reconcile
+   * Protected admin/internal reconciliation endpoint to retry or repair conversion of an
+   * already verified fully-paid pre-order without charging the customer again (Sections 9 & 10).
+   */
+  async function reconcilePreorderConversion(params: {
+    preorderId: string;
+    adminUid: string;
+    note?: string;
+  }) {
+    const result = await convertFullyPaidPreorderToSalesOrder({
+      preorderId: params.preorderId,
+      actorId: params.adminUid,
+      actorRole: 'admin',
+      note: params.note || 'Admin reconciliation triggered',
+    });
+
+    if (!result.converted) {
+      throw new PreorderDomainError(
+        'CONFLICT',
+        result.reason || 'Pre-order booking is not eligible for sales order conversion.',
+        409
+      );
+    }
+
+    return {
+      converted: result.converted,
+      idempotentReplay: result.idempotentReplay,
+      preorder: result.booking,
+      salesOrderId: result.salesOrderId,
+      salesOrderNumber: result.salesOrderNumber,
+      salesOrder: result.salesOrder,
+    };
+  }
+
   return {
     listEligibleProducts,
     listCourierAgents,
     createPreorder,
     updatePreorderDetails,
+    convertFullyPaidPreorderToSalesOrder,
     confirmPreorderPaymentsForCheckout,
     failPreorderPaymentsForCheckout,
     getPreorderById,
+    getPreorderBalanceQuote,
+    createPreorderBalanceCheckout,
+    reconcilePreorderConversion,
     listMyPreorders,
     cancelPreorder,
     adminUpdateStatus,

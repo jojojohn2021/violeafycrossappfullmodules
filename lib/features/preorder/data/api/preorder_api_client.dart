@@ -160,4 +160,27 @@ class PreorderApiClient {
     return PreorderBooking.fromJson(
         Map<String, dynamic>.from(res['preorder'] as Map));
   }
+
+  Future<Map<String, dynamic>> getBalanceQuote(String preorderId) async {
+    final encoded = Uri.encodeComponent(preorderId);
+    return Map<String, dynamic>.from(
+      await _api.get('/api/v1/preorders/$encoded/balance'),
+    );
+  }
+
+  Future<PreorderBalanceCheckoutQuote> createBalanceCheckout({
+    required String preorderId,
+    Map<String, dynamic>? deliveryAddress,
+    String? idempotencyKey,
+  }) async {
+    final encoded = Uri.encodeComponent(preorderId);
+    final res = Map<String, dynamic>.from(
+      await _api.post('/api/v1/preorders/$encoded/balance-checkout', {
+        if (deliveryAddress != null) 'deliveryAddress': deliveryAddress,
+        if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+          'idempotencyKey': idempotencyKey.trim(),
+      }),
+    );
+    return PreorderBalanceCheckoutQuote.fromJson(res);
+  }
 }
