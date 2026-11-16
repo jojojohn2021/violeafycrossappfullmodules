@@ -1,7 +1,7 @@
 import '../api/preorder_api_client.dart';
 import '../models/preorder_models.dart';
 
-/// LeafyEarth Pre-Order Booking Module — Repository Layer.
+/// LeafyMart Pre-Order Booking Module — Repository Layer.
 class PreorderRepository {
   final PreorderApiClient _apiClient;
 

@@ -1,7 +1,7 @@
-/// Centralized Compliance Configuration for Leafyearth Flutter Application.
+/// Centralized Compliance Configuration for LeafyMart Flutter Application.
 class ComplianceConfig {
   static const String businessLegalName = 'VAMJO';
-  static const String businessDisplayName = 'Leafyearth';
+  static const String businessDisplayName = 'LeafyMart';
   static const String businessAddress =
       '3/286 Panamkoodan Commerial Corner, kallettumkara, Thrissur, Kerala, 680683';
   static const String supportEmail = 'sales@vamjo.com';

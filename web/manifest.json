@@ -1,11 +1,11 @@
 {
-    "name": "Leafyearth",
-    "short_name": "Leafyearth",
+    "name": "LeafyMart",
+    "short_name": "LeafyMart",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#0175C2",
-    "description": "Leafyearth - Authentic Online Store",
+    "description": "LeafyMart - Authentic Online Store",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

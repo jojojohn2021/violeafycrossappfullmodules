@@ -22,7 +22,7 @@ class _PolicyLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return Title(
       color: AppColors.primaryGreen,
-      title: 'Leafyearth - ${webTitle ?? title}',
+      title: 'LeafyMart - ${webTitle ?? title}',
       child: Scaffold(
         backgroundColor: AppColors.secondaryBackground,
         appBar: AppBar(
@@ -161,7 +161,7 @@ Widget _bullet(String label, String detail) {
 }
 
 /// 1. Privacy Policy Screen (/privacy-policy)
-/// Publicly accessible HTTPS Privacy Policy for Leafyearth / VAMJO
+/// Publicly accessible HTTPS Privacy Policy for LeafyMart / VAMJO
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
@@ -172,7 +172,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
       canonicalUrl: ComplianceConfig.privacyPolicyUrl,
       children: [
         Text(
-          'Privacy Policy for Leafyearth',
+          'Privacy Policy for LeafyMart',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 4),
@@ -187,7 +187,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
         ),
         const Divider(height: 24),
         _paragraph(
-            '${ComplianceConfig.businessDisplayName} ("we", "us", or "our"), developed and operated by ${ComplianceConfig.businessLegalName}, is committed to safeguarding your privacy and personal data. This Privacy Policy governs the Leafyearth application across Android, iOS, and Web platforms (${ComplianceConfig.websiteUrl}). It provides a complete and transparent explanation of how your information is collected, used, stored, processed, and protected.'),
+            '${ComplianceConfig.businessDisplayName} ("we", "us", or "our"), developed and operated by ${ComplianceConfig.businessLegalName}, is committed to safeguarding your privacy and personal data. This Privacy Policy governs the LeafyMart application across Android, iOS, and Web platforms (${ComplianceConfig.websiteUrl}). It provides a complete and transparent explanation of how your information is collected, used, stored, processed, and protected.'),
 
         _sectionHeader('1. Application & Developer Identification'),
         _bullet('Application Name', ComplianceConfig.businessDisplayName),
@@ -434,7 +434,7 @@ class FaqScreen extends StatelessWidget {
         const SizedBox(height: 4),
         Text('${ComplianceConfig.businessDisplayName} Customer Support Center', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         const Divider(height: 24),
-        _sectionHeader('Q: How do I place an order on Leafyearth?'),
+        _sectionHeader('Q: How do I place an order on LeafyMart?'),
         _paragraph('Browse products, add your desired items to the cart, enter your delivery address PIN code, and proceed to checkout using Razorpay UPI, card, or net banking.'),
         _sectionHeader('Q: What payment methods are accepted?'),
         _paragraph('We accept UPI (Google Pay, PhonePe, Paytm), Credit Cards, Debit Cards, Net Banking, and Wallet payments authorized securely through Razorpay.'),

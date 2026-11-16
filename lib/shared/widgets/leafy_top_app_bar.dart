@@ -211,7 +211,7 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                               TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: 'Leafyearth ',
+                                    text: 'LeafyMart ',
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,

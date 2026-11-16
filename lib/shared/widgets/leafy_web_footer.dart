@@ -6,10 +6,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/app_providers.dart';
 
-/// Leafyearth Production Domain
+/// LeafyMart Production Domain
 const String kProductionDomain = 'https://www.vamjo.com';
 
-/// Web-Only Footer Component for Leafyearth Web Platform (https://www.vamjo.com)
+/// Web-Only Footer Component for LeafyMart Web Platform (https://www.vamjo.com)
 class LeafyWebFooter extends ConsumerWidget {
   const LeafyWebFooter({super.key});
 
@@ -68,7 +68,7 @@ class LeafyWebFooter extends ConsumerWidget {
                             child: _buildCustomerPoliciesSection(context),
                           ),
                           const SizedBox(width: 20),
-                          // 3. EXPERIENCE LEAFYEARTH APP ON MOBILE
+                          // 3. EXPERIENCE LEAFYMART APP ON MOBILE
                           Expanded(
                             flex: 3,
                             child: _buildMobileAppSection(context),
@@ -113,7 +113,7 @@ class LeafyWebFooter extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      '© 2026 Leafyearth. All Rights Reserved. Powered by VAMJO.',
+                      '© 2026 LeafyMart. All Rights Reserved. Powered by VAMJO.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                     Row(
@@ -249,15 +249,15 @@ class LeafyWebFooter extends ConsumerWidget {
     );
   }
 
-  // Section 3: EXPERIENCE LEAFYEARTH APP ON MOBILE
+  // Section 3: EXPERIENCE LEAFYMART APP ON MOBILE
   Widget _buildMobileAppSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('EXPERIENCE LEAFYEARTH APP ON MOBILE'),
+        _buildSectionHeader('EXPERIENCE LEAFYMART APP ON MOBILE'),
         const SizedBox(height: 4),
         const Text(
-          'Download the official Leafyearth Mobile Application for fast ordering & instant tracking.',
+          'Download the official LeafyMart Mobile Application for fast ordering & instant tracking.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
         ),
         const SizedBox(height: 14),
@@ -332,7 +332,7 @@ class LeafyWebFooter extends ConsumerWidget {
         _buildSectionHeader('LEAFYAYUR'),
         const SizedBox(height: 4),
         const Text(
-          'Discover authentic Ayurvedic products, organic wellness solutions & natural living with Leafyayur by Leafyearth.',
+          'Discover authentic Ayurvedic products, organic wellness solutions & natural living with Leafyayur by LeafyMart.',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
         ),
         const SizedBox(height: 14),

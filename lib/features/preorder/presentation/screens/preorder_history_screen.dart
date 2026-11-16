@@ -293,7 +293,7 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
       } catch (_) {}
 
       if (customerName.isEmpty) {
-        customerName = 'LeafyEarth Customer';
+        customerName = 'LeafyMart Customer';
       }
 
       final deliveryAddressJson =

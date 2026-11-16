@@ -1,4 +1,4 @@
-/// LeafyEarth Pre-Order Booking Module — Data Models, Validators & DTOs.
+/// LeafyMart Pre-Order Booking Module — Data Models, Validators & DTOs.
 /// No direct Firestore / Realtime Database dependencies.
 library;
 

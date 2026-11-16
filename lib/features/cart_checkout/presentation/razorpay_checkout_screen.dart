@@ -91,7 +91,7 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
       "key": "${widget.keyId}",
       "amount": ${widget.amount},
       "currency": "${widget.currency}",
-      "name": "Leafyearth",
+      "name": "LeafyMart",
       "description": "Order Payment ${widget.transactionId}",
       "image": "https://www.vamjo.com/assets/logo.png",
       "order_id": "${widget.orderId}",

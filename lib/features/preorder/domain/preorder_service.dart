@@ -3,7 +3,7 @@ import '../../../../models/models.dart';
 import '../data/models/preorder_models.dart';
 import '../data/repositories/preorder_repository.dart';
 
-/// LeafyEarth Pre-Order Booking Module — Domain Service.
+/// LeafyMart Pre-Order Booking Module — Domain Service.
 class PreorderService {
   final PreorderRepository _repository;
 

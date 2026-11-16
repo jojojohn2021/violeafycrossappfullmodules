@@ -1,7 +1,7 @@
 import '../../../../core/network/api_client.dart';
 import '../models/preorder_models.dart';
 
-/// LeafyEarth Pre-Order Booking Module — HTTP API Client.
+/// LeafyMart Pre-Order Booking Module — HTTP API Client.
 /// Uses the existing [ApiClient] (with Firebase Auth ID token headers) and never accesses Firestore directly.
 class PreorderApiClient {
   final ApiClient _api;

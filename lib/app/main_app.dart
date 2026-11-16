@@ -8,7 +8,7 @@ class LeafyMainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Leafyearth - Connect,Refer,Earn',
+      title: 'LeafyMart - Connect,Refer,Earn',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       themeMode: ThemeMode.light,
