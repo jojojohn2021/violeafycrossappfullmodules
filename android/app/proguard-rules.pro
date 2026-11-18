@@ -17,8 +17,8 @@
 -dontwarn com.google.android.play.core.**
 
 # App Package & Models (Keep all classes and members in app namespace from obfuscation/shrinking issues)
--keep class com.vamjo.leafyearth.** { *; }
--keepclassmembers class com.vamjo.leafyearth.** {
+-keep class com.vionature.leafymart.** { *; }
+-keepclassmembers class com.vionature.leafymart.** {
     *;
 }
 

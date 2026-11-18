@@ -8,13 +8,6 @@ import '../../core/theme/app_colors.dart';
 import '../../providers/app_providers.dart';
 
 String _getPlatformAppLogoAsset() {
-  if (kIsWeb) {
-    return 'assets/web/icon-512.png';
-  } else if (defaultTargetPlatform == TargetPlatform.android) {
-    return 'assets/android/res/mipmap-hdpi/ic_launcher.png';
-  } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-    return 'assets/ios/AppIcon@3x.png';
-  }
   return 'assets/logo.png';
 }
 

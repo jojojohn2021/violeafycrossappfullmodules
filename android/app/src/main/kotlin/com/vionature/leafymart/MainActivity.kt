@@ -1,4 +1,4 @@
-package com.vamjo.leafyearth
+package com.vionature.leafymart
 
 import io.flutter.embedding.android.FlutterActivity
 
