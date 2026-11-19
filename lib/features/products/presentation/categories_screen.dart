@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../models/models.dart';
 import '../../../providers/app_providers.dart';
 import '../../../shared/widgets/firestore_image_widget.dart';
+import '../../banners/banner_module.dart';
 
 class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
@@ -57,6 +58,12 @@ class CategoriesScreen extends ConsumerWidget {
                 'Explore Categories',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
               ),
+            ),
+            DynamicBannerSlot(
+              pageType: BannerPageType.category,
+              placement: BannerPlacement.hero,
+              pageId: selectedCat == 'All' ? null : selectedCat,
+              padding: const EdgeInsets.only(bottom: 8),
             ),
             Expanded(
               child: categoryModelsAsync.when(

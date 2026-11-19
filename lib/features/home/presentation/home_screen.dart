@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/models.dart';
 import '../../../providers/app_providers.dart';
@@ -10,6 +9,7 @@ import '../../../shared/widgets/firestore_image_widget.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/shimmer_loaders.dart';
 import '../../../shared/widgets/leafy_web_footer.dart';
+import '../../banners/banner_module.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -19,25 +19,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final PageController _bannerController = PageController();
-  int _currentBannerIndex = 0;
-
-  Widget _buildBannerImage(String? imageUrl) {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Container(color: AppColors.secondaryBackground);
-    }
-
-    if (imageUrl.startsWith('http')) {
-      return CachedNetworkImage(
-        imageUrl: imageUrl,
-        fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => Container(color: AppColors.secondaryBackground),
-      );
-    }
-
-    return Container(color: AppColors.secondaryBackground);
-  }
-
   Color _getColorForCategory(String category) {
     final normalized = category.toLowerCase();
 
@@ -105,7 +86,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
     final categoryModelsAsync = ref.watch(categoryModelsProvider);
-    final bannersAsync = ref.watch(bannersProvider);
     final selectedCategory = ref.watch(selectedCategoryProvider);
 
     return Scaffold(
@@ -118,7 +98,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ref.invalidate(categoryModelsProvider);
           ref.invalidate(brandModelsProvider);
           ref.invalidate(brandOwnerModelsProvider);
-          ref.invalidate(bannersProvider);
+          ref.invalidate(dynamicBannersProvider);
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -128,123 +108,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. Promotional Banner Carousel loaded dynamically from backend
+                  // 1. Dynamic Mixed Image/Video Hero Banner Carousel (Firestore `banners`)
                   const SizedBox(height: 12),
-                  bannersAsync.when(
-                    data: (banners) {
-                      if (banners.isEmpty) return const SizedBox();
-                      return Column(
-                        children: [
-                          SizedBox(
-                            height: 160,
-                            child: PageView.builder(
-                              controller: _bannerController,
-                              onPageChanged: (index) => setState(() => _currentBannerIndex = index),
-                              itemCount: banners.length,
-                              itemBuilder: (context, index) {
-                                final banner = banners[index];
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.06),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: Stack(
-                                    children: [
-                                      Positioned.fill(
-                                        child: _buildBannerImage(banner['image']),
-                                      ),
-                                      Positioned.fill(
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              begin: Alignment.centerLeft,
-                                              end: Alignment.centerRight,
-                                              colors: [
-                                                Colors.black.withValues(alpha: 0.75),
-                                                Colors.black.withValues(alpha: 0.15),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        left: 18,
-                                        top: 24,
-                                        bottom: 24,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              banner['title'] ?? 'Leafy Deal',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              banner['subtitle'] ?? 'Farm fresh offers',
-                                              style: const TextStyle(
-                                                color: AppColors.accentLime,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 10),
-                                            if (banner['code'] != null && banner['code']!.isNotEmpty)
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white.withValues(alpha: 0.25),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
-                                                ),
-                                                child: Text(
-                                                  'CODE: ${banner['code']}',
-                                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(
-                              banners.length,
-                              (i) => AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                margin: const EdgeInsets.symmetric(horizontal: 3),
-                                width: _currentBannerIndex == i ? 18 : 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: _currentBannerIndex == i ? AppColors.primaryGreen : AppColors.border,
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                    loading: () => const ShimmerBanner(),
-                    error: (_, __) => const SizedBox(),
+                  DynamicBannerSlot(
+                    pageType: BannerPageType.home,
+                    placement: BannerPlacement.hero,
+                    allowTopLevelPosterFallback: true,
+                    loadingBuilder: (_) => const ShimmerBanner(),
                   ),
 
                   // 2. Compact Meesho-style Category Carousel (Positioned directly below Banners / Search Bar)
@@ -407,6 +277,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     error: (_, __) => const SizedBox(),
                   ),
 
+                  // Optional Home Secondary Banner Slot (collapses when none active)
+                  const DynamicBannerSlot(
+                    pageType: BannerPageType.home,
+                    placement: BannerPlacement.secondary,
+                    padding: EdgeInsets.only(top: 14),
+                  ),
+
                   // 3. Referral & Wallet Promo Banners
                   const SizedBox(height: 16),
                   Padding(
@@ -470,6 +347,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                     ),
+                  ),
+
+                  // Optional Home Strip Banner Slot (collapses when none active)
+                  const DynamicBannerSlot(
+                    pageType: BannerPageType.home,
+                    placement: BannerPlacement.strip,
+                    padding: EdgeInsets.only(top: 14),
                   ),
 
                   // 4. Production Product Catalog Grid from MongoDB
@@ -559,6 +443,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       padding: const EdgeInsets.all(20),
                       child: Text('Failed to load products: $err', style: const TextStyle(color: AppColors.error)),
                     ),
+                  ),
+                  const DynamicBannerSlot(
+                    pageType: BannerPageType.home,
+                    placement: BannerPlacement.spotlight,
+                    padding: EdgeInsets.only(top: 16),
+                  ),
+                  const DynamicBannerSlot(
+                    pageType: BannerPageType.home,
+                    placement: BannerPlacement.footerPromo,
+                    padding: EdgeInsets.only(top: 16),
                   ),
                   const SizedBox(height: 24),
                   if (kIsWeb) const LeafyWebFooter(),

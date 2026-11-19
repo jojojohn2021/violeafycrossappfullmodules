@@ -9,6 +9,7 @@ import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/product_story_dialog.dart';
 import '../../preorder/presentation/widgets/preorder_widgets.dart';
 import '../../reviews/presentation/customer_reviews_section.dart';
+import '../../banners/banner_module.dart';
 
 /// Resolves a product by its Firestore document ID.
 /// Uses the already-loaded product list (existing cache) first and only falls back
@@ -118,6 +119,13 @@ class _ProductDetailBody extends ConsumerWidget {
       final details = _ProductDetailsSections(product: product);
       final related = _RelatedProducts(product: product);
       final reviews = CustomerReviewsSection(productId: product.id, productName: product.name);
+      final productBanner = DynamicBannerSlot(
+        pageType: BannerPageType.product,
+        placement: BannerPlacement.strip,
+        pageId: product.id,
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.only(bottom: 16),
+      );
 
       final content = isWide
           ? Column(
@@ -125,6 +133,7 @@ class _ProductDetailBody extends ConsumerWidget {
               children: [
                 _Breadcrumb(product: product),
                 const SizedBox(height: 16),
+                productBanner,
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -142,6 +151,7 @@ class _ProductDetailBody extends ConsumerWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                productBanner,
                 gallery,
                 const SizedBox(height: 16),
                 info,
