@@ -51,7 +51,7 @@ void main() {
       final json = {
         'partner': {
           'referralCode': 'REF9988',
-          'referralLink': 'https://violeafy.com/ref/REF9988',
+          'referralLink': 'https://www.leafymart.com/ref/REF9988',
           'status': 'Active',
           'level': 'Gold',
         },
@@ -74,7 +74,7 @@ void main() {
       final info = ReferralInfo.fromJson(json);
 
       expect(info.referralCode, 'REF9988');
-      expect(info.referralLink, 'https://violeafy.com/ref/REF9988');
+      expect(info.referralLink, 'https://www.leafymart.com/ref/REF9988');
       expect(info.partnerLevel, 'Gold');
       expect(info.referralCount, 12);
       expect(info.qualifiedCount, 8);

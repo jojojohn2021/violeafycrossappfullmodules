@@ -313,6 +313,25 @@ class ProductPerformance {
   final String? allergenInformation;
   final List<String> productHighlights;
   final String? certifications;
+  final bool ayurvedicproduct;
+  final String? sanskritName;
+  final String? malayalamName;
+  final String? hindiName;
+  final String? kannadaName;
+  final String? tamilName;
+  final String? teluguName;
+
+  /// True when `ayurvedicproduct` is true and at least one language-specific name is populated.
+  bool get hasAyurvedicLanguageNames =>
+      ayurvedicproduct &&
+      [
+        sanskritName,
+        malayalamName,
+        hindiName,
+        kannadaName,
+        tamilName,
+        teluguName,
+      ].any((v) => v != null && v.trim().isNotEmpty);
 
   /// True only when the existing Product Story backing field has a meaningful, non-empty value.
   bool get hasProductStory {
@@ -467,6 +486,13 @@ class ProductPerformance {
     this.allergenInformation,
     this.productHighlights = const [],
     this.certifications,
+    this.ayurvedicproduct = false,
+    this.sanskritName,
+    this.malayalamName,
+    this.hindiName,
+    this.kannadaName,
+    this.tamilName,
+    this.teluguName,
   });
 
   static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -558,6 +584,13 @@ class ProductPerformance {
     allergenInformation: _parseTextOrList(json['allergenInformation']),
     productHighlights: parseBulletList(json['productHighlights']),
     certifications: _parseTextOrList(json['certifications']),
+    ayurvedicproduct: json['ayurvedicproduct'] == true,
+    sanskritName: _parseTextOrList(json['sanskritName']),
+    malayalamName: _parseTextOrList(json['malayalamName']),
+    hindiName: _parseTextOrList(json['hindiName']),
+    kannadaName: _parseTextOrList(json['kannadaName']),
+    tamilName: _parseTextOrList(json['tamilName']),
+    teluguName: _parseTextOrList(json['teluguName']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1915,7 +1948,7 @@ class ReferralInfo {
     final summaryJson = json['commissionSummary'] as Map<String, dynamic>? ?? json['earnings'] as Map<String, dynamic>? ?? json;
 
     final code = (partner['referralCode'] ?? partner['referralcode'] ?? partner['id'] ?? '').toString();
-    final link = (partner['referralLink'] ?? 'https://violeafy.com/ref/$code').toString();
+    final link = (partner['referralLink'] ?? 'https://www.leafymart.com/ref/$code').toString();
 
     return ReferralInfo(
       referralCode: code,

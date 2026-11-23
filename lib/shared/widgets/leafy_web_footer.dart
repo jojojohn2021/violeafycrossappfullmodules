@@ -7,9 +7,9 @@ import '../../core/theme/app_colors.dart';
 import '../../providers/app_providers.dart';
 
 /// LeafyMart Production Domain
-const String kProductionDomain = 'https://www.vamjo.com';
+const String kProductionDomain = 'https://www.leafymart.com';
 
-/// Web-Only Footer Component for LeafyMart Web Platform (https://www.vamjo.com)
+/// Web-Only Footer Component for LeafyMart Web Platform (https://www.leafymart.com)
 class LeafyWebFooter extends ConsumerWidget {
   const LeafyWebFooter({super.key});
 
@@ -31,7 +31,7 @@ class LeafyWebFooter extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Platform restriction: Render ONLY on Web platform (https://www.vamjo.com)
+    // Platform restriction: Render ONLY on Web platform (https://www.leafymart.com)
     if (!kIsWeb) {
       return const SizedBox.shrink();
     }
@@ -265,7 +265,7 @@ class LeafyWebFooter extends ConsumerWidget {
         MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
-            onTap: () => _launchExternalUrl('https://play.google.com/store/apps/details?id=com.vamjo.leafyearth'),
+            onTap: () => _launchExternalUrl('https://play.google.com/store/apps/details?id=com.vionature.leafymart'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -295,7 +295,7 @@ class LeafyWebFooter extends ConsumerWidget {
         MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
-            onTap: () => _launchExternalUrl('https://www.vamjo.com'),
+            onTap: () => _launchExternalUrl('https://www.leafymart.com'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -339,7 +339,7 @@ class LeafyWebFooter extends ConsumerWidget {
         MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
-            onTap: () => _launchExternalUrl('https://www.vamjo.com/leafyayur'),
+            onTap: () => _launchExternalUrl('https://www.leafymart.com/leafyayur'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(

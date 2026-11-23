@@ -512,8 +512,27 @@ class _ProductInfo extends StatelessWidget {
           product.name,
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary, height: 1.25),
         ),
-        // 2. Pack size
-        if (packSize != null) ...[
+        // 2. Pack size (+ Ayurvedic language-specific names when ayurvedicproduct == true)
+        if (product.hasAyurvedicLanguageNames) ...[
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (packSize != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 1, right: 16),
+                  child: Text(
+                    packSize,
+                    style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  ),
+                ),
+              ],
+              Expanded(
+                child: _AyurvedicLanguageNamesGrid(product: product),
+              ),
+            ],
+          ),
+        ] else if (packSize != null) ...[
           const SizedBox(height: 6),
           Text(packSize, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
         ],
@@ -586,6 +605,63 @@ class _ProductInfo extends StatelessWidget {
           _ProductHighlightsCard(
             highlights: product.productHighlights,
             compactForDesktop: showInlinePurchase,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AyurvedicLanguageNamesGrid extends StatelessWidget {
+  final ProductPerformance product;
+
+  const _AyurvedicLanguageNamesGrid({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <(String?, String?)>[
+      (product.sanskritName, product.malayalamName),
+      (product.hindiName, product.kannadaName),
+      (product.tamilName, product.teluguName),
+    ].where((r) => r.$1 != null || r.$2 != null).toList();
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    const style = TextStyle(
+      fontSize: 12.5,
+      fontWeight: FontWeight.w600,
+      color: AppColors.textPrimary,
+      height: 1.35,
+    );
+
+    return Column(
+      key: ValueKey('ayurvedic_names_${product.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 2),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  rows[i].$1 ?? '',
+                  style: style,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  rows[i].$2 ?? '',
+                  style: style,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         ],
       ],
@@ -837,13 +913,21 @@ class _BottomPurchaseBar extends StatelessWidget {
 
 // ─────────────────────────────── Details sections ───────────────────────────────
 
-class _ProductDetailsSections extends StatelessWidget {
+class _ProductDetailsSections extends StatefulWidget {
   final ProductPerformance product;
 
   const _ProductDetailsSections({required this.product});
 
   @override
+  State<_ProductDetailsSections> createState() => _ProductDetailsSectionsState();
+}
+
+class _ProductDetailsSectionsState extends State<_ProductDetailsSections> {
+  int _selectedTabIndex = 0;
+
+  @override
   Widget build(BuildContext context) {
+    final product = widget.product;
     final category = _clean(product.categories?.isNotEmpty == true ? product.categories!.join(', ') : product.category);
     // Product Details metadata labels in exact reference order: Brand, Category, Pack Size, Unit, Marketed By
     final facts = <MapEntry<String, String>>[
@@ -854,8 +938,16 @@ class _ProductDetailsSections extends StatelessWidget {
       if (_clean(product.brandOwner) != null) MapEntry('Marketed By', _clean(product.brandOwner)!),
     ];
 
-    final sections = <Widget>[
-      if (facts.isNotEmpty) _Section(title: 'Product Details', initiallyExpanded: true, child: _FactsTable(facts: facts)),
+    final detailSubSections = <Widget>[
+      if (facts.isNotEmpty)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: _FactsTable(facts: facts),
+        ),
       if (product.keyFeatures.isNotEmpty)
         _Section(title: 'KEY FEATURES', initiallyExpanded: true, child: _BulletList(items: product.keyFeatures)),
       if (product.dietaryAttributes.isNotEmpty)
@@ -880,18 +972,82 @@ class _ProductDetailsSections extends StatelessWidget {
         _Section(title: 'Certifications', child: _Body(text: _clean(product.certifications)!)),
     ];
 
-    if (sections.isEmpty) return const SizedBox.shrink();
+    if (detailSubSections.isEmpty) return const SizedBox.shrink();
+
+    final tabs = <({String label, Widget content})>[
+      (
+        label: 'Product Details',
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: detailSubSections,
+        ),
+      ),
+    ];
+
+    final activeIndex = _selectedTabIndex.clamp(0, tabs.length - 1);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
         Container(
+          key: const ValueKey('product_details_tab_section'),
           decoration: BoxDecoration(
             border: Border.all(color: AppColors.border),
             borderRadius: BorderRadius.circular(12),
           ),
           clipBehavior: Clip.antiAlias,
-          child: Column(children: sections),
+          child: Material(
+            color: AppColors.card,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Tab Bar Header
+                Container(
+                  key: const ValueKey('product_details_tab_bar'),
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: AppColors.secondaryBackground,
+                    border: Border(bottom: BorderSide(color: AppColors.border)),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < tabs.length; i++)
+                          InkWell(
+                            key: ValueKey('product_details_tab_$i'),
+                            onTap: () => setState(() => _selectedTabIndex = i),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: i == activeIndex ? AppColors.card : Colors.transparent,
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: i == activeIndex ? AppColors.primaryGreen : Colors.transparent,
+                                    width: 2.5,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                tabs[i].label,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: i == activeIndex ? FontWeight.bold : FontWeight.w600,
+                                  color: i == activeIndex ? AppColors.primaryGreen : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Active Tab Body
+                tabs[activeIndex].content,
+              ],
+            ),
+          ),
         ),
       ],
     );

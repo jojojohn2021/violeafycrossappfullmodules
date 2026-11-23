@@ -1585,7 +1585,7 @@ class ShoppingRepository {
       final code = customer?.referralCode ?? customerId;
       combinedPayload['partner'] = {
         'referralCode': code,
-        'referralLink': 'https://leafyearth.in/ref/$code',
+        'referralLink': 'https://www.leafymart.com/ref/$code',
         'status': 'Active',
         'level': customer?.tier ?? 'Bronze',
       };

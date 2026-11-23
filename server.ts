@@ -2287,7 +2287,7 @@ async function sendEmailNotification(settings: any, type: 'Success' | 'Failed' |
         <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
           <strong>Leafy Organics Corporate Headquarters</strong><br/>
           ABC House, Kochi, Kerala, India - 682001<br/>
-          Email: info@vamjo.com | Web: <a href="https://www.vamjo" style="color: #0f766e; text-decoration: none;">https://www.vamjo.com</a><br/>
+          Email: info@leafymart.com | Web: <a href="https://www.leafymart.com" style="color: #0f766e; text-decoration: none;">https://www.leafymart.com</a><br/>
           <span style="display: block; margin-top: 8px; color: #94a3b8;">This email has been dispatched automatically based on core payment ledger updates.</span>
         </div>
         
@@ -2396,7 +2396,7 @@ async function sendWhatsAppNotification(settings: any, type: 'Success' | 'Failed
   messageText += `\n`;
 
   messageText += `*Status:*\n${statusVal}\n\n`;
-  messageText += `Thank you for shopping with us! View full invoice details at https://www.vamjo.com`;
+  messageText += `Thank you for shopping with us! View full invoice details at https://www.leafymart.com`;
 
   let sentStatus = 'Success';
   let errorMessage = '';
@@ -4933,7 +4933,7 @@ app.get("/api/partners/referral-info", async (req, res) => {
     return res.json({
       partner: {
         referralCode: refCode,
-        referralLink: `https://violeafy.com/ref/${refCode}`,
+        referralLink: `https://www.leafymart.com/ref/${refCode}`,
         status: 'Active',
         level: customer.tier || 'Bronze'
       },

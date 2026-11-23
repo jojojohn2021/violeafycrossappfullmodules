@@ -96,7 +96,7 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
                 for (final value in (header['addresses'] as List? ?? const [])) pw.Text(value.toString(), style: const pw.TextStyle(fontSize: 9)),
               pw.SizedBox(height: 2),
               pw.Text(
-                '${header['customerCareEmail'] ?? 'sales@vamjo.com'} , Customer care : ${header['customerCareNumber'] ?? header['customerCareMobile'] ?? ''}',
+                '${header['customerCareEmail'] ?? 'info@leafymart.com'} , Customer care : ${header['customerCareNumber'] ?? header['customerCareMobile'] ?? ''}',
                 style: const pw.TextStyle(fontSize: 9),
               ),
               pw.SizedBox(height: 2),
@@ -417,7 +417,7 @@ class _InvoiceScreenState extends ConsumerState<InvoiceScreen> {
                   Text(address.toString(), style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
               const SizedBox(height: 2),
               Text(
-                '${header['customerCareEmail'] ?? 'sales@vamjo.com'} , Customer care : ${header['customerCareNumber'] ?? header['customerCareMobile'] ?? ''}',
+                '${header['customerCareEmail'] ?? 'info@leafymart.com'} , Customer care : ${header['customerCareNumber'] ?? header['customerCareMobile'] ?? ''}',
                 style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 2),

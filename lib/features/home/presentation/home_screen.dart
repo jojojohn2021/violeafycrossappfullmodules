@@ -141,10 +141,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 10),
                   categoryModelsAsync.when(
                     data: (categoryModels) {
-                      final allCategoryNames = categoryModels.map((m) => m.name).where((n) => n.isNotEmpty).toList();
-                      final listNames = allCategoryNames.contains('All')
-                          ? allCategoryNames
-                          : ['All', ...allCategoryNames];
+                      final listNames = categoryModels
+                          .map((m) => m.name.trim())
+                          .where((n) => n.isNotEmpty && n.toLowerCase() != 'all')
+                          .toList();
 
                       return SizedBox(
                         height: 92,
@@ -162,7 +162,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                             return GestureDetector(
                               onTap: () {
-                                ref.read(selectedCategoryProvider.notifier).state = catName;
+                                ref.read(selectedCategoryProvider.notifier).state =
+                                    isSelected ? 'All' : catName;
                               },
                               child: Container(
                                 width: 76,

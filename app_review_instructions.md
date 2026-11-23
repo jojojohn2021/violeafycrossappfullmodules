@@ -39,5 +39,5 @@
 
 ## 3. Support Contacts for Reviewers
 
-* **Technical Support Email**: `info@vamjo.com`
-* **Compliance Lead Email**: `sales@vamjo.com`
+* **Technical Support Email**: `info@leafymart.com`
+* **Compliance Lead Email**: `info@leafymart.com`

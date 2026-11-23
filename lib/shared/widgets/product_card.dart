@@ -177,15 +177,37 @@ class ProductCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    product.packingSize,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textSecondary,
+                  if (product.hasAyurvedicLanguageNames) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (product.packingSize.trim().isNotEmpty) ...[
+                          Text(
+                            product.packingSize,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Expanded(
+                          child: _CompactAyurvedicLanguageNames(product: product),
+                        ),
+                      ],
                     ),
-                  ),
+                  ] else
+                    Text(
+                      product.packingSize,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   const SizedBox(height: 6),
 
                   // Price Row & Product Story button
@@ -373,6 +395,60 @@ class ProductCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CompactAyurvedicLanguageNames extends StatelessWidget {
+  final ProductPerformance product;
+
+  const _CompactAyurvedicLanguageNames({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <(String?, String?)>[
+      (product.sanskritName, product.malayalamName),
+      (product.hindiName, product.kannadaName),
+      (product.tamilName, product.teluguName),
+    ].where((r) => r.$1 != null || r.$2 != null).toList();
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    const style = TextStyle(
+      fontSize: 9.5,
+      fontWeight: FontWeight.w600,
+      color: AppColors.textPrimary,
+      height: 1.2,
+    );
+
+    return Column(
+      key: ValueKey('product_card_ayurvedic_names_${product.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final row in rows)
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  row.$1 ?? '',
+                  style: style,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  row.$2 ?? '',
+                  style: style,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }

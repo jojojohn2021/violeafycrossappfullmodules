@@ -6,21 +6,21 @@
 export const complianceConfig = {
   business: {
     legalName: "VAMJO",
-    displayName: "Leafyearth",
+    displayName: "LeafyMart",
     address: "Kallettumkara,Thrissur,Kerala-680683",
     country: "India",
-    supportEmail: "info@vamjo.com.com",
+    supportEmail: "info@leafymart.com",
     supportPhone: "+918547927539",
-    privacyEmail: "info@vamjo.com",
+    privacyEmail: "info@leafymart.com",
     grievanceContact: {
       role: "Grievance Officer",
       name: "Compliance & Safety Cell",
-      email: "sales@vamjo.com",
+      email: "info@leafymart.com",
       phone: "+918547927539",
     },
   },
   urls: {
-    website: "https://vamjo.com",
+    website: "https://www.leafymart.com",
     privacyPolicy: "/privacy-policy",
     termsAndConditions: "/terms-and-conditions",
     shippingPolicy: "/shipping-and-delivery-policy",

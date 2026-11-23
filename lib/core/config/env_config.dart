@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class EnvConfig {
   static const String _defaultDevBaseUrl = 'http://localhost:3000';
   static const String _defaultAndroidEmulatorBaseUrl = 'http://10.0.2.2:3000';
-  static const String _defaultProductionBaseUrl = 'https://www.vamjo.com'; // Fallback
+  static const String _defaultProductionBaseUrl = 'https://www.leafymart.com'; // Fallback
   
   static String _currentBaseUrl = '';
 
@@ -23,7 +23,7 @@ class EnvConfig {
       if (savedUrl != null && savedUrl.isNotEmpty) {
         final savedHost = Uri.tryParse(savedUrl)?.host.toLowerCase() ?? '';
         final isSavedLocal = savedHost == 'localhost' || savedHost == '127.0.0.1' || savedHost == '0.0.0.0' || savedHost == '::1';
-        // On remote live domain (e.g. www.vamjo.com), purge any stale localhost/127.0.0.1 saved in LocalStorage
+        // On remote live domain (e.g. www.leafymart.com), purge any stale localhost/127.0.0.1 saved in LocalStorage
         if (!isLocal && isSavedLocal) {
           debugPrint('[EnvConfig] Purging stale local API URL ($savedUrl) from browser storage on remote host ($host)');
           await prefs.remove('custom_api_base_url');

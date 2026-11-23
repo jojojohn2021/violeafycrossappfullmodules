@@ -84,6 +84,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          key: const ValueKey('ayurvedic_card_scope'),
           overrides: [
             shoppingRepositoryProvider.overrideWithValue(ShoppingRepository()),
           ],
@@ -196,6 +197,89 @@ void main() {
       expect(find.byKey(const ValueKey('product_detail_story_p_detail_2')), findsOneWidget);
       expect(find.text('Ideal for making'), findsOneWidget);
       expect(find.text('Certifications'), findsOneWidget);
+    });
+
+    testWidgets('shows language-specific names only when ayurvedicproduct is true on ProductDetailScreen and ProductCard',
+        (tester) async {
+      tester.view.physicalSize = const Size(1280, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final ayurvedic = ProductPerformance.fromJson({
+        'id': 'p_kadukka',
+        'name': 'Kadukka',
+        'sku': 'KAD-100',
+        'packingSize': '100 g',
+        'unit': 'PAC',
+        'onlinePrice': 349,
+        'shopPrice': 399,
+        'brand': 'Bhadram',
+        'ayurvedicproduct': true,
+        'sanskritName': 'Haritaki',
+        'malayalamName': 'Kadukka (മലയാളം)',
+        'hindiName': 'Harad (हिन्दी)',
+        'kannadaName': 'Alalekayi (ಕನ್ನಡ)',
+        'tamilName': 'Kadukkai (தமிழ்)',
+        'teluguName': 'Karakkaya (తెలుగు)',
+      });
+
+      final nonAyurvedic = ProductPerformance.fromJson({
+        'id': 'p_regular',
+        'name': 'Regular Spice',
+        'sku': 'REG-100',
+        'packingSize': '100 g',
+        'unit': 'PAC',
+        'onlinePrice': 199,
+        'shopPrice': 220,
+        'ayurvedicproduct': false,
+        'sanskritName': 'Should Not Show',
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            shoppingRepositoryProvider.overrideWithValue(ShoppingRepository()),
+            productsProvider.overrideWith((ref) async => [ayurvedic, nonAyurvedic]),
+          ],
+          child: const MaterialApp(
+            home: ProductDetailScreen(productId: 'p_kadukka'),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byKey(const ValueKey('ayurvedic_names_p_kadukka')), findsOneWidget);
+      expect(find.text('Haritaki'), findsOneWidget);
+      expect(find.text('Kadukka (മലയാളം)'), findsOneWidget);
+      expect(find.text('Harad (हिन्दी)'), findsOneWidget);
+      expect(find.text('Alalekayi (ಕನ್ನಡ)'), findsOneWidget);
+      expect(find.text('Kadukkai (தமிழ்)'), findsOneWidget);
+      expect(find.text('Karakkaya (తెలుగు)'), findsOneWidget);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          key: const ValueKey('ayurvedic_card_scope'),
+          overrides: [
+            shoppingRepositoryProvider.overrideWithValue(ShoppingRepository()),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Row(
+                children: [
+                  SizedBox(width: 300, height: 380, child: ProductCard(product: ayurvedic)),
+                  SizedBox(width: 300, height: 380, child: ProductCard(product: nonAyurvedic)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('product_card_ayurvedic_names_p_kadukka')), findsOneWidget);
+      expect(find.byKey(const ValueKey('product_card_ayurvedic_names_p_regular')), findsNothing);
+      expect(find.text('Should Not Show'), findsNothing);
     });
   });
 }

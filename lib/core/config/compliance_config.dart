@@ -4,26 +4,26 @@ class ComplianceConfig {
   static const String businessDisplayName = 'LeafyMart';
   static const String businessAddress =
       '3/286 Panamkoodan Commerial Corner, kallettumkara, Thrissur, Kerala, 680683';
-  static const String supportEmail = 'sales@vamjo.com';
+  static const String supportEmail = 'info@leafymart.com';
   static const String supportPhone = '+91 8547927539';
-  static const String privacyEmail = 'info@vamjo.com';
+  static const String privacyEmail = 'info@leafymart.com';
   static const String grievanceName = 'Compliance & Safety Officer';
-  static const String grievanceEmail = 'info@vamjo.com';
+  static const String grievanceEmail = 'info@leafymart.com';
 
   /// Canonical Public Production Domain
-  static const String websiteUrl = 'https://www.vamjo.com';
+  static const String websiteUrl = 'https://www.leafymart.com';
 
   /// Canonical Public HTTPS Policy URLs (Google Play Console Compliant)
-  static const String privacyPolicyUrl = 'https://www.vamjo.com/privacy-policy';
-  static const String termsAndConditionsUrl = 'https://www.vamjo.com/terms-and-conditions';
-  static const String termsOfUseUrl = 'https://www.vamjo.com/terms-of-use';
-  static const String shippingPolicyUrl = 'https://www.vamjo.com/shipping-and-delivery-policy';
-  static const String cancellationPolicyUrl = 'https://www.vamjo.com/cancellation-policy';
-  static const String returnRefundPolicyUrl = 'https://www.vamjo.com/return-refund-policy';
-  static const String contactUsUrl = 'https://www.vamjo.com/contact-us';
-  static const String grievanceRedressalUrl = 'https://www.vamjo.com/grievance-redressal';
-  static const String faqUrl = 'https://www.vamjo.com/faq';
-  static const String trackOrdersUrl = 'https://www.vamjo.com/track-orders';
+  static const String privacyPolicyUrl = 'https://www.leafymart.com/privacy-policy';
+  static const String termsAndConditionsUrl = 'https://www.leafymart.com/terms-and-conditions';
+  static const String termsOfUseUrl = 'https://www.leafymart.com/terms-of-use';
+  static const String shippingPolicyUrl = 'https://www.leafymart.com/shipping-and-delivery-policy';
+  static const String cancellationPolicyUrl = 'https://www.leafymart.com/cancellation-policy';
+  static const String returnRefundPolicyUrl = 'https://www.leafymart.com/return-refund-policy';
+  static const String contactUsUrl = 'https://www.leafymart.com/contact-us';
+  static const String grievanceRedressalUrl = 'https://www.leafymart.com/grievance-redressal';
+  static const String faqUrl = 'https://www.leafymart.com/faq';
+  static const String trackOrdersUrl = 'https://www.leafymart.com/track-orders';
 
   /// Internal Navigation Paths
   static const String privacyPolicyPath = '/privacy-policy';

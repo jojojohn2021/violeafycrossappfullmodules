@@ -313,7 +313,7 @@ class _ReferralScreenState extends ConsumerState<ReferralScreen> with SingleTick
 
   Widget _buildReferralCardFallback(firebase_auth.User? user, CustomerPerformance? customer) {
     final code = customer?.referralCode ?? customer?.id ?? user?.uid ?? 'VIOLEAFY';
-    final link = 'https://violeafy.com/ref/$code';
+    final link = 'https://www.leafymart.com/ref/$code';
     final tier = customer?.tier ?? 'Bronze';
 
     return _buildReferralInfoCard(

@@ -68,10 +68,10 @@ class CategoriesScreen extends ConsumerWidget {
             Expanded(
               child: categoryModelsAsync.when(
                 data: (categoryModels) {
-                  final allCategoryNames = categoryModels.map((m) => m.name).where((n) => n.isNotEmpty).toList();
-                  final listNames = allCategoryNames.contains('All')
-                      ? allCategoryNames
-                      : ['All', ...allCategoryNames];
+                  final listNames = categoryModels
+                      .map((m) => m.name.trim())
+                      .where((n) => n.isNotEmpty && n.toLowerCase() != 'all')
+                      .toList();
 
                   return GridView.builder(
                     padding: const EdgeInsets.all(16),
