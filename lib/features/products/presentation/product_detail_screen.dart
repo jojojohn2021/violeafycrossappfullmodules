@@ -314,31 +314,33 @@ class _ProductGalleryState extends ConsumerState<_ProductGallery> {
                 top: 10,
                 child: _RoundIcon(icon: Icons.zoom_out_map, onTap: () => _openZoom(images, selected)),
               ),
-            Positioned(
-              left: 10,
-              bottom: 10,
-              child: Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                elevation: 2,
-                child: InkWell(
+            if (widget.product.hasProductStory)
+              Positioned(
+                left: 10,
+                bottom: 10,
+                child: Material(
+                  key: ValueKey('product_detail_story_${widget.product.id}'),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
-                  onTap: _openStory,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.play_circle_fill, size: 18, color: AppColors.primaryGreen),
-                        SizedBox(width: 6),
-                        Text('Product Story',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryGreen)),
-                      ],
+                  elevation: 2,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: _openStory,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.play_circle_fill, size: 18, color: AppColors.primaryGreen),
+                          SizedBox(width: 6),
+                          Text('Product Story',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryGreen)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -578,8 +580,113 @@ class _ProductInfo extends StatelessWidget {
           const SizedBox(height: 20),
           SizedBox(width: 280, child: _CartControl(product: product, height: 48)),
         ],
+        // 11. Product Highlights directly below Add to Cart (within gallery height on desktop, natural reflow on mobile)
+        if (product.productHighlights.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _ProductHighlightsCard(
+            highlights: product.productHighlights,
+            compactForDesktop: showInlinePurchase,
+          ),
+        ],
       ],
     );
+  }
+}
+
+class _ProductHighlightsCard extends StatelessWidget {
+  final List<String> highlights;
+  final bool compactForDesktop;
+
+  const _ProductHighlightsCard({
+    required this.highlights,
+    required this.compactForDesktop,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Reference requests 4–6 bullets; never fabricate extras if fewer exist, cap at 6 on desktop to stay aligned with gallery bottom.
+    final visibleItems = compactForDesktop && highlights.length > 6
+        ? highlights.take(6).toList()
+        : highlights;
+
+    final cardContent = Container(
+      key: const ValueKey('product_highlights_card'),
+      width: double.infinity,
+      padding: EdgeInsets.all(compactForDesktop ? 14 : 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDF8F1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.primaryGreen.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 15, color: AppColors.primaryGreen),
+              SizedBox(width: 6),
+              Text(
+                'PRODUCT HIGHLIGHTS',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: AppColors.primaryGreen,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < visibleItems.length; i++) ...[
+            if (i > 0) SizedBox(height: compactForDesktop ? 6 : 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 5),
+                  child: Icon(
+                    Icons.circle,
+                    size: 6,
+                    color: AppColors.primaryGreen,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    visibleItems[i],
+                    maxLines: compactForDesktop ? 2 : null,
+                    overflow: compactForDesktop ? TextOverflow.ellipsis : null,
+                    style: TextStyle(
+                      fontSize: compactForDesktop ? 12.5 : 13,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+
+    // On desktop, bound vertical extent so it stays within the bottom of the product image thumbnail strip.
+    if (compactForDesktop) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 270),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: cardContent,
+        ),
+      );
+    }
+
+    return cardContent;
   }
 }
 
@@ -738,23 +845,39 @@ class _ProductDetailsSections extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final category = _clean(product.categories?.isNotEmpty == true ? product.categories!.join(', ') : product.category);
+    // Product Details metadata labels in exact reference order: Brand, Category, Pack Size, Unit, Marketed By
     final facts = <MapEntry<String, String>>[
       if (_clean(product.brand) != null) MapEntry('Brand', _clean(product.brand)!),
       if (category != null) MapEntry('Category', category),
       if (_clean(product.packingSize) != null) MapEntry('Pack Size', _clean(product.packingSize)!),
       if (_clean(product.unit) != null) MapEntry('Unit', _clean(product.unit)!),
-      if (_clean(product.variants) != null) MapEntry('Variants', _clean(product.variants)!),
       if (_clean(product.brandOwner) != null) MapEntry('Marketed By', _clean(product.brandOwner)!),
     ];
 
     final sections = <Widget>[
       if (facts.isNotEmpty) _Section(title: 'Product Details', initiallyExpanded: true, child: _FactsTable(facts: facts)),
+      if (product.keyFeatures.isNotEmpty)
+        _Section(title: 'KEY FEATURES', initiallyExpanded: true, child: _BulletList(items: product.keyFeatures)),
+      if (product.dietaryAttributes.isNotEmpty)
+        _Section(title: 'Dietary', child: _BulletList(items: product.dietaryAttributes)),
+      if (product.nutritionalBenefits.isNotEmpty)
+        _Section(title: 'NUTRITION', child: _BulletList(items: product.nutritionalBenefits)),
       if (_clean(product.description) != null)
-        _Section(title: 'Description', initiallyExpanded: true, child: _Body(text: _clean(product.description)!)),
+        _Section(title: 'DESCRIPTION', initiallyExpanded: true, child: _Body(text: _clean(product.description)!)),
       if (_clean(product.specifications) != null)
-        _Section(title: 'Specifications', child: _Body(text: _clean(product.specifications)!)),
+        _Section(title: 'SPECIFICATIONS', child: _Body(text: _clean(product.specifications)!)),
       if (_clean(product.ingredients) != null)
-        _Section(title: 'Ingredients', child: _Body(text: _clean(product.ingredients)!)),
+        _Section(title: 'INGREDIENTS', child: _Body(text: _clean(product.ingredients)!)),
+      if (_clean(product.notes) != null)
+        _Section(title: 'NOTES', child: _Body(text: _clean(product.notes)!)),
+      if (product.culinarydetails && product.culinaryUses.isNotEmpty)
+        _Section(title: 'Ideal for making', child: _BulletList(items: product.culinaryUses)),
+      if (_clean(product.storageInstructions) != null)
+        _Section(title: 'Storage Conditions', child: _Body(text: _clean(product.storageInstructions)!)),
+      if (_clean(product.allergenInformation) != null)
+        _Section(title: 'Allergen Information', child: _Body(text: _clean(product.allergenInformation)!)),
+      if (_clean(product.certifications) != null)
+        _Section(title: 'Certifications', child: _Body(text: _clean(product.certifications)!)),
     ];
 
     if (sections.isEmpty) return const SizedBox.shrink();
@@ -770,6 +893,40 @@ class _ProductDetailsSections extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Column(children: sections),
         ),
+      ],
+    );
+  }
+}
+
+class _BulletList extends StatelessWidget {
+  final List<String> items;
+
+  const _BulletList({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Icon(Icons.circle, size: 6, color: AppColors.primaryGreen),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  items[i],
+                  style: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

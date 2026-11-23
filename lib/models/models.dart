@@ -304,6 +304,75 @@ class ProductPerformance {
   final String? uniqueSpec3;
   final String? uniqueSpec4;
   final bool preorderactive;
+  final List<String> keyFeatures;
+  final List<String> dietaryAttributes;
+  final List<String> nutritionalBenefits;
+  final List<String> culinaryUses;
+  final bool culinarydetails;
+  final String? storageInstructions;
+  final String? allergenInformation;
+  final List<String> productHighlights;
+  final String? certifications;
+
+  /// True only when the existing Product Story backing field has a meaningful, non-empty value.
+  bool get hasProductStory {
+    final u = productStoryUrl?.trim();
+    return u != null && u.isNotEmpty && u.toLowerCase() != 'null';
+  }
+
+  /// Parses either a comma-separated String or a List into trimmed, non-empty bullet entries.
+  static List<String> parseBulletList(dynamic raw) {
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw
+          .map((e) => e?.toString().trim() ?? '')
+          .where((s) => s.isNotEmpty && s.toLowerCase() != 'null')
+          .toList();
+    }
+    if (raw is String) {
+      return raw
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty && s.toLowerCase() != 'null')
+          .toList();
+    }
+    return const [];
+  }
+
+  static String? _parseTextOrList(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is List) {
+      final items = raw
+          .map((e) => e?.toString().trim() ?? '')
+          .where((s) => s.isNotEmpty && s.toLowerCase() != 'null')
+          .toList();
+      return items.isEmpty ? null : items.join(', ');
+    }
+    final trimmed = raw.toString().trim();
+    return (trimmed.isEmpty || trimmed.toLowerCase() == 'null') ? null : trimmed;
+  }
+
+  static String? _parseProductStoryUrl(Map<String, dynamic> json) {
+    final candidates = [
+      json['productStoryUrl'],
+      json['productStoryVideoUrl'],
+      json['linkedInVideoUrl'],
+      json['storyVideoUrl'],
+      json['productStory'],
+      json['videoUrl'],
+    ];
+    for (final c in candidates) {
+      final cleaned = _parseTextOrList(c);
+      if (cleaned != null) return cleaned;
+    }
+    if (json['videos'] is List) {
+      for (final v in (json['videos'] as List)) {
+        final cleaned = _parseTextOrList(v);
+        if (cleaned != null) return cleaned;
+      }
+    }
+    return null;
+  }
 
   /// Maximum allowed length for each uniqueSpec field.
   static const int uniqueSpecMaxLength = 30;
@@ -389,6 +458,15 @@ class ProductPerformance {
     this.uniqueSpec3,
     this.uniqueSpec4,
     this.preorderactive = false,
+    this.keyFeatures = const [],
+    this.dietaryAttributes = const [],
+    this.nutritionalBenefits = const [],
+    this.culinaryUses = const [],
+    this.culinarydetails = false,
+    this.storageInstructions,
+    this.allergenInformation,
+    this.productHighlights = const [],
+    this.certifications,
   });
 
   static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -465,12 +543,21 @@ class ProductPerformance {
     rating: _toDoubleNullable(json['rating']),
     reviewsCount: _toIntNullable(json['reviewsCount']),
     videos: json['videos'] is List ? List<String>.from((json['videos'] as List).map((e) => e.toString())) : null,
-    productStoryUrl: (json['productStoryUrl'] ?? json['productStoryVideoUrl'] ?? json['linkedInVideoUrl'] ?? json['storyVideoUrl'] ?? json['productStory'] ?? json['videoUrl'])?.toString() ?? (json['videos'] is List && (json['videos'] as List).isNotEmpty ? (json['videos'] as List).first.toString() : null),
+    productStoryUrl: _parseProductStoryUrl(json),
     uniqueSpec1: _parseUniqueSpec(json['uniqueSpec1']),
     uniqueSpec2: _parseUniqueSpec(json['uniqueSpec2']),
     uniqueSpec3: _parseUniqueSpec(json['uniqueSpec3']),
     uniqueSpec4: _parseUniqueSpec(json['uniqueSpec4']),
     preorderactive: json['preorderactive'] == true,
+    keyFeatures: parseBulletList(json['keyFeatures']),
+    dietaryAttributes: parseBulletList(json['dietaryAttributes']),
+    nutritionalBenefits: parseBulletList(json['nutritionalBenefits']),
+    culinaryUses: parseBulletList(json['culinaryUses']),
+    culinarydetails: json['culinarydetails'] == true,
+    storageInstructions: _parseTextOrList(json['storageInstructions']),
+    allergenInformation: _parseTextOrList(json['allergenInformation']),
+    productHighlights: parseBulletList(json['productHighlights']),
+    certifications: _parseTextOrList(json['certifications']),
   );
 
   Map<String, dynamic> toJson() => {
