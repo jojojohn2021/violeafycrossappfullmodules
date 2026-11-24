@@ -982,6 +982,11 @@ class _ProductDetailsSectionsState extends State<_ProductDetailsSections> {
           children: detailSubSections,
         ),
       ),
+      if (product.ayurvedicproduct)
+        (
+          label: 'Ayurveda Insights',
+          content: _AyurvedaInsightsTab(product: product),
+        ),
     ];
 
     final activeIndex = _selectedTabIndex.clamp(0, tabs.length - 1);
@@ -1050,6 +1055,251 @@ class _ProductDetailsSectionsState extends State<_ProductDetailsSections> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AyurvedaInsightsTab extends StatelessWidget {
+  final ProductPerformance product;
+
+  const _AyurvedaInsightsTab({required this.product});
+
+  Widget _buildSubHeading(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dravyagunaFacts = <MapEntry<String, String>>[
+      if (product.ayurvedicRasa.isNotEmpty)
+        MapEntry('Rasa', product.ayurvedicRasa.join(', ')),
+      if (product.ayurvedicGuna.isNotEmpty)
+        MapEntry('Guna', product.ayurvedicGuna.join(', ')),
+      if (_clean(product.ayurvedicVirya) != null)
+        MapEntry('Virya (Potency)', _clean(product.ayurvedicVirya)!),
+      if (_clean(product.ayurvedicVipaka) != null)
+        MapEntry('Vipaka (Post-Digestive)', _clean(product.ayurvedicVipaka)!),
+      if (_clean(product.ayurvedicPrabhava) != null)
+        MapEntry('Prabhava (Special Action)', _clean(product.ayurvedicPrabhava)!),
+    ];
+
+    final doshaEntries = <MapEntry<String, String>>[
+      if (_clean(product.doshaVata) != null)
+        MapEntry('Dosha Effect — Vata', _clean(product.doshaVata)!),
+      if (_clean(product.doshaPitta) != null)
+        MapEntry('Dosha Effect — Pitta', _clean(product.doshaPitta)!),
+      if (_clean(product.doshaKapha) != null)
+        MapEntry('Dosha Effect — Kapha', _clean(product.doshaKapha)!),
+    ];
+
+    final blocks = <Widget>[
+      if (_clean(product.ayurvedicClassification) != null) ...[
+        _buildSubHeading('Ayurvedic Classification'),
+        _Body(text: _clean(product.ayurvedicClassification)!),
+      ],
+      if (_clean(product.ayurvedicDescription) != null) ...[
+        _buildSubHeading('Classical Description'),
+        _Body(text: _clean(product.ayurvedicDescription)!),
+      ],
+      if (dravyagunaFacts.isNotEmpty) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7FAF5),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.primaryGreen.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < dravyagunaFacts.length; i++) ...[
+                if (i > 0) const Divider(height: 14, color: AppColors.border),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 175,
+                      child: Text(
+                        dravyagunaFacts[i].key,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        dravyagunaFacts[i].value,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+      if (doshaEntries.isNotEmpty) ...[
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 600;
+            if (isNarrow) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < doshaEntries.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 8),
+                    _DoshaEffectCard(label: doshaEntries[i].key, value: doshaEntries[i].value),
+                  ],
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < doshaEntries.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  Expanded(
+                    child: _DoshaEffectCard(label: doshaEntries[i].key, value: doshaEntries[i].value),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+      if (product.ayurvedicMedicinalUses.isNotEmpty) ...[
+        _buildSubHeading('Medicinal Uses'),
+        _BulletList(items: product.ayurvedicMedicinalUses),
+      ],
+      if (product.ayurvedicUsageMethods.isNotEmpty) ...[
+        _buildSubHeading('Usage Methods'),
+        _BulletList(items: product.ayurvedicUsageMethods),
+      ],
+      if (_clean(product.ayurvedicDosage) != null) ...[
+        _buildSubHeading('Typical Dosage Note'),
+        _Body(text: _clean(product.ayurvedicDosage)!),
+      ],
+      if (product.ayurvedicFormulations.isNotEmpty) ...[
+        _buildSubHeading('Classical Formulations'),
+        _Body(text: product.ayurvedicFormulations.join(', ')),
+      ],
+      if (product.ayurvedicPrecautions.isNotEmpty) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8ED),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE6C280)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Color(0xFF9A6700)),
+                  SizedBox(width: 6),
+                  Text(
+                    'Precautions',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF9A6700),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _BulletList(items: product.ayurvedicPrecautions),
+            ],
+          ),
+        ),
+      ],
+    ];
+
+    if (blocks.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Ayurveda insights details are not available for this product.',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+      );
+    }
+
+    return Padding(
+      key: ValueKey('ayurveda_insights_content_${product.id}'),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < blocks.length; i++) ...[
+            if (i > 0) const SizedBox(height: 16),
+            blocks[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DoshaEffectCard extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DoshaEffectCard({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.secondaryBackground,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryGreen,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -433,7 +433,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             itemCount: filteredList.length,
                             itemBuilder: (context, index) {
-                              return ProductCard(product: filteredList[index]);
+                              return ProductCard(
+                                product: filteredList[index],
+                                restrictToPrimarySpecs: true,
+                              );
                             },
                           );
                         },

@@ -320,6 +320,21 @@ class ProductPerformance {
   final String? kannadaName;
   final String? tamilName;
   final String? teluguName;
+  final String? ayurvedicClassification;
+  final String? ayurvedicDescription;
+  final List<String> ayurvedicRasa;
+  final List<String> ayurvedicGuna;
+  final String? ayurvedicVirya;
+  final String? ayurvedicVipaka;
+  final String? ayurvedicPrabhava;
+  final String? doshaVata;
+  final String? doshaPitta;
+  final String? doshaKapha;
+  final List<String> ayurvedicMedicinalUses;
+  final List<String> ayurvedicUsageMethods;
+  final String? ayurvedicDosage;
+  final List<String> ayurvedicFormulations;
+  final List<String> ayurvedicPrecautions;
 
   /// True when `ayurvedicproduct` is true and at least one language-specific name is populated.
   bool get hasAyurvedicLanguageNames =>
@@ -398,6 +413,13 @@ class ProductPerformance {
 
   /// Non-empty, trimmed unique specifications in field order (1..4).
   List<String> get uniqueSpecs => [uniqueSpec1, uniqueSpec2, uniqueSpec3, uniqueSpec4]
+      .whereType<String>()
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  /// Non-empty, trimmed primary unique specifications (`uniqueSpec1` and `uniqueSpec2` only).
+  List<String> get primaryUniqueSpecs => [uniqueSpec1, uniqueSpec2]
       .whereType<String>()
       .map((s) => s.trim())
       .where((s) => s.isNotEmpty)
@@ -493,6 +515,21 @@ class ProductPerformance {
     this.kannadaName,
     this.tamilName,
     this.teluguName,
+    this.ayurvedicClassification,
+    this.ayurvedicDescription,
+    this.ayurvedicRasa = const [],
+    this.ayurvedicGuna = const [],
+    this.ayurvedicVirya,
+    this.ayurvedicVipaka,
+    this.ayurvedicPrabhava,
+    this.doshaVata,
+    this.doshaPitta,
+    this.doshaKapha,
+    this.ayurvedicMedicinalUses = const [],
+    this.ayurvedicUsageMethods = const [],
+    this.ayurvedicDosage,
+    this.ayurvedicFormulations = const [],
+    this.ayurvedicPrecautions = const [],
   });
 
   static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -591,6 +628,37 @@ class ProductPerformance {
     kannadaName: _parseTextOrList(json['kannadaName']),
     tamilName: _parseTextOrList(json['tamilName']),
     teluguName: _parseTextOrList(json['teluguName']),
+    ayurvedicClassification: _parseTextOrList(json['ayurvedicClassification']),
+    ayurvedicDescription: _parseTextOrList(json['ayurvedicDescription']),
+    ayurvedicRasa: parseBulletList(
+      (json['dravyaguna'] is Map ? (json['dravyaguna'] as Map)['rasa'] : null) ?? json['rasa'],
+    ),
+    ayurvedicGuna: parseBulletList(
+      (json['dravyaguna'] is Map ? (json['dravyaguna'] as Map)['guna'] : null) ?? json['guna'],
+    ),
+    ayurvedicVirya: _parseTextOrList(
+      (json['dravyaguna'] is Map ? (json['dravyaguna'] as Map)['virya'] : null) ?? json['virya'],
+    ),
+    ayurvedicVipaka: _parseTextOrList(
+      (json['dravyaguna'] is Map ? (json['dravyaguna'] as Map)['vipaka'] : null) ?? json['vipaka'],
+    ),
+    ayurvedicPrabhava: _parseTextOrList(
+      (json['dravyaguna'] is Map ? (json['dravyaguna'] as Map)['prabhava'] : null) ?? json['prabhava'],
+    ),
+    doshaVata: _parseTextOrList(
+      (json['doshaEffect'] is Map ? (json['doshaEffect'] as Map)['vata'] : null) ?? json['doshaVata'],
+    ),
+    doshaPitta: _parseTextOrList(
+      (json['doshaEffect'] is Map ? (json['doshaEffect'] as Map)['pitta'] : null) ?? json['doshaPitta'],
+    ),
+    doshaKapha: _parseTextOrList(
+      (json['doshaEffect'] is Map ? (json['doshaEffect'] as Map)['kapha'] : null) ?? json['doshaKapha'],
+    ),
+    ayurvedicMedicinalUses: parseBulletList(json['ayurvedicMedicinalUses']),
+    ayurvedicUsageMethods: parseBulletList(json['ayurvedicUsageMethods']),
+    ayurvedicDosage: _parseTextOrList(json['ayurvedicDosage']),
+    ayurvedicFormulations: parseBulletList(json['ayurvedicFormulations']),
+    ayurvedicPrecautions: parseBulletList(json['ayurvedicPrecautions']),
   );
 
   Map<String, dynamic> toJson() => {

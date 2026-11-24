@@ -10,8 +10,13 @@ import 'product_story_dialog.dart';
 
 class ProductCard extends ConsumerWidget {
   final ProductPerformance product;
+  final bool restrictToPrimarySpecs;
 
-  const ProductCard({super.key, required this.product});
+  const ProductCard({
+    super.key,
+    required this.product,
+    this.restrictToPrimarySpecs = false,
+  });
 
   bool get _isMobilePlatform =>
       !kIsWeb &&
@@ -281,8 +286,10 @@ class ProductCard extends ConsumerWidget {
                   const SizedBox(height: 8),
 
                   // Unique specification highlights (immediately above rating)
-                  if (product.uniqueSpecs.isNotEmpty) ...[
-                    UniqueSpecHighlights(specs: product.uniqueSpecs),
+                  if ((restrictToPrimarySpecs ? product.primaryUniqueSpecs : product.uniqueSpecs).isNotEmpty) ...[
+                    UniqueSpecHighlights(
+                      specs: restrictToPrimarySpecs ? product.primaryUniqueSpecs : product.uniqueSpecs,
+                    ),
                     const SizedBox(height: 4),
                   ],
 
@@ -290,7 +297,7 @@ class ProductCard extends ConsumerWidget {
                   if (product.rating != null && product.rating! > 0) ...[
                     ProductRatingRow(rating: product.rating!, reviewsCount: product.reviewsCount),
                     const SizedBox(height: 8),
-                  ] else if (product.uniqueSpecs.isNotEmpty)
+                  ] else if ((restrictToPrimarySpecs ? product.primaryUniqueSpecs : product.uniqueSpecs).isNotEmpty)
                     const SizedBox(height: 4),
 
                   // Add to Cart / Pre-Order / Quantity Modifier Button

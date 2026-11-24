@@ -105,6 +105,46 @@ void main() {
       expect(find.byKey(const ValueKey('product_card_story_no_story')), findsNothing);
       expect(find.byKey(const ValueKey('product_card_story_with_story')), findsOneWidget);
     });
+
+    testWidgets('Home ProductCard restricts unique specs to uniqueSpec1 and uniqueSpec2 only', (tester) async {
+      final product = ProductPerformance.fromJson({
+        'id': 'p_specs',
+        'name': 'Mango Dry Fruits',
+        'sku': 'MANGO-250',
+        'packingSize': '250 gm',
+        'unit': 'PAC',
+        'onlinePrice': 599,
+        'shopPrice': 625,
+        'uniqueSpec1': 'Sun Dried',
+        'uniqueSpec2': 'Low Sugar',
+        'uniqueSpec3': 'Sourced from trusted growers',
+        'uniqueSpec4': 'Small Batch',
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          key: const ValueKey('home_specs_scope'),
+          overrides: [
+            shoppingRepositoryProvider.overrideWithValue(ShoppingRepository()),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 300,
+                height: 360,
+                child: ProductCard(product: product, restrictToPrimarySpecs: true),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Sun Dried'), findsOneWidget);
+      expect(find.text('Low Sugar'), findsOneWidget);
+      expect(find.text('Sourced from trusted growers'), findsNothing);
+      expect(find.text('Small Batch'), findsNothing);
+    });
   });
 
   group('ProductDetailScreen layout, sections, highlights & conditional culinaryUses', () {
@@ -221,6 +261,34 @@ void main() {
         'kannadaName': 'Alalekayi (ಕನ್ನಡ)',
         'tamilName': 'Kadukkai (தமிழ்)',
         'teluguName': 'Karakkaya (తెలుగు)',
+        'ayurvedicClassification': 'Dravyaguna Vijnana – Traditional Herb',
+        'ayurvedicDescription': 'Traditionally valued for balanced digestion.',
+        'dravyaguna': {
+          'rasa': ['Katu (Pungent)', 'Tikta (Bitter)'],
+          'guna': ['Laghu (Light)', 'Ruksha (Dry)'],
+          'virya': 'Ushna (Warming)',
+          'vipaka': 'Katu (Pungent)',
+          'prabhava': 'Classical rejuvenative action',
+        },
+        'doshaEffect': {
+          'vata': 'Balances Vata in moderation',
+          'pitta': 'Use in moderation for Pitta',
+          'kapha': 'Pacifies Kapha',
+        },
+        'ayurvedicMedicinalUses': [
+          'Supports healthy digestion',
+          'Seasonal respiratory comfort',
+          'Promotes gut regularity',
+          'Supports natural vitality',
+        ],
+        'ayurvedicUsageMethods': [
+          'Warm herbal decoction',
+          'Fine churna with warm water',
+          'Daily culinary tempering',
+        ],
+        'ayurvedicDosage': '1–3 g daily as directed by a Vaidya.',
+        'ayurvedicFormulations': ['Classical Churna', 'Kwatha'],
+        'ayurvedicPrecautions': ['Consult a healthcare practitioner during pregnancy.'],
       });
 
       final nonAyurvedic = ProductPerformance.fromJson({
@@ -256,6 +324,32 @@ void main() {
       expect(find.text('Alalekayi (ಕನ್ನಡ)'), findsOneWidget);
       expect(find.text('Kadukkai (தமிழ்)'), findsOneWidget);
       expect(find.text('Karakkaya (తెలుగు)'), findsOneWidget);
+
+      // Ayurveda Insights tab appears next to Product Details when ayurvedicproduct == true
+      expect(find.text('Ayurveda Insights'), findsOneWidget);
+      await tester.tap(find.text('Ayurveda Insights'));
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('ayurveda_insights_content_p_kadukka')), findsOneWidget);
+      expect(find.text('Ayurvedic Classification'), findsOneWidget);
+      expect(find.text('Dravyaguna Vijnana – Traditional Herb'), findsOneWidget);
+      expect(find.text('Classical Description'), findsOneWidget);
+      expect(find.text('Rasa'), findsOneWidget);
+      expect(find.text('Katu (Pungent), Tikta (Bitter)'), findsOneWidget);
+      expect(find.text('Guna'), findsOneWidget);
+      expect(find.text('Virya (Potency)'), findsOneWidget);
+      expect(find.text('Vipaka (Post-Digestive)'), findsOneWidget);
+      expect(find.text('Prabhava (Special Action)'), findsOneWidget);
+      expect(find.text('Dosha Effect — Vata'), findsOneWidget);
+      expect(find.text('Dosha Effect — Pitta'), findsOneWidget);
+      expect(find.text('Dosha Effect — Kapha'), findsOneWidget);
+      expect(find.text('Medicinal Uses'), findsOneWidget);
+      expect(find.text('Supports healthy digestion'), findsOneWidget);
+      expect(find.text('Usage Methods'), findsOneWidget);
+      expect(find.text('Typical Dosage Note'), findsOneWidget);
+      expect(find.text('Classical Formulations'), findsOneWidget);
+      expect(find.text('Classical Churna, Kwatha'), findsOneWidget);
+      expect(find.text('Precautions'), findsOneWidget);
 
       await tester.pumpWidget(
         ProviderScope(
