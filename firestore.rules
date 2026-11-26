@@ -192,6 +192,13 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // Global Configuration Collection (`global/config`, including `epaymentprovider`)
+    // Server-side read by consumer apps; modifications restricted to authorized admins.
+    match /global/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // App Settings Collection - readable by anyone (no
     // secrets stored), but only authorized administrators may modify it. Missing/absent
     // documents remain valid.

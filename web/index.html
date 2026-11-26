@@ -34,6 +34,51 @@
   <title>LeafyMart - Connect,Refer,Earn</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+  <script>
+    window.addEventListener('OPEN_CASHFREE_CHECKOUT', function(e) {
+      var detail = e.detail || {};
+      var callbackName = detail.callbackName;
+      try {
+        if (!window.Cashfree) {
+          console.error('Cashfree JS SDK not loaded');
+          window.dispatchEvent(new CustomEvent(callbackName, {
+            detail: JSON.stringify({ outcome: 'failed', message: 'Cashfree SDK not loaded' })
+          }));
+          return;
+        }
+        var cashfree = window.Cashfree({ mode: detail.mode || 'sandbox' });
+        cashfree.checkout({
+          paymentSessionId: detail.paymentSessionId,
+          redirectTarget: '_modal'
+        }).then(function(result) {
+          if (result && result.error) {
+            var isDismissed = (result.error.message || '').toLowerCase().indexOf('cancel') !== -1 ||
+                              (result.error.message || '').toLowerCase().indexOf('closed') !== -1;
+            window.dispatchEvent(new CustomEvent(callbackName, {
+              detail: JSON.stringify({
+                outcome: isDismissed ? 'cancelled' : 'failed',
+                message: result.error.message || 'Payment not completed'
+              })
+            }));
+          } else {
+            // Always return pending/verify so backend S2S confirms final status authoritatively
+            window.dispatchEvent(new CustomEvent(callbackName, {
+              detail: JSON.stringify({ outcome: 'success' })
+            }));
+          }
+        }).catch(function(err) {
+          window.dispatchEvent(new CustomEvent(callbackName, {
+            detail: JSON.stringify({ outcome: 'failed', message: (err && err.message) || 'Cashfree checkout error' })
+          }));
+        });
+      } catch (err) {
+        window.dispatchEvent(new CustomEvent(callbackName, {
+          detail: JSON.stringify({ outcome: 'failed', message: String(err) })
+        }));
+      }
+    });
+  </script>
   <script>
     window.addEventListener('OPEN_RAZORPAY_CHECKOUT', function(e) {
       var detail = e.detail || {};

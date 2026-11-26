@@ -373,6 +373,17 @@ class _PreorderDetailScreenState extends ConsumerState<PreorderDetailScreen> {
             ),
           );
           break;
+        case PaymentOutcome.pending:
+          ref.invalidate(preorderDetailProvider(widget.preorderId));
+          ref.invalidate(myPreordersProvider);
+          messenger?.showSnackBar(
+            const SnackBar(
+              content: Text('Remaining balance payment is pending confirmation. Please refresh shortly.'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          break;
         case PaymentOutcome.failed:
         case PaymentOutcome.initFailed:
           messenger?.showSnackBar(

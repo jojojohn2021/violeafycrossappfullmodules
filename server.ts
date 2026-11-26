@@ -3345,6 +3345,101 @@ export async function getRazorpayCredentials(environment?: string): Promise<{ ke
   return { keyId, keySecret };
 }
 
+// Cashfree Credentials Helper (Environment / GCP Secret Manager; never exposed to client)
+export async function getCashfreeCredentials(): Promise<{
+  appId: string;
+  secretKey: string;
+  environment: 'PRODUCTION' | 'SANDBOX';
+  apiBaseUrl: string;
+}> {
+  let appId = (process.env.CASHFREE_APP_ID || process.env.CASHFREE_CLIENT_ID || '').trim();
+  let secretKey = (process.env.CASHFREE_SECRET_KEY || process.env.CASHFREE_CLIENT_SECRET || '').trim();
+  let envRaw = (process.env.CASHFREE_ENV || '').trim().toUpperCase();
+
+  if (!appId) {
+    const fetched = await getSecretFromGCP('CASHFREE_APP_ID');
+    if (fetched) appId = fetched.trim();
+  }
+  if (!secretKey) {
+    const fetched = await getSecretFromGCP('CASHFREE_SECRET_KEY');
+    if (fetched) secretKey = fetched.trim();
+  }
+  if (!envRaw) {
+    const fetched = await getSecretFromGCP('CASHFREE_ENV');
+    if (fetched) envRaw = fetched.trim().toUpperCase();
+  }
+
+  const environment: 'PRODUCTION' | 'SANDBOX' = envRaw === 'PRODUCTION' || envRaw === 'PROD' || envRaw === 'LIVE' ? 'PRODUCTION' : 'SANDBOX';
+  const apiBaseUrl = environment === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+  return { appId, secretKey, environment, apiBaseUrl };
+}
+
+// PayU Credentials Helper (Environment / GCP Secret Manager; salt never exposed to client)
+export async function getPayUCredentials(): Promise<{
+  merchantKey: string;
+  merchantSalt: string;
+  environment: 'PRODUCTION' | 'SANDBOX';
+  checkoutUrl: string;
+  verifyUrl: string;
+}> {
+  let merchantKey = (process.env.PAYU_MERCHANT_KEY || process.env.PAYU_KEY || '').trim();
+  let merchantSalt = (process.env.PAYU_MERCHANT_SALT || process.env.PAYU_SALT || '').trim();
+  let envRaw = (process.env.PAYU_ENV || '').trim().toUpperCase();
+
+  if (!merchantKey) {
+    const fetched = await getSecretFromGCP('PAYU_MERCHANT_KEY');
+    if (fetched) merchantKey = fetched.trim();
+  }
+  if (!merchantSalt) {
+    const fetched = await getSecretFromGCP('PAYU_MERCHANT_SALT');
+    if (fetched) merchantSalt = fetched.trim();
+  }
+  if (!envRaw) {
+    const fetched = await getSecretFromGCP('PAYU_ENV');
+    if (fetched) envRaw = fetched.trim().toUpperCase();
+  }
+
+  const environment: 'PRODUCTION' | 'SANDBOX' = envRaw === 'PRODUCTION' || envRaw === 'PROD' || envRaw === 'LIVE' ? 'PRODUCTION' : 'SANDBOX';
+  const checkoutUrl = environment === 'PRODUCTION' ? 'https://secure.payu.in/_payment' : 'https://test.payu.in/_payment';
+  const verifyUrl = environment === 'PRODUCTION' ? 'https://info.payu.in/merchant/postservice?form=2' : 'https://test.payu.in/merchant/postservice?form=2';
+  return { merchantKey, merchantSalt, environment, checkoutUrl, verifyUrl };
+}
+
+// PhonePe Credentials Helper (Environment / GCP Secret Manager; salt key never exposed to client)
+export async function getPhonePeCredentials(): Promise<{
+  merchantId: string;
+  saltKey: string;
+  saltIndex: string;
+  environment: 'PRODUCTION' | 'SANDBOX';
+  apiBaseUrl: string;
+}> {
+  let merchantId = (process.env.PHONEPE_MERCHANT_ID || '').trim();
+  let saltKey = (process.env.PHONEPE_SALT_KEY || '').trim();
+  let saltIndex = (process.env.PHONEPE_SALT_INDEX || '').trim();
+  let envRaw = (process.env.PHONEPE_ENV || '').trim().toUpperCase();
+
+  if (!merchantId) {
+    const fetched = await getSecretFromGCP('PHONEPE_MERCHANT_ID');
+    if (fetched) merchantId = fetched.trim();
+  }
+  if (!saltKey) {
+    const fetched = await getSecretFromGCP('PHONEPE_SALT_KEY');
+    if (fetched) saltKey = fetched.trim();
+  }
+  if (!saltIndex) {
+    const fetched = await getSecretFromGCP('PHONEPE_SALT_INDEX');
+    if (fetched) saltIndex = fetched.trim();
+  }
+  if (!envRaw) {
+    const fetched = await getSecretFromGCP('PHONEPE_ENV');
+    if (fetched) envRaw = fetched.trim().toUpperCase();
+  }
+
+  const environment: 'PRODUCTION' | 'SANDBOX' = envRaw === 'PRODUCTION' || envRaw === 'PROD' || envRaw === 'LIVE' ? 'PRODUCTION' : 'SANDBOX';
+  const apiBaseUrl = environment === 'PRODUCTION' ? 'https://api.phonepe.com/apis/hermes' : 'https://api-preprod.phonepe.com/apis/pg-sandbox';
+  return { merchantId, saltKey, saltIndex: saltIndex || '1', environment, apiBaseUrl };
+}
+
 
 export async function enrichOrderProductsFromMaster(rawProducts: any[]): Promise<any[]> {
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) return rawProducts || [];
@@ -3916,7 +4011,9 @@ app.get("/api/payment/status/:transactionId", async (req, res) => {
       payment.id === req.params.transactionId ||
       payment.txnid === req.params.transactionId ||
       payment.orderId === req.params.transactionId ||
-      payment.razorpayOrderId === req.params.transactionId
+      payment.razorpayOrderId === req.params.transactionId ||
+      payment.cfOrderId === req.params.transactionId ||
+      payment.merchantTransactionId === req.params.transactionId
     );
     if (!tx) return res.status(404).json({ error: 'Payment transaction not found' });
     if (tx.orderPayload?.customerId && tx.orderPayload.customerId !== authenticatedUser.uid && tx.customerId !== authenticatedUser.uid) {
@@ -3924,7 +4021,8 @@ app.get("/api/payment/status/:transactionId", async (req, res) => {
     }
     const isPaidSuccess = tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success';
     const isCodPending = (tx.paymentMethod === 'COD' || tx.paymentGateway === 'COD' || tx.orderPayload?.paymentMethod === 'COD') && (tx.status === 'PENDING' || tx.status === 'Pending');
-    const statusResult = (isPaidSuccess || isCodPending) ? 'Success' : tx.status;
+    const isGatewayPending = !isCodPending && (tx.status === 'PAYMENT_PENDING' || tx.status === 'PENDING' || tx.status === 'Pending');
+    const statusResult = (isPaidSuccess || isCodPending) ? 'Success' : (isGatewayPending ? 'Pending' : tx.status);
     return res.json({
       status: statusResult,
       rawStatus: tx.status,
@@ -3932,6 +4030,7 @@ app.get("/api/payment/status/:transactionId", async (req, res) => {
       amount: tx.amount,
       paymentMethod: tx.paymentMethod || tx.orderPayload?.paymentMethod || 'Razorpay',
       paymentGateway: tx.paymentGateway || 'Razorpay',
+      epaymentProvider: tx.epaymentProvider || String(tx.paymentGateway || 'razorpay').toLowerCase(),
       orderPayload: tx.orderPayload
     });
   } catch (err: any) {
@@ -4944,6 +5043,1034 @@ app.post("/api/payment/razorpay/callback", handleRazorpayCallback);
 app.get("/api/payment/razorpay/callback", handleRazorpayCallback);
 app.post("/payment_callback", handleRazorpayCallback);
 app.post("/payment-result", handleRazorpayCallback);
+
+// ============================================================================
+// MULTI-GATEWAY PAYMENT ROUTES: CASHFREE, PAYU & PHONEPE
+// Reuses existing GST calculation, idempotent finalizeSuccessfulPayment(tx),
+// preorder confirmation/failure hooks, and customer profile backfill.
+// Each transaction records its original `epaymentProvider` and verifies
+// strictly against that original provider (never the latest global setting).
+// ============================================================================
+
+function resolvePublicBaseUrl(req: any): string {
+  const configured = (process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+  const proto = (req.headers?.['x-forwarded-proto'] || req.protocol || 'https').toString().split(',')[0].trim();
+  const host = (req.headers?.['x-forwarded-host'] || req.headers?.host || 'www.leafymart.com').toString().split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+
+function renderGatewayCallbackBridgeHtml(params: {
+  provider: 'cashfree' | 'payu' | 'phonepe';
+  txnid: string;
+  status: 'success' | 'failed' | 'cancelled' | 'pending';
+  message?: string;
+}): string {
+  const safeTxnid = encodeURIComponent(params.txnid || '');
+  const safeStatus = encodeURIComponent(params.status);
+  const safeProvider = encodeURIComponent(params.provider);
+  const payload = JSON.stringify({
+    type: 'LEAFYMART_GATEWAY_CALLBACK',
+    provider: params.provider,
+    txnid: params.txnid,
+    status: params.status,
+    message: params.message || '',
+  });
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Completing Payment...</title>
+</head>
+<body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #F4F6F8;">
+  <div style="text-align: center; padding: 24px;">
+    <h3 style="color: #2D6A4F;">Completing your payment...</h3>
+    <p style="color: #6C757D;">Please wait while we verify your transaction.</p>
+  </div>
+  <script>
+    (function() {
+      var data = ${payload};
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(data, '*');
+          setTimeout(function() { window.close(); }, 300);
+          return;
+        }
+      } catch (e) {}
+      window.location.replace('/payment-result?txnid=${safeTxnid}&payment_status=${safeStatus}&provider=${safeProvider}');
+    })();
+  </script>
+</body>
+</html>`;
+}
+
+async function validateAndPrepareGatewayOrder(req: any, orderData: any) {
+  const authenticatedUser = await getAuthenticatedUser(req);
+  if (!authenticatedUser) {
+    throw Object.assign(new Error('Authenticated customer required'), { statusCode: 401 });
+  }
+  if (!orderData || !orderData.id) {
+    throw Object.assign(new Error('Invalid order payload'), { statusCode: 400 });
+  }
+
+  const deliveryFee = Number(orderData.deliveryFee || 0);
+  const discount = Number(orderData.discount || 0);
+  const gstCalc = await calculateGSTForOrderItems(
+    orderData.products || [],
+    deliveryFee,
+    discount
+  );
+
+  if (gstCalc.items.length === 0 && gstCalc.preorderItems.length === 0) {
+    throw Object.assign(new Error('Order contains no valid items'), { statusCode: 400 });
+  }
+
+  const finalAmount = Number(gstCalc.customerGrandTotalPayable || 0);
+  if (!(finalAmount > 0)) {
+    throw Object.assign(new Error('Order payable amount must be greater than zero'), { statusCode: 400 });
+  }
+
+  const salesPlatform = determineSalesPlatform(orderData, req);
+  orderData.salesPlatform = salesPlatform;
+  orderData.customerId = authenticatedUser.uid || orderData.customerId;
+
+  return {
+    authenticatedUser,
+    gstCalc,
+    finalAmount,
+    amountInPaise: Math.round(finalAmount * 100),
+    transactionId: String(orderData.id),
+    salesPlatform,
+    checkoutDeliveryAddress: orderData.shippingAddress || orderData.deliveryAddress || null,
+    preorderItemsForCheckout: Array.isArray(gstCalc.preorderItems) ? gstCalc.preorderItems : [],
+    preorderIdsForCheckout: (Array.isArray(gstCalc.preorderItems) ? gstCalc.preorderItems : [])
+      .map((p: any) => p.preorderId)
+      .filter(Boolean),
+  };
+}
+
+// --------------------------- 1. CASHFREE GATEWAY ----------------------------
+
+app.post("/api/payment/cashfree/create-order", async (req: any, res: any) => {
+  try {
+    const orderData = req.body?.orderData || req.body;
+    const prep = await validateAndPrepareGatewayOrder(req, orderData);
+    const creds = await getCashfreeCredentials();
+
+    if (!creds.appId || !creds.secretKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cashfree credentials are not configured on the server (CASHFREE_APP_ID / CASHFREE_SECRET_KEY).',
+      });
+    }
+
+    const baseUrl = resolvePublicBaseUrl(req);
+    const cleanPhone = String(orderData.customerMobile || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999';
+    const cleanEmail = String(orderData.customerEmail || 'customer@leafymart.com').trim() || 'customer@leafymart.com';
+    const cleanName = String(orderData.customerName || 'LeafyMart Customer').trim() || 'LeafyMart Customer';
+
+    const cfPayload = {
+      order_id: prep.transactionId,
+      order_amount: Number(prep.finalAmount.toFixed(2)),
+      order_currency: 'INR',
+      customer_details: {
+        customer_id: String(prep.authenticatedUser.uid || prep.transactionId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'cust_leafy',
+        customer_name: cleanName,
+        customer_email: cleanEmail,
+        customer_phone: cleanPhone,
+      },
+      order_meta: {
+        return_url: `${baseUrl}/api/payment/cashfree/return?order_id={order_id}`,
+        notify_url: `${baseUrl}/api/payment/cashfree/webhook`,
+      },
+      order_note: `LeafyMart Order ${prep.transactionId}`,
+    };
+
+    const cfResp = await fetch(`${creds.apiBaseUrl}/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-version': '2023-08-01',
+        'x-client-id': creds.appId,
+        'x-client-secret': creds.secretKey,
+      },
+      body: JSON.stringify(cfPayload),
+    });
+
+    const cfData: any = await cfResp.json().catch(() => ({}));
+    if (!cfResp.ok || !cfData.payment_session_id) {
+      console.error('[Cashfree API] Create order failed:', cfResp.status, cfData);
+      return res.status(cfResp.status || 500).json({
+        success: false,
+        error: cfData?.message || `Cashfree order creation failed (${cfResp.status})`,
+      });
+    }
+
+    const tx = {
+      id: prep.transactionId,
+      txnid: prep.transactionId,
+      orderId: prep.transactionId,
+      cfOrderId: String(cfData.cf_order_id || prep.transactionId),
+      paymentSessionId: String(cfData.payment_session_id),
+      orderPayload: orderData,
+      salesPlatform: prep.salesPlatform,
+      amount: prep.finalAmount,
+      regularSalesAmount: prep.gstCalc.regularInvoiceGrandTotal,
+      totalPreorderBookingAdvance: prep.gstCalc.totalPreorderBookingAdvance,
+      customerGrandTotalPayable: prep.gstCalc.customerGrandTotalPayable,
+      preorderIds: prep.preorderIdsForCheckout,
+      preorderItems: prep.preorderItemsForCheckout,
+      amountPaise: prep.amountInPaise,
+      currency: 'INR',
+      status: 'PAYMENT_CREATED',
+      epaymentProvider: 'cashfree',
+      paymentGateway: 'Cashfree',
+      paymentAggregator: 'Cashfree',
+      paymentMethod: 'Cashfree',
+      environment: creds.environment,
+      logs: [{
+        timestamp: new Date().toISOString(),
+        action: 'INITIATED',
+        details: `Cashfree ${creds.environment} order created. CF Order ID: ${cfData.cf_order_id || prep.transactionId}`,
+      }],
+      statusHistory: [{
+        status: 'PAYMENT_CREATED',
+        timestamp: new Date().toISOString(),
+        note: `Order initialized for Cashfree (${creds.environment})`,
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveCollectionDoc('payments', tx);
+    await backfillCustomerProfileFromCheckout(
+      [prep.authenticatedUser?.uid, prep.authenticatedUser?.phone_number, orderData.customerId, orderData.customerMobile],
+      orderData
+    );
+
+    return res.json({
+      success: true,
+      txnid: prep.transactionId,
+      orderId: prep.transactionId,
+      cfOrderId: tx.cfOrderId,
+      paymentSessionId: tx.paymentSessionId,
+      environment: creds.environment === 'PRODUCTION' ? 'production' : 'sandbox',
+      returnUrl: `${baseUrl}/api/payment/cashfree/return?order_id=${encodeURIComponent(prep.transactionId)}`,
+      amount: prep.amountInPaise,
+      currency: 'INR',
+    });
+  } catch (err: any) {
+    console.error('[Cashfree Create Order Error]:', err);
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message || 'Failed to create Cashfree order' });
+  }
+});
+
+app.post("/api/payment/cashfree/verify", async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ success: false, error: 'Authenticated customer required' });
+
+    const transactionId = String(req.body?.transactionId || req.body?.orderId || '').trim();
+    if (!transactionId) return res.status(400).json({ success: false, error: 'Missing transactionId' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === transactionId || p.txnid === transactionId || p.cfOrderId === transactionId);
+    if (!tx) return res.status(404).json({ success: false, error: 'Payment transaction not found' });
+
+    if (tx.orderPayload?.customerId && tx.orderPayload.customerId !== authenticatedUser.uid && tx.customerId !== authenticatedUser.uid) {
+      return res.status(403).json({ success: false, error: 'Payment does not belong to customer' });
+    }
+    if (String(tx.epaymentProvider || tx.paymentGateway || '').toLowerCase() !== 'cashfree') {
+      return res.status(400).json({ success: false, error: 'Transaction provider mismatch (expected cashfree)' });
+    }
+
+    if (tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success') {
+      return res.json({ success: true, status: 'Success', transactionId: tx.id });
+    }
+
+    const creds = await getCashfreeCredentials();
+    if (!creds.appId || !creds.secretKey) {
+      return res.status(500).json({ success: false, error: 'Cashfree credentials missing on server' });
+    }
+
+    const cfResp = await fetch(`${creds.apiBaseUrl}/orders/${encodeURIComponent(tx.id)}`, {
+      method: 'GET',
+      headers: {
+        'x-api-version': '2023-08-01',
+        'x-client-id': creds.appId,
+        'x-client-secret': creds.secretKey,
+      },
+    });
+    const cfOrder: any = await cfResp.json().catch(() => ({}));
+    if (!cfResp.ok) {
+      return res.status(502).json({ success: false, status: 'Pending', error: cfOrder?.message || 'Unable to verify Cashfree order status' });
+    }
+
+    const orderStatus = String(cfOrder.order_status || '').toUpperCase();
+    const verifiedAmount = Number(cfOrder.order_amount || 0);
+    if (orderStatus === 'PAID') {
+      if (Math.abs(verifiedAmount - Number(tx.amount || 0)) > 0.05) {
+        return res.status(400).json({ success: false, status: 'Failed', error: 'Verified Cashfree payment amount mismatch' });
+      }
+      tx.status = 'PAYMENT_SUCCESS';
+      tx.transactionReference = String(cfOrder.cf_order_id || tx.cfOrderId || tx.id);
+      tx.logs = Array.isArray(tx.logs) ? tx.logs : [];
+      tx.logs.push({ timestamp: new Date().toISOString(), action: 'CASHFREE_VERIFIED', details: `Cashfree S2S verified PAID for order ${tx.id}` });
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      await finalizeSuccessfulPayment(tx);
+      return res.json({ success: true, status: 'Success', transactionId: tx.id });
+    }
+
+    if (orderStatus === 'ACTIVE' || orderStatus === 'PENDING') {
+      tx.status = 'PAYMENT_PENDING';
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      return res.json({ success: false, status: 'Pending', transactionId: tx.id });
+    }
+
+    const isCancelled = orderStatus === 'TERMINATED' || orderStatus === 'EXPIRED' || orderStatus === 'CANCELLED';
+    tx.status = isCancelled ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+    tx.updatedAt = new Date().toISOString();
+    await saveCollectionDoc('payments', tx);
+    await recordPreorderFailureOrCancellationForTx(
+      tx,
+      String(authenticatedUser.uid),
+      isCancelled ? 'cancelled' : 'failed',
+      `Cashfree order status: ${orderStatus || 'FAILED'}`
+    );
+    return res.json({ success: false, status: isCancelled ? 'Cancelled' : 'Failed', transactionId: tx.id });
+  } catch (err: any) {
+    console.error('[Cashfree Verify Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Cashfree verification failed' });
+  }
+});
+
+app.post("/api/payment/cashfree/outcome", async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ error: 'Authenticated customer required' });
+    const { transactionId, outcome, reason } = req.body || {};
+    if (!transactionId) return res.status(400).json({ error: 'Missing transactionId' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === transactionId || p.txnid === transactionId);
+    if (!tx) return res.status(404).json({ error: 'Payment transaction not found' });
+    if (tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success') {
+      return res.json({ success: true, status: tx.status });
+    }
+
+    const normalized = String(outcome || 'failed').toLowerCase() === 'cancelled' ? 'cancelled' : 'failed';
+    tx.status = normalized === 'cancelled' ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+    tx.updatedAt = new Date().toISOString();
+    await saveCollectionDoc('payments', tx);
+    await recordPreorderFailureOrCancellationForTx(tx, String(authenticatedUser.uid), normalized, String(reason || `Cashfree checkout ${normalized}`));
+    return res.json({ success: true, status: tx.status });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to record Cashfree outcome' });
+  }
+});
+
+app.post("/api/payment/cashfree/webhook", async (req: any, res: any) => {
+  try {
+    const creds = await getCashfreeCredentials();
+    const signature = String(req.headers['x-webhook-signature'] || '');
+    const timestamp = String(req.headers['x-webhook-timestamp'] || '');
+    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
+
+    if (!creds.secretKey || !signature || !timestamp) {
+      return res.status(400).json({ error: 'Missing Cashfree webhook signature headers or secret' });
+    }
+
+    const expectedSig = crypto
+      .createHmac('sha256', creds.secretKey)
+      .update(`${timestamp}${rawBody}`)
+      .digest('base64');
+
+    if (expectedSig !== signature) {
+      return res.status(401).json({ error: 'Invalid Cashfree webhook signature' });
+    }
+
+    const eventType = String(req.body?.type || '').toUpperCase();
+    const orderId = String(req.body?.data?.order?.order_id || '').trim();
+    if (!orderId) return res.status(200).json({ status: 'ignored' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === orderId || p.txnid === orderId);
+    if (!tx || String(tx.epaymentProvider || tx.paymentGateway || '').toLowerCase() !== 'cashfree') {
+      return res.status(200).json({ status: 'ignored' });
+    }
+
+    if (eventType === 'PAYMENT_SUCCESS_WEBHOOK') {
+      if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+        tx.status = 'PAYMENT_SUCCESS';
+        tx.transactionReference = String(req.body?.data?.payment?.cf_payment_id || tx.cfOrderId || tx.id);
+        tx.updatedAt = new Date().toISOString();
+        await saveCollectionDoc('payments', tx);
+        await finalizeSuccessfulPayment(tx);
+      }
+    } else if (eventType === 'PAYMENT_FAILED_WEBHOOK' || eventType === 'PAYMENT_USER_DROPPED_WEBHOOK') {
+      if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+        const isCancelled = eventType === 'PAYMENT_USER_DROPPED_WEBHOOK';
+        tx.status = isCancelled ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+        tx.updatedAt = new Date().toISOString();
+        await saveCollectionDoc('payments', tx);
+        await recordPreorderFailureOrCancellationForTx(
+          tx,
+          String(tx.orderPayload?.customerId || tx.customerId || ''),
+          isCancelled ? 'cancelled' : 'failed',
+          `Cashfree webhook: ${eventType}`
+        );
+      }
+    }
+    return res.status(200).json({ status: 'ok' });
+  } catch (err: any) {
+    console.error('[Cashfree Webhook Error]:', err);
+    return res.status(500).json({ error: err.message || 'Cashfree webhook error' });
+  }
+});
+
+app.get("/api/payment/cashfree/return", async (req: any, res: any) => {
+  const orderId = String(req.query?.order_id || req.query?.txnid || '').trim();
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(renderGatewayCallbackBridgeHtml({
+    provider: 'cashfree',
+    txnid: orderId,
+    status: 'pending',
+  }));
+});
+
+// ----------------------------- 2. PAYU GATEWAY ------------------------------
+
+app.post("/api/payment/payu/create-order", async (req: any, res: any) => {
+  try {
+    const orderData = req.body?.orderData || req.body;
+    const prep = await validateAndPrepareGatewayOrder(req, orderData);
+    const creds = await getPayUCredentials();
+
+    if (!creds.merchantKey || !creds.merchantSalt) {
+      return res.status(400).json({
+        success: false,
+        error: 'PayU credentials are not configured on the server (PAYU_MERCHANT_KEY / PAYU_MERCHANT_SALT).',
+      });
+    }
+
+    const baseUrl = resolvePublicBaseUrl(req);
+    const amountStr = prep.finalAmount.toFixed(2);
+    const productinfo = `LeafyMart Order ${prep.transactionId}`;
+    const firstname = String(orderData.customerName || 'Customer').trim().replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 50) || 'Customer';
+    const email = String(orderData.customerEmail || 'customer@leafymart.com').trim() || 'customer@leafymart.com';
+    const phone = String(orderData.customerMobile || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999';
+
+    const { hash } = generatePayUHash({
+      key: creds.merchantKey,
+      txnid: prep.transactionId,
+      amount: amountStr,
+      productinfo,
+      firstname,
+      email,
+      salt: creds.merchantSalt,
+    });
+
+    const callbackUrl = `${baseUrl}/api/payment/payu/callback`;
+
+    const tx = {
+      id: prep.transactionId,
+      txnid: prep.transactionId,
+      orderId: prep.transactionId,
+      orderPayload: orderData,
+      salesPlatform: prep.salesPlatform,
+      amount: prep.finalAmount,
+      regularSalesAmount: prep.gstCalc.regularInvoiceGrandTotal,
+      totalPreorderBookingAdvance: prep.gstCalc.totalPreorderBookingAdvance,
+      customerGrandTotalPayable: prep.gstCalc.customerGrandTotalPayable,
+      preorderIds: prep.preorderIdsForCheckout,
+      preorderItems: prep.preorderItemsForCheckout,
+      amountPaise: prep.amountInPaise,
+      currency: 'INR',
+      status: 'PAYMENT_CREATED',
+      epaymentProvider: 'payu',
+      paymentGateway: 'PayU',
+      paymentAggregator: 'PayU',
+      paymentMethod: 'PayU',
+      environment: creds.environment,
+      logs: [{
+        timestamp: new Date().toISOString(),
+        action: 'INITIATED',
+        details: `PayU ${creds.environment} hosted checkout hash generated for ${prep.transactionId}`,
+      }],
+      statusHistory: [{
+        status: 'PAYMENT_CREATED',
+        timestamp: new Date().toISOString(),
+        note: `Order initialized for PayU (${creds.environment})`,
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveCollectionDoc('payments', tx);
+    await backfillCustomerProfileFromCheckout(
+      [prep.authenticatedUser?.uid, prep.authenticatedUser?.phone_number, orderData.customerId, orderData.customerMobile],
+      orderData
+    );
+
+    return res.json({
+      success: true,
+      txnid: prep.transactionId,
+      actionUrl: creds.checkoutUrl,
+      fields: {
+        key: creds.merchantKey,
+        txnid: prep.transactionId,
+        amount: amountStr,
+        productinfo,
+        firstname,
+        email,
+        phone,
+        surl: callbackUrl,
+        furl: callbackUrl,
+        curl: callbackUrl,
+        hash,
+      },
+      amount: prep.amountInPaise,
+      currency: 'INR',
+    });
+  } catch (err: any) {
+    console.error('[PayU Create Order Error]:', err);
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message || 'Failed to create PayU payment request' });
+  }
+});
+
+async function verifyPayUStatusS2S(tx: any): Promise<'success' | 'pending' | 'failed' | 'cancelled'> {
+  const creds = await getPayUCredentials();
+  if (!creds.merchantKey || !creds.merchantSalt) return 'failed';
+
+  const command = 'verify_payment';
+  const hashStr = `${creds.merchantKey}|${command}|${tx.id}|${creds.merchantSalt}`;
+  const hash = crypto.createHash('sha512').update(hashStr).digest('hex').toLowerCase();
+
+  const body = new URLSearchParams({
+    key: creds.merchantKey,
+    command,
+    var1: tx.id,
+    hash,
+  });
+
+  const resp = await fetch(creds.verifyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  const data: any = await resp.json().catch(() => ({}));
+  const details = data?.transaction_details?.[tx.id];
+  const st = String(details?.status || '').toLowerCase();
+  const amt = Number(details?.amt || details?.transaction_amount || 0);
+
+  if (st === 'success' && Math.abs(amt - Number(tx.amount || 0)) <= 0.05) {
+    tx.transactionReference = String(details?.mihpayid || tx.transactionReference || tx.id);
+    return 'success';
+  }
+  if (st === 'pending' || st === 'in progress') return 'pending';
+  if (st === 'usercancelled' || st === 'cancelled') return 'cancelled';
+  return 'failed';
+}
+
+app.post("/api/payment/payu/callback", async (req: any, res: any) => {
+  try {
+    const body = req.body || {};
+    const txnid = String(body.txnid || '').trim();
+    const status = String(body.status || '').toLowerCase();
+    const receivedHash = String(body.hash || '').toLowerCase();
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === txnid || p.txnid === txnid);
+    if (!tx || String(tx.epaymentProvider || tx.paymentGateway || '').toLowerCase() !== 'payu') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(renderGatewayCallbackBridgeHtml({ provider: 'payu', txnid, status: 'failed' }));
+    }
+
+    const creds = await getPayUCredentials();
+    const { hash: expectedReverseHash } = generatePayUReverseHash({
+      salt: creds.merchantSalt,
+      status: String(body.status || ''),
+      udf10: String(body.udf10 || ''),
+      udf9: String(body.udf9 || ''),
+      udf8: String(body.udf8 || ''),
+      udf7: String(body.udf7 || ''),
+      udf6: String(body.udf6 || ''),
+      udf5: String(body.udf5 || ''),
+      udf4: String(body.udf4 || ''),
+      udf3: String(body.udf3 || ''),
+      udf2: String(body.udf2 || ''),
+      udf1: String(body.udf1 || ''),
+      email: String(body.email || ''),
+      firstname: String(body.firstname || ''),
+      productinfo: String(body.productinfo || ''),
+      amount: String(body.amount || ''),
+      txnid,
+      key: creds.merchantKey,
+    });
+
+    let finalStatus: 'success' | 'pending' | 'failed' | 'cancelled' = 'failed';
+    if (receivedHash && expectedReverseHash === receivedHash && status === 'success') {
+      // Cross-verify server-to-server before marking paid
+      finalStatus = await verifyPayUStatusS2S(tx);
+      if (finalStatus === 'success') {
+        if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+          tx.status = 'PAYMENT_SUCCESS';
+          tx.transactionReference = String(body.mihpayid || tx.transactionReference || tx.id);
+          tx.updatedAt = new Date().toISOString();
+          await saveCollectionDoc('payments', tx);
+          await finalizeSuccessfulPayment(tx);
+        }
+      }
+    } else if (status === 'pending') {
+      finalStatus = 'pending';
+      if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+        tx.status = 'PAYMENT_PENDING';
+        tx.updatedAt = new Date().toISOString();
+        await saveCollectionDoc('payments', tx);
+      }
+    } else {
+      finalStatus = status.includes('cancel') ? 'cancelled' : 'failed';
+      if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+        tx.status = finalStatus === 'cancelled' ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+        tx.updatedAt = new Date().toISOString();
+        await saveCollectionDoc('payments', tx);
+        await recordPreorderFailureOrCancellationForTx(
+          tx,
+          String(tx.orderPayload?.customerId || tx.customerId || ''),
+          finalStatus,
+          String(body.error_Message || `PayU callback status: ${status || 'failed'}`)
+        );
+      }
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(renderGatewayCallbackBridgeHtml({ provider: 'payu', txnid: tx.id, status: finalStatus }));
+  } catch (err: any) {
+    console.error('[PayU Callback Error]:', err);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(renderGatewayCallbackBridgeHtml({ provider: 'payu', txnid: '', status: 'failed' }));
+  }
+});
+
+app.post("/api/payment/payu/verify", async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ success: false, error: 'Authenticated customer required' });
+    const transactionId = String(req.body?.transactionId || req.body?.txnid || '').trim();
+    if (!transactionId) return res.status(400).json({ success: false, error: 'Missing transactionId' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === transactionId || p.txnid === transactionId);
+    if (!tx) return res.status(404).json({ success: false, error: 'Payment transaction not found' });
+    if (tx.orderPayload?.customerId && tx.orderPayload.customerId !== authenticatedUser.uid && tx.customerId !== authenticatedUser.uid) {
+      return res.status(403).json({ success: false, error: 'Payment does not belong to customer' });
+    }
+    if (String(tx.epaymentProvider || tx.paymentGateway || '').toLowerCase() !== 'payu') {
+      return res.status(400).json({ success: false, error: 'Transaction provider mismatch (expected payu)' });
+    }
+
+    if (tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success') {
+      return res.json({ success: true, status: 'Success', transactionId: tx.id });
+    }
+
+    const s2s = await verifyPayUStatusS2S(tx);
+    if (s2s === 'success') {
+      tx.status = 'PAYMENT_SUCCESS';
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      await finalizeSuccessfulPayment(tx);
+      return res.json({ success: true, status: 'Success', transactionId: tx.id });
+    }
+    if (s2s === 'pending') {
+      tx.status = 'PAYMENT_PENDING';
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      return res.json({ success: false, status: 'Pending', transactionId: tx.id });
+    }
+
+    tx.status = s2s === 'cancelled' ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+    tx.updatedAt = new Date().toISOString();
+    await saveCollectionDoc('payments', tx);
+    await recordPreorderFailureOrCancellationForTx(tx, String(authenticatedUser.uid), s2s, `PayU S2S verify: ${s2s}`);
+    return res.json({ success: false, status: s2s === 'cancelled' ? 'Cancelled' : 'Failed', transactionId: tx.id });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'PayU verification failed' });
+  }
+});
+
+app.post("/api/payment/payu/outcome", async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ error: 'Authenticated customer required' });
+    const { transactionId, outcome, reason } = req.body || {};
+    if (!transactionId) return res.status(400).json({ error: 'Missing transactionId' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === transactionId || p.txnid === transactionId);
+    if (!tx) return res.status(404).json({ error: 'Payment transaction not found' });
+    if (tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success') {
+      return res.json({ success: true, status: tx.status });
+    }
+
+    const normalized = String(outcome || 'failed').toLowerCase() === 'cancelled' ? 'cancelled' : 'failed';
+    tx.status = normalized === 'cancelled' ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+    tx.updatedAt = new Date().toISOString();
+    await saveCollectionDoc('payments', tx);
+    await recordPreorderFailureOrCancellationForTx(tx, String(authenticatedUser.uid), normalized, String(reason || `PayU checkout ${normalized}`));
+    return res.json({ success: true, status: tx.status });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to record PayU outcome' });
+  }
+});
+
+app.post("/api/payment/payu/webhook", async (req: any, res: any) => {
+  try {
+    const body = req.body || {};
+    const txnid = String(body.txnid || '').trim();
+    if (!txnid) return res.status(200).json({ status: 'ignored' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === txnid || p.txnid === txnid);
+    if (!tx || String(tx.epaymentProvider || tx.paymentGateway || '').toLowerCase() !== 'payu') {
+      return res.status(200).json({ status: 'ignored' });
+    }
+
+    const creds = await getPayUCredentials();
+    const { hash: expectedReverseHash } = generatePayUReverseHash({
+      salt: creds.merchantSalt,
+      status: String(body.status || ''),
+      udf10: String(body.udf10 || ''),
+      udf9: String(body.udf9 || ''),
+      udf8: String(body.udf8 || ''),
+      udf7: String(body.udf7 || ''),
+      udf6: String(body.udf6 || ''),
+      udf5: String(body.udf5 || ''),
+      udf4: String(body.udf4 || ''),
+      udf3: String(body.udf3 || ''),
+      udf2: String(body.udf2 || ''),
+      udf1: String(body.udf1 || ''),
+      email: String(body.email || ''),
+      firstname: String(body.firstname || ''),
+      productinfo: String(body.productinfo || ''),
+      amount: String(body.amount || ''),
+      txnid,
+      key: creds.merchantKey,
+    });
+
+    if (String(body.hash || '').toLowerCase() !== expectedReverseHash) {
+      return res.status(401).json({ error: 'Invalid PayU webhook hash' });
+    }
+
+    const status = String(body.status || '').toLowerCase();
+    if (status === 'success') {
+      if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+        tx.status = 'PAYMENT_SUCCESS';
+        tx.transactionReference = String(body.mihpayid || tx.id);
+        tx.updatedAt = new Date().toISOString();
+        await saveCollectionDoc('payments', tx);
+        await finalizeSuccessfulPayment(tx);
+      }
+    } else if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+      const isCancelled = status.includes('cancel');
+      tx.status = isCancelled ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      await recordPreorderFailureOrCancellationForTx(
+        tx,
+        String(tx.orderPayload?.customerId || tx.customerId || ''),
+        isCancelled ? 'cancelled' : 'failed',
+        `PayU webhook: ${status}`
+      );
+    }
+    return res.status(200).json({ status: 'ok' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'PayU webhook error' });
+  }
+});
+
+// --------------------------- 3. PHONEPE GATEWAY -----------------------------
+
+app.post("/api/payment/phonepe/create-order", async (req: any, res: any) => {
+  try {
+    const orderData = req.body?.orderData || req.body;
+    const prep = await validateAndPrepareGatewayOrder(req, orderData);
+    const creds = await getPhonePeCredentials();
+
+    if (!creds.merchantId || !creds.saltKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'PhonePe credentials are not configured on the server (PHONEPE_MERCHANT_ID / PHONEPE_SALT_KEY).',
+      });
+    }
+
+    const baseUrl = resolvePublicBaseUrl(req);
+    const merchantTransactionId = prep.transactionId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 35);
+    const cleanPhone = String(orderData.customerMobile || '9999999999').replace(/\D/g, '').slice(-10) || '9999999999';
+
+    const phonePePayload = {
+      merchantId: creds.merchantId,
+      merchantTransactionId,
+      merchantUserId: String(prep.authenticatedUser.uid || 'LEAFYUSER').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36),
+      amount: prep.amountInPaise,
+      redirectUrl: `${baseUrl}/api/payment/phonepe/return?txnid=${encodeURIComponent(prep.transactionId)}`,
+      redirectMode: 'REDIRECT',
+      callbackUrl: `${baseUrl}/api/payment/phonepe/webhook`,
+      mobileNumber: cleanPhone,
+      paymentInstrument: { type: 'PAY_PAGE' },
+    };
+
+    const base64Payload = Buffer.from(JSON.stringify(phonePePayload)).toString('base64');
+    const xVerify = `${crypto.createHash('sha256').update(`${base64Payload}/pg/v1/pay${creds.saltKey}`).digest('hex')}###${creds.saltIndex}`;
+
+    const ppResp = await fetch(`${creds.apiBaseUrl}/pg/v1/pay`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-VERIFY': xVerify,
+      },
+      body: JSON.stringify({ request: base64Payload }),
+    });
+
+    const ppData: any = await ppResp.json().catch(() => ({}));
+    const redirectUrl = ppData?.data?.instrumentResponse?.redirectInfo?.url;
+    if (!ppResp.ok || !ppData?.success || !redirectUrl) {
+      console.error('[PhonePe API] Create order failed:', ppResp.status, ppData);
+      return res.status(ppResp.status || 500).json({
+        success: false,
+        error: ppData?.message || `PhonePe order creation failed (${ppResp.status})`,
+      });
+    }
+
+    const tx = {
+      id: prep.transactionId,
+      txnid: prep.transactionId,
+      orderId: prep.transactionId,
+      merchantTransactionId,
+      orderPayload: orderData,
+      salesPlatform: prep.salesPlatform,
+      amount: prep.finalAmount,
+      regularSalesAmount: prep.gstCalc.regularInvoiceGrandTotal,
+      totalPreorderBookingAdvance: prep.gstCalc.totalPreorderBookingAdvance,
+      customerGrandTotalPayable: prep.gstCalc.customerGrandTotalPayable,
+      preorderIds: prep.preorderIdsForCheckout,
+      preorderItems: prep.preorderItemsForCheckout,
+      amountPaise: prep.amountInPaise,
+      currency: 'INR',
+      status: 'PAYMENT_CREATED',
+      epaymentProvider: 'phonepe',
+      paymentGateway: 'PhonePe',
+      paymentAggregator: 'PhonePe',
+      paymentMethod: 'PhonePe',
+      environment: creds.environment,
+      logs: [{
+        timestamp: new Date().toISOString(),
+        action: 'INITIATED',
+        details: `PhonePe ${creds.environment} pay page created. MerchantTxnId: ${merchantTransactionId}`,
+      }],
+      statusHistory: [{
+        status: 'PAYMENT_CREATED',
+        timestamp: new Date().toISOString(),
+        note: `Order initialized for PhonePe (${creds.environment})`,
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveCollectionDoc('payments', tx);
+    await backfillCustomerProfileFromCheckout(
+      [prep.authenticatedUser?.uid, prep.authenticatedUser?.phone_number, orderData.customerId, orderData.customerMobile],
+      orderData
+    );
+
+    return res.json({
+      success: true,
+      txnid: prep.transactionId,
+      merchantTransactionId,
+      redirectUrl,
+      amount: prep.amountInPaise,
+      currency: 'INR',
+    });
+  } catch (err: any) {
+    console.error('[PhonePe Create Order Error]:', err);
+    return res.status(err.statusCode || 500).json({ success: false, error: err.message || 'Failed to create PhonePe payment request' });
+  }
+});
+
+app.post("/api/payment/phonepe/verify", async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ success: false, error: 'Authenticated customer required' });
+    const transactionId = String(req.body?.transactionId || req.body?.merchantTransactionId || '').trim();
+    if (!transactionId) return res.status(400).json({ success: false, error: 'Missing transactionId' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === transactionId || p.txnid === transactionId || p.merchantTransactionId === transactionId);
+    if (!tx) return res.status(404).json({ success: false, error: 'Payment transaction not found' });
+    if (tx.orderPayload?.customerId && tx.orderPayload.customerId !== authenticatedUser.uid && tx.customerId !== authenticatedUser.uid) {
+      return res.status(403).json({ success: false, error: 'Payment does not belong to customer' });
+    }
+    if (String(tx.epaymentProvider || tx.paymentGateway || '').toLowerCase() !== 'phonepe') {
+      return res.status(400).json({ success: false, error: 'Transaction provider mismatch (expected phonepe)' });
+    }
+
+    if (tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success') {
+      return res.json({ success: true, status: 'Success', transactionId: tx.id });
+    }
+
+    const creds = await getPhonePeCredentials();
+    if (!creds.merchantId || !creds.saltKey) {
+      return res.status(500).json({ success: false, error: 'PhonePe credentials missing on server' });
+    }
+
+    const mTxnId = String(tx.merchantTransactionId || tx.id);
+    const statusPath = `/pg/v1/status/${creds.merchantId}/${mTxnId}`;
+    const xVerify = `${crypto.createHash('sha256').update(`${statusPath}${creds.saltKey}`).digest('hex')}###${creds.saltIndex}`;
+
+    const ppResp = await fetch(`${creds.apiBaseUrl}${statusPath}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-VERIFY': xVerify,
+        'X-MERCHANT-ID': creds.merchantId,
+      },
+    });
+    const ppData: any = await ppResp.json().catch(() => ({}));
+    const code = String(ppData?.code || '').toUpperCase();
+    const verifiedPaise = Number(ppData?.data?.amount || 0);
+
+    if (code === 'PAYMENT_SUCCESS') {
+      if (verifiedPaise > 0 && Math.abs(verifiedPaise - Number(tx.amountPaise || 0)) > 5) {
+        return res.status(400).json({ success: false, status: 'Failed', error: 'Verified PhonePe amount mismatch' });
+      }
+      tx.status = 'PAYMENT_SUCCESS';
+      tx.transactionReference = String(ppData?.data?.transactionId || mTxnId);
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      await finalizeSuccessfulPayment(tx);
+      return res.json({ success: true, status: 'Success', transactionId: tx.id });
+    }
+
+    if (code === 'PAYMENT_PENDING' || code === 'INTERNAL_SERVER_ERROR') {
+      tx.status = 'PAYMENT_PENDING';
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      return res.json({ success: false, status: 'Pending', transactionId: tx.id });
+    }
+
+    const isCancelled = code === 'PAYMENT_CANCELLED' || code === 'USER_CANCELLED';
+    tx.status = isCancelled ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+    tx.updatedAt = new Date().toISOString();
+    await saveCollectionDoc('payments', tx);
+    await recordPreorderFailureOrCancellationForTx(
+      tx,
+      String(authenticatedUser.uid),
+      isCancelled ? 'cancelled' : 'failed',
+      `PhonePe status: ${code || 'FAILED'}`
+    );
+    return res.json({ success: false, status: isCancelled ? 'Cancelled' : 'Failed', transactionId: tx.id });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'PhonePe verification failed' });
+  }
+});
+
+app.post("/api/payment/phonepe/outcome", async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser) return res.status(401).json({ error: 'Authenticated customer required' });
+    const { transactionId, outcome, reason } = req.body || {};
+    if (!transactionId) return res.status(400).json({ error: 'Missing transactionId' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.id === transactionId || p.txnid === transactionId);
+    if (!tx) return res.status(404).json({ error: 'Payment transaction not found' });
+    if (tx.status === 'Paid' || tx.status === 'PAYMENT_SUCCESS' || tx.status === 'Success') {
+      return res.json({ success: true, status: tx.status });
+    }
+
+    const normalized = String(outcome || 'failed').toLowerCase() === 'cancelled' ? 'cancelled' : 'failed';
+    tx.status = normalized === 'cancelled' ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+    tx.updatedAt = new Date().toISOString();
+    await saveCollectionDoc('payments', tx);
+    await recordPreorderFailureOrCancellationForTx(tx, String(authenticatedUser.uid), normalized, String(reason || `PhonePe checkout ${normalized}`));
+    return res.json({ success: true, status: tx.status });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to record PhonePe outcome' });
+  }
+});
+
+app.post("/api/payment/phonepe/webhook", async (req: any, res: any) => {
+  try {
+    const creds = await getPhonePeCredentials();
+    const xVerifyHeader = String(req.headers['x-verify'] || '');
+    const base64Response = String(req.body?.response || '');
+    if (!creds.saltKey || !xVerifyHeader || !base64Response) {
+      return res.status(400).json({ error: 'Missing PhonePe webhook signature or payload' });
+    }
+
+    const expectedXVerify = `${crypto.createHash('sha256').update(`${base64Response}${creds.saltKey}`).digest('hex')}###${creds.saltIndex}`;
+    if (xVerifyHeader !== expectedXVerify) {
+      return res.status(401).json({ error: 'Invalid PhonePe webhook X-VERIFY signature' });
+    }
+
+    const decoded = JSON.parse(Buffer.from(base64Response, 'base64').toString('utf8'));
+    const mTxnId = String(decoded?.data?.merchantTransactionId || '').trim();
+    if (!mTxnId) return res.status(200).json({ status: 'ignored' });
+
+    const payments = await getCollectionDocs('payments');
+    const tx = payments.find((p: any) => p.merchantTransactionId === mTxnId || p.id === mTxnId || p.txnid === mTxnId);
+    if (!tx || String(tx.epaymentProvider || tx.paymentGateway || '').toLowerCase() !== 'phonepe') {
+      return res.status(200).json({ status: 'ignored' });
+    }
+
+    const code = String(decoded?.code || '').toUpperCase();
+    if (code === 'PAYMENT_SUCCESS') {
+      if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+        tx.status = 'PAYMENT_SUCCESS';
+        tx.transactionReference = String(decoded?.data?.transactionId || mTxnId);
+        tx.updatedAt = new Date().toISOString();
+        await saveCollectionDoc('payments', tx);
+        await finalizeSuccessfulPayment(tx);
+      }
+    } else if (tx.status !== 'Paid' && tx.status !== 'PAYMENT_SUCCESS' && tx.status !== 'Success') {
+      const isCancelled = code === 'PAYMENT_CANCELLED' || code === 'USER_CANCELLED';
+      tx.status = isCancelled ? 'PAYMENT_CANCELLED' : 'PAYMENT_FAILED';
+      tx.updatedAt = new Date().toISOString();
+      await saveCollectionDoc('payments', tx);
+      await recordPreorderFailureOrCancellationForTx(
+        tx,
+        String(tx.orderPayload?.customerId || tx.customerId || ''),
+        isCancelled ? 'cancelled' : 'failed',
+        `PhonePe webhook: ${code}`
+      );
+    }
+    return res.status(200).json({ status: 'ok' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'PhonePe webhook error' });
+  }
+});
+
+app.get("/api/payment/phonepe/return", async (req: any, res: any) => {
+  const txnid = String(req.query?.txnid || req.query?.merchantTransactionId || '').trim();
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(renderGatewayCallbackBridgeHtml({
+    provider: 'phonepe',
+    txnid,
+    status: 'pending',
+  }));
+});
+
+app.post("/api/payment/phonepe/return", async (req: any, res: any) => {
+  const txnid = String(req.query?.txnid || req.body?.transactionId || req.body?.merchantTransactionId || '').trim();
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(renderGatewayCallbackBridgeHtml({
+    provider: 'phonepe',
+    txnid,
+    status: 'pending',
+  }));
+});
 
 
 // --- ACCOUNT DELETION ENDPOINT (Platform Policy Compliance) ---

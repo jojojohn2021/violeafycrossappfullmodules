@@ -4,9 +4,9 @@
 /// unavailable, unsupported platform, platform-channel error) - NO transaction
 /// was submitted to gateway, so it is safe to handle initialization errors cleanly.
 ///
-/// [success]/[failed]/[cancelled] mean a real transaction attempt happened -
+/// [success]/[failed]/[cancelled]/[pending] mean a real transaction attempt happened -
 /// these must never trigger an automatic second payment attempt.
-enum PaymentOutcome { launchedExternally, success, failed, cancelled, initFailed }
+enum PaymentOutcome { launchedExternally, success, failed, cancelled, pending, initFailed }
 
 class PaymentResult {
   final PaymentOutcome outcome;

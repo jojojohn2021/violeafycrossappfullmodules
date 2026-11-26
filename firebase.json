@@ -40,9 +40,7 @@
       "source": ".",
       "codebase": "default",
       "runtime": "nodejs22",
-      "predeploy": [
-        "npm run build"
-      ],
+      "predeploy": [],
       "ignore": [
         "node_modules",
         ".git",

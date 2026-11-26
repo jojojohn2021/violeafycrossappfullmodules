@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'core/config/env_config.dart';
+import 'features/cart_checkout/domain/payment_gateway_config.dart';
 import 'firebase_options.dart';
 import 'app/main_app.dart';
  
@@ -47,6 +48,10 @@ void main() async {
       app: Firebase.app(),
       databaseId: EnvConfig.firestoreDatabaseId,
     );
+
+    // 3. STRICT STARTUP RULE: Retrieve active payment gateway directly from Firestore server
+    //    (Source.server, no persistent caching, retained in runtime memory only for this session).
+    await PaymentGatewayManager.instance.initializeFromServer(firestore: firestore);
 
     // Proactive connectivity check (light document probe)
     try {

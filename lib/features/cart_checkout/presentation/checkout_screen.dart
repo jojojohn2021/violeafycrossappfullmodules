@@ -467,16 +467,38 @@ class OrderReviewScreen extends ConsumerStatefulWidget {
 class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
   final _orchestrator = PaymentOrchestrator();
   bool _isStartingPayment = false;
-  String _selectedPaymentMethod = 'Razorpay'; // 'Razorpay' or 'COD'
+  bool _isRetryingGatewayConfig = false;
+  String _selectedPaymentMethod = 'Online'; // 'Online' or 'COD'
 
   @override
   void initState() {
     super.initState();
+    if (kIsWeb && !PaymentGatewayManager.instance.isOnlinePaymentAvailable) {
+      _selectedPaymentMethod = 'COD';
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
       }
     });
+  }
+
+  Future<void> _retryGatewayConfig() async {
+    if (_isRetryingGatewayConfig) return;
+    setState(() => _isRetryingGatewayConfig = true);
+    try {
+      final nextState = await PaymentGatewayManager.instance.retryFromServer();
+      if (!mounted) return;
+      if (nextState.isOnlinePaymentAvailable) {
+        setState(() => _selectedPaymentMethod = 'Online');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(nextState.errorMessage ?? 'Unable to load payment configuration.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRetryingGatewayConfig = false);
+    }
   }
 
   Future<void> _startPayment() async {
@@ -558,6 +580,9 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
             break;
           case PaymentOutcome.cancelled:
             context.go('/payment-result?txnid=${result.transactionId}&payment_status=cancelled');
+            break;
+          case PaymentOutcome.pending:
+            context.go('/payment-result?txnid=${result.transactionId}&payment_status=pending');
             break;
           case PaymentOutcome.failed:
           case PaymentOutcome.initFailed:
@@ -773,64 +798,120 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
             // Payment Method Selection (COD is rendered EXCLUSIVELY on Web)
             const Text('Payment Method', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            if (kIsWeb) ...[
-              RadioGroup<String>(
-                groupValue: _selectedPaymentMethod,
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedPaymentMethod = val);
-                },
-                child: Column(
-                  children: [
-                    Card(
-                      elevation: 0,
-                      color: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: _selectedPaymentMethod == 'Razorpay' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'Razorpay' ? 1.5 : 1),
-                      ),
-                      child: RadioListTile<String>(
-                        value: 'Razorpay',
-                        activeColor: AppColors.primaryGreen,
+            Builder(
+              builder: (context) {
+                final gatewayState = PaymentGatewayManager.instance.state;
+                final onlineAvailable = gatewayState.isOnlinePaymentAvailable;
+                final providerName = gatewayState.provider?.displayName;
+                final onlineSubtitle = onlineAvailable && providerName != null
+                    ? 'Secure payment processed via $providerName'
+                    : (gatewayState.errorMessage ?? 'Online payment is currently unavailable.');
+
+                if (kIsWeb) {
+                  return RadioGroup<String>(
+                    groupValue: _selectedPaymentMethod,
+                    onChanged: (val) {
+                      if (val == 'Online' && !onlineAvailable) return;
+                      if (val != null) setState(() => _selectedPaymentMethod = val);
+                    },
+                    child: Column(
+                      children: [
+                        Card(
+                          elevation: 0,
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: _selectedPaymentMethod == 'Online' && onlineAvailable
+                                  ? AppColors.primaryGreen
+                                  : AppColors.border,
+                              width: _selectedPaymentMethod == 'Online' && onlineAvailable ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              RadioListTile<String>(
+                                value: 'Online',
+                                enabled: onlineAvailable,
+                                activeColor: AppColors.primaryGreen,
+                                title: const Text('Online Payment (Cards, Net Banking, UPI)', style: TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text(
+                                  onlineSubtitle,
+                                  style: TextStyle(color: onlineAvailable ? null : AppColors.error),
+                                ),
+                                secondary: Icon(Icons.payment, color: onlineAvailable ? AppColors.primaryGreen : AppColors.textMuted),
+                              ),
+                              if (gatewayState.status == PaymentGatewayConfigStatus.serverUnavailable)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton.icon(
+                                      onPressed: _isRetryingGatewayConfig ? null : _retryGatewayConfig,
+                                      icon: const Icon(Icons.refresh, size: 16),
+                                      label: Text(_isRetryingGatewayConfig ? 'Retrying...' : 'Retry Online Payment'),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Card(
+                          elevation: 0,
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: _selectedPaymentMethod == 'COD' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'COD' ? 1.5 : 1),
+                          ),
+                          child: RadioListTile<String>(
+                            value: 'COD',
+                            activeColor: AppColors.primaryGreen,
+                            title: const Text('Cash on Delivery (COD)', style: TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: const Text('Pay with cash when your order is delivered'),
+                            secondary: const Icon(Icons.local_shipping_outlined, color: AppColors.primaryGreen),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // On Android & iOS, COD is unavailable and hidden. Active startup provider handles online payment.
+                return Card(
+                  elevation: 0,
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: onlineAvailable ? AppColors.border : AppColors.error),
+                  ),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Icon(Icons.payment, color: onlineAvailable ? AppColors.primaryGreen : AppColors.error),
                         title: const Text('Online Payment (Cards, Net Banking, UPI)', style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: const Text('Secure payment processed via Razorpay'),
-                        secondary: const Icon(Icons.payment, color: AppColors.primaryGreen),
+                        subtitle: Text(
+                          onlineSubtitle,
+                          style: TextStyle(color: onlineAvailable ? null : AppColors.error),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Card(
-                      elevation: 0,
-                      color: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(color: _selectedPaymentMethod == 'COD' ? AppColors.primaryGreen : AppColors.border, width: _selectedPaymentMethod == 'COD' ? 1.5 : 1),
-                      ),
-                      child: RadioListTile<String>(
-                        value: 'COD',
-                        activeColor: AppColors.primaryGreen,
-                        title: const Text('Cash on Delivery (COD)', style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: const Text('Pay with cash when your order is delivered'),
-                        secondary: const Icon(Icons.local_shipping_outlined, color: AppColors.primaryGreen),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              // On Android & iOS, COD is unavailable and hidden. Razorpay is the default payment method.
-              Card(
-                elevation: 0,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: AppColors.border),
-                ),
-                child: const ListTile(
-                  leading: Icon(Icons.payment, color: AppColors.primaryGreen),
-                  title: Text('Online Payment (Cards, Net Banking, UPI)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Secure payment processed via Razorpay'),
-                ),
-              ),
-            ],
+                      if (gatewayState.status == PaymentGatewayConfigStatus.serverUnavailable)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _isRetryingGatewayConfig ? null : _retryGatewayConfig,
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: Text(_isRetryingGatewayConfig ? 'Retrying...' : 'Retry'),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 20),
 
             // Mandatory Checkout Policy Disclosure
@@ -926,7 +1007,10 @@ class _OrderReviewScreenState extends ConsumerState<OrderReviewScreen> {
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
                     key: const ValueKey('order_review_bottom_pay_btn'),
-                    onPressed: _isStartingPayment ? null : _startPayment,
+                    onPressed: (_isStartingPayment ||
+                            (_selectedPaymentMethod != 'COD' && !PaymentGatewayManager.instance.isOnlinePaymentAvailable))
+                        ? null
+                        : _startPayment,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryGreen,
                       foregroundColor: Colors.white,
@@ -1047,10 +1131,21 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
   @override
   Widget build(BuildContext context) {
     final success = _verifiedStatus == 'Success';
+    final pending = _verifiedStatus == 'Pending' || _verifiedStatus == 'PAYMENT_PENDING';
     final waiting = _verifiedStatus == null;
-    final cancelled = widget.status == 'cancelled';
+    final cancelled = widget.status == 'cancelled' || _verifiedStatus == 'PAYMENT_CANCELLED';
     return Scaffold(
-      appBar: AppBar(title: Text(waiting ? 'Confirming Order' : success ? 'Order Confirmed' : 'Payment ${cancelled ? 'Cancelled' : 'Failed'}')),
+      appBar: AppBar(
+        title: Text(
+          waiting
+              ? 'Confirming Order'
+              : success
+                  ? 'Order Confirmed'
+                  : pending
+                      ? 'Payment Pending'
+                      : 'Payment ${cancelled ? 'Cancelled' : 'Failed'}',
+        ),
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -1060,14 +1155,28 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
               if (waiting)
                 const CircularProgressIndicator(color: AppColors.primaryGreen)
               else
-                Icon(success ? Icons.check_circle_outline : Icons.error_outline, size: 72, color: success ? AppColors.primaryGreen : AppColors.error),
+                Icon(
+                  success
+                      ? Icons.check_circle_outline
+                      : pending
+                          ? Icons.hourglass_top_rounded
+                          : Icons.error_outline,
+                  size: 72,
+                  color: success
+                      ? AppColors.primaryGreen
+                      : pending
+                          ? Colors.orange
+                          : AppColors.error,
+                ),
               const SizedBox(height: 16),
               Text(
                 waiting
                     ? 'Verifying your order with the server...'
                     : success
                         ? 'Order confirmed successfully.'
-                        : 'Order was not completed. Your cart has not been cleared.',
+                        : pending
+                            ? 'Your payment is still being confirmed by the gateway. Please refresh status shortly.'
+                            : 'Order was not completed. Your cart has not been cleared.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
@@ -1077,7 +1186,16 @@ class _PaymentResultScreenState extends ConsumerState<PaymentResultScreen> {
               ],
               const SizedBox(height: 24),
               if (!waiting) ...[
-                ElevatedButton(onPressed: () => context.go(success ? '/orders' : '/checkout'), child: Text(success ? 'VIEW ORDER HISTORY' : 'RETRY PAYMENT')),
+                if (pending)
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() => _verifiedStatus = null);
+                      _loadPaymentStatus();
+                    },
+                    child: const Text('REFRESH PAYMENT STATUS'),
+                  )
+                else
+                  ElevatedButton(onPressed: () => context.go(success ? '/orders' : '/checkout'), child: Text(success ? 'VIEW ORDER HISTORY' : 'RETRY PAYMENT')),
                 if (!success) TextButton(onPressed: () => context.go('/cart'), child: const Text('RETURN TO CART')),
               ],
             ],
