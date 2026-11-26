@@ -254,6 +254,18 @@ class CalendarEvent {
 }
 
 // --- PRODUCTS ---
+class NutritionalInfoRow {
+  final String nutrient;
+  final String value;
+  final String? dailyValue;
+
+  const NutritionalInfoRow({
+    required this.nutrient,
+    required this.value,
+    this.dailyValue,
+  });
+}
+
 class ProductPerformance {
   final String id;
   final String name;
@@ -335,6 +347,9 @@ class ProductPerformance {
   final String? ayurvedicDosage;
   final List<String> ayurvedicFormulations;
   final List<String> ayurvedicPrecautions;
+  final List<String> healthBenefits;
+  final List<NutritionalInfoRow> nutritionalInformation;
+  final List<String> generalPrecautions;
 
   /// True when `ayurvedicproduct` is true and at least one language-specific name is populated.
   bool get hasAyurvedicLanguageNames =>
@@ -371,6 +386,120 @@ class ProductPerformance {
           .toList();
     }
     return const [];
+  }
+
+  static String _formatNutrientKey(String rawKey) {
+    final trimmed = rawKey.trim();
+    if (trimmed.isEmpty) return '';
+    final spaced = trimmed
+        .replaceAll('_', ' ')
+        .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m.group(1)} ${m.group(2)}')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return spaced
+        .split(' ')
+        .map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
+  }
+
+  /// Parses `nutritionalInformation` from Firestore into structured table rows.
+  /// Supports `Map<String, dynamic>`, `List<Map>`, `List<String>`, or formatted `String`.
+  static List<NutritionalInfoRow> parseNutritionalInformation(dynamic raw) {
+    if (raw == null) return const [];
+    final rows = <NutritionalInfoRow>[];
+
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        final key = _formatNutrientKey(entry.key.toString());
+        if (key.isEmpty) continue;
+        final val = entry.value;
+        if (val == null) continue;
+        if (val is Map) {
+          final amount = (val['value'] ?? val['amount'] ?? val['per100g'] ?? val['perServing'] ?? val['quantity'] ?? '').toString().trim();
+          final unit = (val['unit'] ?? '').toString().trim();
+          final dv = (val['dailyValue'] ?? val['dv'] ?? val['rda'] ?? val['percentDV'] ?? '').toString().trim();
+          final combined = unit.isNotEmpty && amount.isNotEmpty && !amount.toLowerCase().endsWith(unit.toLowerCase())
+              ? '$amount $unit'
+              : amount;
+          if (combined.isNotEmpty && combined.toLowerCase() != 'null') {
+            rows.add(NutritionalInfoRow(
+              nutrient: key,
+              value: combined,
+              dailyValue: dv.isNotEmpty && dv.toLowerCase() != 'null' ? dv : null,
+            ));
+          }
+        } else {
+          final strVal = val.toString().trim();
+          if (strVal.isNotEmpty && strVal.toLowerCase() != 'null') {
+            rows.add(NutritionalInfoRow(nutrient: key, value: strVal));
+          }
+        }
+      }
+      return rows;
+    }
+
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          final nutrient = (item['nutrient'] ?? item['name'] ?? item['label'] ?? item['parameter'] ?? item['component'] ?? item['key'] ?? item['title'] ?? '').toString().trim();
+          final amount = (item['value'] ?? item['amount'] ?? item['per100g'] ?? item['perServing'] ?? item['quantity'] ?? item['val'] ?? '').toString().trim();
+          final unit = (item['unit'] ?? '').toString().trim();
+          final dv = (item['dailyValue'] ?? item['dv'] ?? item['rda'] ?? item['percentDV'] ?? item['percentage'] ?? '').toString().trim();
+          final combined = unit.isNotEmpty && amount.isNotEmpty && !amount.toLowerCase().endsWith(unit.toLowerCase())
+              ? '$amount $unit'
+              : amount;
+          if (nutrient.isNotEmpty && nutrient.toLowerCase() != 'null') {
+            rows.add(NutritionalInfoRow(
+              nutrient: nutrient,
+              value: combined.isNotEmpty && combined.toLowerCase() != 'null' ? combined : '-',
+              dailyValue: dv.isNotEmpty && dv.toLowerCase() != 'null' ? dv : null,
+            ));
+          }
+        } else if (item != null) {
+          final text = item.toString().trim();
+          if (text.isEmpty || text.toLowerCase() == 'null') continue;
+          final parsed = _parseNutritionTextLine(text);
+          if (parsed != null) rows.add(parsed);
+        }
+      }
+      return rows;
+    }
+
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty || trimmed.toLowerCase() == 'null') return const [];
+      final lines = trimmed.contains('\n')
+          ? trimmed.split('\n')
+          : (trimmed.contains(';') ? trimmed.split(';') : trimmed.split(','));
+      for (final line in lines) {
+        final parsed = _parseNutritionTextLine(line.trim());
+        if (parsed != null) rows.add(parsed);
+      }
+      return rows;
+    }
+
+    return const [];
+  }
+
+  static NutritionalInfoRow? _parseNutritionTextLine(String line) {
+    if (line.isEmpty || line.toLowerCase() == 'null') return null;
+    final colonIdx = line.indexOf(':');
+    if (colonIdx > 0) {
+      final k = line.substring(0, colonIdx).trim();
+      final v = line.substring(colonIdx + 1).trim();
+      if (k.isNotEmpty) {
+        return NutritionalInfoRow(nutrient: k, value: v.isNotEmpty ? v : '-');
+      }
+    }
+    final dashMatch = RegExp(r'\s[-–—]\s').firstMatch(line);
+    if (dashMatch != null && dashMatch.start > 0) {
+      final k = line.substring(0, dashMatch.start).trim();
+      final v = line.substring(dashMatch.end).trim();
+      if (k.isNotEmpty) {
+        return NutritionalInfoRow(nutrient: k, value: v.isNotEmpty ? v : '-');
+      }
+    }
+    return NutritionalInfoRow(nutrient: line, value: '-');
   }
 
   static String? _parseTextOrList(dynamic raw) {
@@ -530,6 +659,9 @@ class ProductPerformance {
     this.ayurvedicDosage,
     this.ayurvedicFormulations = const [],
     this.ayurvedicPrecautions = const [],
+    this.healthBenefits = const [],
+    this.nutritionalInformation = const [],
+    this.generalPrecautions = const [],
   });
 
   static double _toDouble(dynamic val, [double defaultValue = 0.0]) {
@@ -659,6 +791,9 @@ class ProductPerformance {
     ayurvedicDosage: _parseTextOrList(json['ayurvedicDosage']),
     ayurvedicFormulations: parseBulletList(json['ayurvedicFormulations']),
     ayurvedicPrecautions: parseBulletList(json['ayurvedicPrecautions']),
+    healthBenefits: parseBulletList(json['healthBenefits']),
+    nutritionalInformation: parseNutritionalInformation(json['nutritionalInformation']),
+    generalPrecautions: parseBulletList(json['generalPrecautions']),
   );
 
   Map<String, dynamic> toJson() => {

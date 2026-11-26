@@ -106,6 +106,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     ref.read(selectedAddressProvider.notifier).state = address;
 
+    // Backfill any blank/missing name, email, or address fields in customers table
+    // (covers customers who selected an already-saved delivery address at checkout).
+    await ref.read(shoppingRepositoryProvider).syncCustomerProfileFromAddress(address);
+
     final hasRegularItems = cart.any((item) => !item.isPreorder);
     final res = hasRegularItems
         ? await ref.read(shoppingRepositoryProvider).getDeliveryCharge(address.pincode)

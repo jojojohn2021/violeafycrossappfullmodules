@@ -113,7 +113,7 @@ class LeafyWebFooter extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      '© 2026 LeafyMart. All Rights Reserved. Powered by VAMJO.',
+                      '© 2026 LeafyMart. All Rights Reserved.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                     Row(

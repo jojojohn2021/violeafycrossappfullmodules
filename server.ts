@@ -1025,6 +1025,122 @@ app.post(['/api/customer/permanent-address', '/api/customers/permanent-address']
   }
 });
 
+// Helper: Format delivery address line + city into a single customer address string
+function formatCheckoutAddressLine(addressObj: any): string {
+  if (!addressObj) return '';
+  if (typeof addressObj === 'string') return addressObj.trim();
+  const line = String(addressObj.addressLine || addressObj.address || '').trim();
+  const city = String(addressObj.city || '').trim();
+  if (!line) return city;
+  if (!city) return line;
+  if (line.toLowerCase().includes(city.toLowerCase())) return line;
+  return `${line}, ${city}`;
+}
+
+// Helper: Compute ONLY blank/missing fields on an existing customer doc from checkout/address data
+function buildMissingCustomerProfileUpdates(existingCustomer: any, source: any): Record<string, any> {
+  if (!existingCustomer || !source) return {};
+  const shipping = source.shippingAddress || source.deliveryAddress || source;
+  const updates: Record<string, any> = {};
+
+  const existingName = String(existingCustomer.name || '').trim();
+  const candidateName = String(shipping?.name || source.customerName || source.name || '').trim();
+  if (!existingName && candidateName) {
+    updates.name = candidateName;
+  }
+
+  const existingEmail = String(existingCustomer.email || '').trim();
+  const candidateEmail = String(shipping?.email || source.customerEmail || source.email || '').trim();
+  if (!existingEmail && candidateEmail.includes('@') && candidateEmail.includes('.')) {
+    updates.email = candidateEmail;
+  }
+
+  const existingAddress = String(existingCustomer.address || '').trim();
+  const candidateAddress = formatCheckoutAddressLine(shipping);
+  if (!existingAddress && candidateAddress) {
+    updates.address = candidateAddress;
+  }
+
+  const existingDistrict = String(existingCustomer.district || '').trim();
+  const candidateDistrict = String(shipping?.district || source.district || '').trim();
+  if (!existingDistrict && candidateDistrict) {
+    updates.district = candidateDistrict;
+  }
+
+  const existingState = String(existingCustomer.state || '').trim();
+  const candidateState = String(shipping?.state || source.state || '').trim();
+  if (!existingState && candidateState) {
+    updates.state = candidateState;
+  }
+
+  const existingPincode = String(existingCustomer.pincode || '').trim();
+  const candidatePincode = String(shipping?.pincode || source.pincode || '').trim();
+  if (!existingPincode && candidatePincode) {
+    updates.pincode = candidatePincode;
+  }
+
+  return updates;
+}
+
+// Authoritative server-side backfill of blank/missing customer fields from checkout or delivery address
+async function backfillCustomerProfileFromCheckout(identifiers: any[], source: any): Promise<boolean> {
+  try {
+    if (!source) return false;
+    let customerDoc: any = null;
+
+    for (const ident of identifiers) {
+      if (!ident) continue;
+      customerDoc = await findCustomerByAuthUid(String(ident));
+      if (customerDoc && customerDoc.id) break;
+    }
+
+    if (!customerDoc) {
+      for (const ident of identifiers) {
+        const digits = String(ident || '').replace(/\D/g, '');
+        const tenDigit = digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+        if (tenDigit.length === 10) {
+          const snap = await adminDb.collection('customers').where('mobileNumber', '==', tenDigit).limit(1).get();
+          if (!snap.empty) {
+            customerDoc = { id: snap.docs[0].id, ...snap.docs[0].data() };
+            break;
+          }
+        }
+      }
+    }
+
+    if (!customerDoc || !customerDoc.id) return false;
+
+    const updates = buildMissingCustomerProfileUpdates(customerDoc, source);
+    if (Object.keys(updates).length === 0) return false;
+
+    updates.updatedAt = new Date().toISOString();
+    await adminDb.collection('customers').doc(customerDoc.id).set(updates, { merge: true });
+    console.log(`[CustomerBackfill] Updated blank fields on customers/${customerDoc.id}:`, Object.keys(updates));
+    return true;
+  } catch (err) {
+    console.error('[CustomerBackfill] Non-fatal error backfilling customer profile:', err);
+    return false;
+  }
+}
+
+// API: POST /api/customer/backfill-profile (Backfills ONLY blank/missing customer fields from checkout/address)
+app.post(['/api/customer/backfill-profile', '/api/customers/backfill-profile'], async (req: any, res: any) => {
+  try {
+    const authenticatedUser = await getAuthenticatedUser(req);
+    if (!authenticatedUser?.uid) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const updated = await backfillCustomerProfileFromCheckout(
+      [authenticatedUser.uid, authenticatedUser.phone_number],
+      req.body || {}
+    );
+    return res.json({ success: true, updated });
+  } catch (err: any) {
+    console.error('[CustomerBackfill API] Error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to backfill customer profile' });
+  }
+});
+
 
 
 // Alias Routes for direct endpoints
@@ -1848,6 +1964,13 @@ app.post("/api/data/:collectionName", async (req, res) => {
       }
     }
     await saveCollectionDoc(collectionName, item);
+    if (collectionName === 'customer_delivery_addresses') {
+      const authenticatedUser = await getAuthenticatedUser(req).catch(() => null);
+      await backfillCustomerProfileFromCheckout(
+        [authenticatedUser?.uid, authenticatedUser?.phone_number, item.userId, item.customerId, item.mobileNumber],
+        item
+      );
+    }
     if (collectionName === 'sales_orders') {
       try {
         await ensureInvoiceForOrder(item);
@@ -3018,6 +3141,10 @@ async function finalizeSuccessfulPayment(tx: any): Promise<void> {
 
   let generatedInvoiceId: string | null = null;
   if (order) {
+    await backfillCustomerProfileFromCheckout(
+      orderCustomerIdentifiers(tx, order),
+      order
+    );
     try {
       const invRes = await ensureInvoiceForOrder(order);
       generatedInvoiceId = invRes.invoiceId;
@@ -4045,6 +4172,10 @@ app.post("/api/payment/razorpay/create-order", async (req: any, res: any) => {
     };
 
     await saveCollectionDoc('payments', tx);
+    await backfillCustomerProfileFromCheckout(
+      [authenticatedUser?.uid, authenticatedUser?.phone_number, orderData.customerId, orderData.customerMobile],
+      orderData
+    );
 
     // Note: Do NOT add or update records in `preorders`, `preorder_idempotency`, or `preorder_events` here.
     // Persistence is restricted to `finalizeSuccessfulPayment` after payment verification succeeds.
@@ -4226,6 +4357,10 @@ async function handleCreateCodOrder(req: any, res: any) {
         createdAt: new Date().toISOString()
       };
       await saveCollectionDoc('sales_orders', order);
+      await backfillCustomerProfileFromCheckout(
+        [authenticatedUser?.uid, authenticatedUser?.phone_number, orderData.customerId, orderData.customerMobile],
+        orderData
+      );
 
       // Deduct product stock for regular sales items only
       for (const item of (order.products || [])) {

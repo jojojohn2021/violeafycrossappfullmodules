@@ -987,6 +987,18 @@ class _ProductDetailsSectionsState extends State<_ProductDetailsSections> {
           label: 'Ayurveda Insights',
           content: _AyurvedaInsightsTab(product: product),
         ),
+      (
+        label: 'Health Benefits',
+        content: _HealthBenefitsTab(product: product),
+      ),
+      (
+        label: 'Nutritional Information',
+        content: _NutritionalInformationTab(product: product),
+      ),
+      (
+        label: 'Precautions',
+        content: _PrecautionsTab(product: product),
+      ),
     ];
 
     final activeIndex = _selectedTabIndex.clamp(0, tabs.length - 1);
@@ -1299,6 +1311,245 @@ class _DoshaEffectCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HealthBenefitsTab extends StatelessWidget {
+  final ProductPerformance product;
+
+  const _HealthBenefitsTab({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    if (product.healthBenefits.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Health benefits information is not available for this product.',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+      );
+    }
+
+    return Padding(
+      key: ValueKey('health_benefits_content_${product.id}'),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Health Benefits',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _BulletList(items: product.healthBenefits),
+        ],
+      ),
+    );
+  }
+}
+
+class _NutritionalInformationTab extends StatelessWidget {
+  final ProductPerformance product;
+
+  const _NutritionalInformationTab({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = product.nutritionalInformation;
+    if (rows.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Nutritional information is not available for this product.',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+      );
+    }
+
+    final hasDailyValue = rows.any((r) => r.dailyValue != null && r.dailyValue!.trim().isNotEmpty);
+
+    return Padding(
+      key: ValueKey('nutritional_info_content_${product.id}'),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Nutritional Information',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Table(
+              key: ValueKey('nutritional_info_table_${product.id}'),
+              columnWidths: hasDailyValue
+                  ? const {
+                      0: FlexColumnWidth(2.2),
+                      1: FlexColumnWidth(1.4),
+                      2: FlexColumnWidth(1.2),
+                    }
+                  : const {
+                      0: FlexColumnWidth(2),
+                      1: FlexColumnWidth(1.5),
+                    },
+              border: const TableBorder(
+                horizontalInside: BorderSide(color: AppColors.border, width: 0.8),
+                verticalInside: BorderSide(color: AppColors.border, width: 0.8),
+              ),
+              children: [
+                TableRow(
+                  decoration: const BoxDecoration(color: Color(0xFFF3F8F1)),
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Text(
+                        'Nutrient',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Text(
+                        'Value',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
+                    ),
+                    if (hasDailyValue)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Text(
+                          '% Daily Value',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryGreen,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                for (var i = 0; i < rows.length; i++)
+                  TableRow(
+                    decoration: BoxDecoration(
+                      color: i.isEven ? AppColors.card : AppColors.secondaryBackground,
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Text(
+                          rows[i].nutrient,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Text(
+                          rows[i].value,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      if (hasDailyValue)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          child: Text(
+                            rows[i].dailyValue ?? '-',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrecautionsTab extends StatelessWidget {
+  final ProductPerformance product;
+
+  const _PrecautionsTab({required this.product});
+
+  @override
+  Widget build(BuildContext context) {
+    if (product.generalPrecautions.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'No specific precautions listed for this product.',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+      );
+    }
+
+    return Padding(
+      key: ValueKey('general_precautions_content_${product.id}'),
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF8ED),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE6C280)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.info_outline, size: 16, color: Color(0xFF9A6700)),
+                SizedBox(width: 6),
+                Text(
+                  'Precautions',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF9A6700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _BulletList(items: product.generalPrecautions),
+          ],
+        ),
       ),
     );
   }

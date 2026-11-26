@@ -349,7 +349,13 @@ void main() {
       expect(find.text('Typical Dosage Note'), findsOneWidget);
       expect(find.text('Classical Formulations'), findsOneWidget);
       expect(find.text('Classical Churna, Kwatha'), findsOneWidget);
-      expect(find.text('Precautions'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('ayurveda_insights_content_p_kadukka')),
+          matching: find.text('Precautions'),
+        ),
+        findsOneWidget,
+      );
 
       await tester.pumpWidget(
         ProviderScope(
@@ -374,6 +380,110 @@ void main() {
       expect(find.byKey(const ValueKey('product_card_ayurvedic_names_p_kadukka')), findsOneWidget);
       expect(find.byKey(const ValueKey('product_card_ayurvedic_names_p_regular')), findsNothing);
       expect(find.text('Should Not Show'), findsNothing);
+    });
+
+    test('parseNutritionalInformation handles Map, List<Map>, and formatted String inputs', () {
+      final fromMap = ProductPerformance.parseNutritionalInformation({
+        'servingSize': '100 g',
+        'energy': '320 kcal',
+        'dietary_fiber': '10 g',
+      });
+      expect(fromMap.length, 3);
+      expect(fromMap[0].nutrient, 'Serving Size');
+      expect(fromMap[0].value, '100 g');
+      expect(fromMap[2].nutrient, 'Dietary Fiber');
+
+      final fromList = ProductPerformance.parseNutritionalInformation([
+        {'nutrient': 'Protein', 'value': '6.5 g', 'dailyValue': '13%'},
+        {'name': 'Iron', 'amount': '2.4', 'unit': 'mg'},
+      ]);
+      expect(fromList.length, 2);
+      expect(fromList[0].dailyValue, '13%');
+      expect(fromList[1].value, '2.4 mg');
+
+      final fromString = ProductPerformance.parseNutritionalInformation(
+        'Energy: 320 kcal\nCarbohydrates: 72 g',
+      );
+      expect(fromString.length, 2);
+      expect(fromString[0].nutrient, 'Energy');
+      expect(fromString[0].value, '320 kcal');
+    });
+
+    testWidgets('shows Health Benefits, Nutritional Information table, and Precautions tabs for all products (including non-Ayurvedic)',
+        (tester) async {
+      tester.view.physicalSize = const Size(1280, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final regularProduct = ProductPerformance.fromJson({
+        'id': 'p_tabs_all',
+        'name': 'Organic Turmeric',
+        'sku': 'TUR-100',
+        'packingSize': '100 g',
+        'unit': 'PAC',
+        'onlinePrice': 249,
+        'shopPrice': 299,
+        'brand': 'Bhadram',
+        'ayurvedicproduct': false,
+        'healthBenefits': [
+          'Rich in natural curcumin antioxidants',
+          'Supports daily immunity and wellness',
+        ],
+        'nutritionalInformation': [
+          {'nutrient': 'Energy', 'value': '354 kcal', 'dailyValue': '18%'},
+          {'nutrient': 'Protein', 'value': '7.8 g', 'dailyValue': '16%'},
+          {'nutrient': 'Dietary Fiber', 'value': '21 g', 'dailyValue': '75%'},
+        ],
+        'generalPrecautions': [
+          'Store away from direct sunlight',
+          'Consult a physician if on blood-thinning medication',
+        ],
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          key: const ValueKey('all_products_tabs_scope'),
+          overrides: [
+            shoppingRepositoryProvider.overrideWithValue(ShoppingRepository()),
+            productsProvider.overrideWith((ref) async => [regularProduct]),
+          ],
+          child: const MaterialApp(
+            home: ProductDetailScreen(productId: 'p_tabs_all'),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Ayurveda Insights hidden for non-Ayurvedic product, but the 3 general tabs are visible
+      final tabBar = find.byKey(const ValueKey('product_details_tab_bar'));
+      expect(find.descendant(of: tabBar, matching: find.text('Product Details')), findsOneWidget);
+      expect(find.descendant(of: tabBar, matching: find.text('Ayurveda Insights')), findsNothing);
+      expect(find.descendant(of: tabBar, matching: find.text('Health Benefits')), findsOneWidget);
+      expect(find.descendant(of: tabBar, matching: find.text('Nutritional Information')), findsOneWidget);
+      expect(find.descendant(of: tabBar, matching: find.text('Precautions')), findsOneWidget);
+
+      // Tap Health Benefits tab
+      await tester.tap(find.descendant(of: tabBar, matching: find.text('Health Benefits')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('health_benefits_content_p_tabs_all')), findsOneWidget);
+      expect(find.text('Rich in natural curcumin antioxidants'), findsOneWidget);
+
+      // Tap Nutritional Information tab -> structured Table
+      await tester.tap(find.descendant(of: tabBar, matching: find.text('Nutritional Information')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('nutritional_info_table_p_tabs_all')), findsOneWidget);
+      expect(find.text('Nutrient'), findsOneWidget);
+      expect(find.text('Value'), findsOneWidget);
+      expect(find.text('% Daily Value'), findsOneWidget);
+      expect(find.text('354 kcal'), findsOneWidget);
+      expect(find.text('75%'), findsOneWidget);
+
+      // Tap Precautions tab
+      await tester.tap(find.descendant(of: tabBar, matching: find.text('Precautions')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('general_precautions_content_p_tabs_all')), findsOneWidget);
+      expect(find.text('Consult a physician if on blood-thinning medication'), findsOneWidget);
     });
   });
 }

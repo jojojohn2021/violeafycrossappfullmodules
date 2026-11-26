@@ -1146,6 +1146,21 @@ class ShoppingRepository {
             final doc = phoneMatch.docs.first;
             return CustomerPerformance.fromJson({...doc.data(), 'id': doc.id});
           }
+          final digitsOnly = cleanPhone.replaceAll(RegExp(r'\D'), '');
+          final tenDigitMobile =
+              digitsOnly.length > 10 ? digitsOnly.substring(digitsOnly.length - 10) : digitsOnly;
+          if (tenDigitMobile.isNotEmpty && tenDigitMobile != user.phoneNumber) {
+            final tenDigitMatch = await firestore!
+                .collection('customers')
+                .where('mobileNumber', isEqualTo: tenDigitMobile)
+                .limit(1)
+                .get()
+                .timeout(const Duration(seconds: 5));
+            if (tenDigitMatch.docs.isNotEmpty) {
+              final doc = tenDigitMatch.docs.first;
+              return CustomerPerformance.fromJson({...doc.data(), 'id': doc.id});
+            }
+          }
         }
         return null;
       }
@@ -1370,6 +1385,96 @@ class ShoppingRepository {
     return [];
   }
 
+  /// Formats a delivery address's street + city into a single customer `address` string.
+  static String formatCustomerAddressLine(CustomerDeliveryAddress address) {
+    final line = address.addressLine.trim();
+    final city = address.city.trim();
+    if (line.isEmpty) return city;
+    if (city.isEmpty) return line;
+    if (line.toLowerCase().contains(city.toLowerCase())) return line;
+    return '$line, $city';
+  }
+
+  /// Computes ONLY the blank/missing profile fields on [customer] that can be
+  /// backfilled from [address] (never overwrites existing non-empty customer fields).
+  static Map<String, dynamic> buildMissingCustomerProfileUpdates(
+    CustomerPerformance customer,
+    CustomerDeliveryAddress address,
+  ) {
+    final updates = <String, dynamic>{};
+
+    final trimmedName = address.name.trim();
+    if (customer.name.trim().isEmpty && trimmedName.isNotEmpty) {
+      updates['name'] = trimmedName;
+    }
+
+    final trimmedEmail = address.email.trim();
+    final isEmailValid = trimmedEmail.contains('@') && trimmedEmail.contains('.');
+    if (customer.email.trim().isEmpty && isEmailValid) {
+      updates['email'] = trimmedEmail;
+    }
+
+    final formattedAddress = formatCustomerAddressLine(address);
+    if (customer.address.trim().isEmpty && formattedAddress.isNotEmpty) {
+      updates['address'] = formattedAddress;
+    }
+
+    final trimmedDistrict = address.district.trim();
+    if (customer.district.trim().isEmpty && trimmedDistrict.isNotEmpty) {
+      updates['district'] = trimmedDistrict;
+    }
+
+    final trimmedState = address.state.trim();
+    if (customer.state.trim().isEmpty && trimmedState.isNotEmpty) {
+      updates['state'] = trimmedState;
+    }
+
+    final trimmedPincode = address.pincode.trim();
+    if ((customer.pincode ?? '').trim().isEmpty && trimmedPincode.isNotEmpty) {
+      updates['pincode'] = trimmedPincode;
+    }
+
+    return updates;
+  }
+
+  /// Backfills any blank/missing `name`, `email`, `address`, `district`, `state`,
+  /// and `pincode` on the signed-in customer's `customers` document from [address].
+  Future<bool> syncCustomerProfileFromAddress(CustomerDeliveryAddress address) async {
+    try {
+      if (firestore != null) {
+        final customer = await getCurrentCustomer();
+        if (customer == null || customer.id.trim().isEmpty) return false;
+
+        final updates = buildMissingCustomerProfileUpdates(customer, address);
+        if (updates.isEmpty) return false;
+
+        updates['updatedAt'] = DateTime.now().toIso8601String();
+        debugPrint(
+          '[ShoppingRepository] Backfilling missing customer profile fields for ${customer.id}: ${updates.keys.toList()}',
+        );
+        await firestore!
+            .collection('customers')
+            .doc(customer.id)
+            .set(updates, SetOptions(merge: true))
+            .timeout(const Duration(seconds: 5));
+        return true;
+      }
+
+      await _apiClient.post('/api/customer/backfill-profile', {
+        'name': address.name.trim(),
+        'email': address.email.trim(),
+        'address': formatCustomerAddressLine(address),
+        'district': address.district.trim(),
+        'state': address.state.trim(),
+        'pincode': address.pincode.trim(),
+      });
+      return true;
+    } catch (err) {
+      debugPrint('[ShoppingRepository] Error syncing customer profile from address: $err');
+      return false;
+    }
+  }
+
   Future<CustomerDeliveryAddress?> saveCustomerAddress(CustomerDeliveryAddress address) async {
     try {
       debugPrint('[ShoppingRepository] Saving delivery address: ${address.toJson()}');
@@ -1385,28 +1490,8 @@ class ShoppingRepository {
         await _apiClient.post('/api/data/customer_delivery_addresses', address.toJson());
       }
 
-      // Check customer table email sync
-      final trimmedEmail = address.email.trim();
-      final isEmailValid = trimmedEmail.contains('@') && trimmedEmail.contains('.');
-      if (isEmailValid) {
-        try {
-          final customer = await getCurrentCustomer();
-          if (customer != null && customer.email.trim().isEmpty) {
-            debugPrint('[ShoppingRepository] Customer email is empty. Updating customer record ${customer.id} with email $trimmedEmail');
-            if (firestore != null) {
-              await firestore!
-                  .collection('customers')
-                  .doc(customer.id)
-                  .update({'email': trimmedEmail})
-                  .timeout(const Duration(seconds: 5));
-            } else {
-              await _apiClient.post('/api/data/customers/${customer.id}', {'email': trimmedEmail});
-            }
-          }
-        } catch (err) {
-          debugPrint('[ShoppingRepository] Error syncing customer email: $err');
-        }
-      }
+      // Backfill blank/missing name, email, and address fields in customers table
+      await syncCustomerProfileFromAddress(address);
 
       return address;
     } catch (e) {
