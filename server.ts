@@ -1147,6 +1147,7 @@ app.post(['/api/customer/backfill-profile', '/api/customers/backfill-profile'], 
 app.get("/api/products", async (req, res) => {
   try {
     const docs = await getCollectionDocs("products");
+    res.set("Cache-Control", "public, max-age=60, s-maxage=300");
     return res.json(docs);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to fetch products" });
@@ -1184,6 +1185,7 @@ app.get(["/api/categories", "/api/product-categories"], async (req, res) => {
         imageUrl: ""
       }));
     }
+    res.set("Cache-Control", "public, max-age=60, s-maxage=300");
     return res.json(docs);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to fetch categories" });

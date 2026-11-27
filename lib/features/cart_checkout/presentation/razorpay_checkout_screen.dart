@@ -93,7 +93,7 @@ class _RazorpayCheckoutScreenState extends State<RazorpayCheckoutScreen> {
       "currency": "${widget.currency}",
       "name": "LeafyMart",
       "description": "Order Payment ${widget.transactionId}",
-      "image": "https://www.leafymart.com/assets/logo.png",
+      "image": "https://www.leafymart.com/icons/Icon-512.png",
       "order_id": "${widget.orderId}",
       "method": {
         "upi": true,

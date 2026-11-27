@@ -8,6 +8,7 @@ class FirestoreImageWidget extends ConsumerWidget {
   final String? directImageUrl;
   final double? width;
   final double? height;
+  final int? cacheWidth;
   final BoxFit fit;
   final Widget? fallbackWidget;
 
@@ -18,6 +19,7 @@ class FirestoreImageWidget extends ConsumerWidget {
     this.directImageUrl,
     this.width,
     this.height,
+    this.cacheWidth,
     this.fit = BoxFit.cover,
     this.fallbackWidget,
   });
@@ -30,6 +32,7 @@ class FirestoreImageWidget extends ConsumerWidget {
         directImageUrl!,
         width: width,
         height: height,
+        cacheWidth: cacheWidth,
         fit: fit,
         errorBuilder: (context, error, stackTrace) =>
             fallbackWidget ?? _buildDefaultFallback(),
@@ -53,6 +56,7 @@ class FirestoreImageWidget extends ConsumerWidget {
               url,
               width: width,
               height: height,
+              cacheWidth: cacheWidth,
               fit: fit,
               errorBuilder: (context, error, stackTrace) =>
                   fallbackWidget ?? _buildDefaultFallback(),

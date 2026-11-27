@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:image_picker/image_picker.dart';
+import '../../core/config/app_icon_assets.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/app_providers.dart';
 
 String _getPlatformAppLogoAsset() {
-  return 'assets/logo.png';
+  return AppIconAssets.currentPlatform;
 }
 
 class LeafyTopAppBar extends ConsumerStatefulWidget implements PreferredSizeWidget {
@@ -175,7 +176,7 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
                           width: 34,
                           fit: BoxFit.contain,
                           errorBuilder: (_, __, ___) => Image.asset(
-                            'assets/logo.png',
+                            AppIconAssets.web,
                             height: 34,
                             width: 34,
                             fit: BoxFit.contain,

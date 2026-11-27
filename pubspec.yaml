@@ -59,10 +59,12 @@ flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
   remove_alpha_ios: true
-  image_path: "assets/logo.png"
+  image_path: "assets/web/icon-512.png"
+  image_path_android: "assets/android/play_store_512.png"
+  image_path_ios: "assets/ios/AppIcon~ios-marketing.png"
   min_sdk_android: 21
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/logo.png"
+  adaptive_icon_foreground: "assets/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
   web:
     generate: true
     image_path: "assets/web/icon-512.png"
@@ -71,7 +73,8 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
   assets:
-    - assets/logo.png
     - assets/web/icon-512.png
+    - assets/android/play_store_512.png
+    - assets/ios/AppIcon@3x.png
 
 

@@ -34,6 +34,7 @@ class ProductCard extends ConsumerWidget {
               imageUrl: displayUrl,
               fit: BoxFit.contain,
               alignment: Alignment.center,
+              memCacheWidth: 400,
               placeholder: (context, url) => _buildPlaceholder(),
               errorWidget: (context, url, error) => _buildErrorWidget(),
             ),
@@ -43,6 +44,7 @@ class ProductCard extends ConsumerWidget {
       return CachedNetworkImage(
         imageUrl: displayUrl,
         fit: BoxFit.cover,
+        memCacheWidth: 400,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildErrorWidget(),
       );

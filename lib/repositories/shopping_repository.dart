@@ -47,34 +47,11 @@ class ShoppingRepository {
   final List<SalesProduct> _cartItems = [];
   final List<String> _wishlistProductIds = [];
 
-  // Fetch products from Authoritative Server API with Firestore probe fallback
+  // Fetch products directly from Firestore first (fast, leverages Firestore cache) with Server API fallback
   Future<List<ProductPerformance>> getProducts() async {
     try {
-      debugPrint('[ShoppingRepository] Fetching products from Server API...');
-      final response = await _apiClient.get('/api/products');
-      if (response != null && response is List && response.isNotEmpty) {
-        final list = <ProductPerformance>[];
-        for (final item in response) {
-          try {
-            if (item is Map<String, dynamic>) {
-              list.add(ProductPerformance.fromJson(item));
-            } else if (item is Map) {
-              list.add(ProductPerformance.fromJson(Map<String, dynamic>.from(item)));
-            }
-          } catch (itemErr) {
-            debugPrint('[ShoppingRepository] Error parsing API product item: $itemErr');
-          }
-        }
-        if (list.isNotEmpty) return list;
-      }
-    } catch (e) {
-      debugPrint('[ShoppingRepository] Server API fetch error for products: $e');
-    }
-
-    // Fallback to Firestore probe
-    try {
       if (firestore != null) {
-        debugPrint('[ShoppingRepository] Falling back to Firestore probe for products...');
+        debugPrint('[ShoppingRepository] Fetching products directly from Firestore...');
         final snapshot = await firestore!
             .collection('products')
             .get()
@@ -94,7 +71,30 @@ class ShoppingRepository {
         }
       }
     } catch (e) {
-      debugPrint('[ShoppingRepository] Firestore fallback error fetching products: $e');
+      debugPrint('[ShoppingRepository] Firestore products fetch error, falling back to Server API: $e');
+    }
+
+    // Fallback to Server API
+    try {
+      debugPrint('[ShoppingRepository] Falling back to Server API for products...');
+      final response = await _apiClient.get('/api/products');
+      if (response != null && response is List && response.isNotEmpty) {
+        final list = <ProductPerformance>[];
+        for (final item in response) {
+          try {
+            if (item is Map<String, dynamic>) {
+              list.add(ProductPerformance.fromJson(item));
+            } else if (item is Map) {
+              list.add(ProductPerformance.fromJson(Map<String, dynamic>.from(item)));
+            }
+          } catch (itemErr) {
+            debugPrint('[ShoppingRepository] Error parsing API product item: $itemErr');
+          }
+        }
+        if (list.isNotEmpty) return list;
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Server API fetch error for products: $e');
     }
     return [];
   }
@@ -170,27 +170,8 @@ class ShoppingRepository {
     return null;
   }
 
-  // Authoritative Category Data Retrieval from Server-Side API
+  // Category Data Retrieval: Direct Firestore first (fast, cached) with Server API fallback
   Future<List<ProductCategory>> getCategoryModels() async {
-    try {
-      final response = await _apiClient.get('/api/categories');
-      if (response != null && response is List && response.isNotEmpty) {
-        final list = response.map((item) {
-          if (item is Map<String, dynamic>) {
-            return ProductCategory.fromJson(item);
-          } else if (item is Map) {
-            return ProductCategory.fromJson(Map<String, dynamic>.from(item));
-          } else {
-            return ProductCategory(id: item.toString(), name: item.toString());
-          }
-        }).where((cat) => cat.name.trim().isNotEmpty).toList();
-        if (list.isNotEmpty) return list;
-      }
-    } catch (e) {
-      debugPrint('[ShoppingRepository] Error fetching categories from API: $e');
-    }
-
-    // Fallback 1: Firestore collections ('product_categories' or 'categories')
     try {
       if (firestore != null) {
         final snapshot = await firestore!
@@ -210,7 +191,26 @@ class ShoppingRepository {
         }
       }
     } catch (e) {
-      debugPrint('[ShoppingRepository] Error fetching categories from Firestore fallback: $e');
+      debugPrint('[ShoppingRepository] Firestore categories fetch error, falling back to API: $e');
+    }
+
+    // Fallback 1: Server-Side API
+    try {
+      final response = await _apiClient.get('/api/categories');
+      if (response != null && response is List && response.isNotEmpty) {
+        final list = response.map((item) {
+          if (item is Map<String, dynamic>) {
+            return ProductCategory.fromJson(item);
+          } else if (item is Map) {
+            return ProductCategory.fromJson(Map<String, dynamic>.from(item));
+          } else {
+            return ProductCategory(id: item.toString(), name: item.toString());
+          }
+        }).where((cat) => cat.name.trim().isNotEmpty).toList();
+        if (list.isNotEmpty) return list;
+      }
+    } catch (e) {
+      debugPrint('[ShoppingRepository] Error fetching categories from API fallback: $e');
     }
 
     // Fallback 2: Derive categories from products database catalog
