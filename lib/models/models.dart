@@ -266,6 +266,40 @@ class NutritionalInfoRow {
   });
 }
 
+class NutritionalFactsRow {
+  final String nutrient;
+  final List<String> values;
+  final int indentLevel;
+
+  const NutritionalFactsRow({
+    required this.nutrient,
+    required this.values,
+    this.indentLevel = 0,
+  });
+}
+
+class NutritionalFactsData {
+  final String? title;
+  final String? servingSize;
+  final String? servingPerPack;
+  final List<String> introNotes;
+  final List<String> headers;
+  final List<NutritionalFactsRow> rows;
+  final List<String> footNotes;
+
+  const NutritionalFactsData({
+    this.title,
+    this.servingSize,
+    this.servingPerPack,
+    this.introNotes = const [],
+    this.headers = const [],
+    this.rows = const [],
+    this.footNotes = const [],
+  });
+
+  bool get isEmpty => rows.isEmpty && introNotes.isEmpty && footNotes.isEmpty;
+}
+
 class ProductPerformance {
   final String id;
   final String name;
@@ -349,6 +383,7 @@ class ProductPerformance {
   final List<String> ayurvedicPrecautions;
   final List<String> healthBenefits;
   final List<NutritionalInfoRow> nutritionalInformation;
+  final NutritionalFactsData? nutritionalFacts;
   final List<String> generalPrecautions;
 
   /// True when `ayurvedicproduct` is true and at least one language-specific name is populated.
@@ -386,6 +421,38 @@ class ProductPerformance {
           .toList();
     }
     return const [];
+  }
+
+  /// Parses `healthBenefits` from Firestore, extracting only the `claim` value
+  /// when entries are structured maps (e.g. `{claim: "...", review_status: "approved"}`),
+  /// while still supporting plain string lists or comma-separated strings.
+  static List<String> parseHealthBenefits(dynamic raw) {
+    if (raw == null) return const [];
+    if (raw is List) {
+      final results = <String>[];
+      for (final item in raw) {
+        if (item == null) continue;
+        String text;
+        if (item is Map) {
+          text = (item['claim'] ?? item['benefit'] ?? item['text'] ?? item['description'] ?? '')
+              .toString()
+              .trim();
+        } else {
+          text = item.toString().trim();
+        }
+        if (text.isNotEmpty && text.toLowerCase() != 'null') {
+          results.add(text);
+        }
+      }
+      return results;
+    }
+    if (raw is Map) {
+      final text = (raw['claim'] ?? raw['benefit'] ?? raw['text'] ?? raw['description'] ?? '')
+          .toString()
+          .trim();
+      return (text.isNotEmpty && text.toLowerCase() != 'null') ? [text] : const [];
+    }
+    return parseBulletList(raw);
   }
 
   static String _formatNutrientKey(String rawKey) {
@@ -500,6 +567,123 @@ class ProductPerformance {
       }
     }
     return NutritionalInfoRow(nutrient: line, value: '-');
+  }
+
+  /// Parses `nutritionalInformation` into a rich structured [NutritionalFactsData]
+  /// supporting tab-delimited Nutritional Facts tables (with title, serving size,
+  /// servings per pack, indented nutrient rows, multi-column values, and footnotes)
+  /// as well as Map / List<Map> formats.
+  static NutritionalFactsData? parseNutritionalFacts(dynamic raw) {
+    if (raw == null) return null;
+
+    if (raw is String) {
+      final normalized = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+      if (normalized.trim().isEmpty || normalized.trim().toLowerCase() == 'null') {
+        return null;
+      }
+
+      final lines = normalized.split('\n');
+      String? title;
+      String? servingSize;
+      String? servingPerPack;
+      final introNotes = <String>[];
+      List<String> headers = const [];
+      final rows = <NutritionalFactsRow>[];
+      final footNotes = <String>[];
+
+      bool seenTableHeader = false;
+      bool inFootNotes = false;
+
+      for (final rawLine in lines) {
+        final trimmed = rawLine.trim();
+        if (trimmed.isEmpty) {
+          if (seenTableHeader && rows.isNotEmpty) {
+            inFootNotes = true;
+          }
+          continue;
+        }
+
+        // Title line (e.g. "Nutritional Facts")
+        if (!seenTableHeader && title == null && trimmed.toLowerCase() == 'nutritional facts') {
+          title = trimmed;
+          continue;
+        }
+
+        // Serving metadata line (e.g. "Serving Size: 20g | Serving per pack: Approx 10")
+        if (!seenTableHeader && trimmed.toLowerCase().contains('serving size')) {
+          final parts = trimmed.split('|');
+          for (final part in parts) {
+            final idx = part.indexOf(':');
+            if (idx > 0) {
+              final k = part.substring(0, idx).trim().toLowerCase();
+              final v = part.substring(idx + 1).trim();
+              if (k.contains('serving size')) {
+                servingSize = v;
+              } else if (k.contains('serving per pack') || k.contains('servings per pack')) {
+                servingPerPack = v;
+              }
+            }
+          }
+          continue;
+        }
+
+        // Tab-separated table line
+        if (rawLine.contains('\t') && !inFootNotes) {
+          final rawCols = rawLine.split('\t');
+          final firstColRaw = rawCols.first;
+          final leadingSpaces = firstColRaw.length - firstColRaw.trimLeft().length;
+          final firstCol = firstColRaw.trim();
+          final restCols = rawCols.skip(1).map((c) => c.trim()).toList();
+
+          if (!seenTableHeader) {
+            seenTableHeader = true;
+            headers = [firstCol, ...restCols];
+          } else {
+            final indentLevel = leadingSpaces >= 4 ? 2 : (leadingSpaces >= 2 ? 1 : 0);
+            rows.add(NutritionalFactsRow(
+              nutrient: firstCol,
+              values: restCols,
+              indentLevel: indentLevel,
+            ));
+          }
+          continue;
+        }
+
+        if (seenTableHeader) {
+          inFootNotes = true;
+          footNotes.add(trimmed);
+        } else {
+          introNotes.add(trimmed);
+        }
+      }
+
+      if (rows.isNotEmpty || introNotes.isNotEmpty || footNotes.isNotEmpty) {
+        return NutritionalFactsData(
+          title: title ?? 'Nutritional Facts',
+          servingSize: servingSize,
+          servingPerPack: servingPerPack,
+          introNotes: introNotes,
+          headers: headers,
+          rows: rows,
+          footNotes: footNotes,
+        );
+      }
+    }
+
+    // Fallback for Map / List<Map> / simple key:value strings
+    final basicRows = parseNutritionalInformation(raw);
+    if (basicRows.isEmpty) return null;
+    final hasDv = basicRows.any((r) => r.dailyValue != null && r.dailyValue!.trim().isNotEmpty);
+    return NutritionalFactsData(
+      title: 'Nutritional Facts',
+      headers: hasDv ? const ['Nutrient', 'Value', '% Daily Value'] : const ['Nutrient', 'Value'],
+      rows: basicRows
+          .map((r) => NutritionalFactsRow(
+                nutrient: r.nutrient,
+                values: hasDv ? [r.value, r.dailyValue ?? '-'] : [r.value],
+              ))
+          .toList(),
+    );
   }
 
   static String? _parseTextOrList(dynamic raw) {
@@ -661,6 +845,7 @@ class ProductPerformance {
     this.ayurvedicPrecautions = const [],
     this.healthBenefits = const [],
     this.nutritionalInformation = const [],
+    this.nutritionalFacts,
     this.generalPrecautions = const [],
   });
 
@@ -791,8 +976,9 @@ class ProductPerformance {
     ayurvedicDosage: _parseTextOrList(json['ayurvedicDosage']),
     ayurvedicFormulations: parseBulletList(json['ayurvedicFormulations']),
     ayurvedicPrecautions: parseBulletList(json['ayurvedicPrecautions']),
-    healthBenefits: parseBulletList(json['healthBenefits']),
+    healthBenefits: parseHealthBenefits(json['healthBenefits']),
     nutritionalInformation: parseNutritionalInformation(json['nutritionalInformation']),
+    nutritionalFacts: parseNutritionalFacts(json['nutritionalInformation']),
     generalPrecautions: parseBulletList(json['generalPrecautions']),
   );
 

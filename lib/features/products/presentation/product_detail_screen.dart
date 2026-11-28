@@ -1360,10 +1360,46 @@ class _NutritionalInformationTab extends StatelessWidget {
 
   const _NutritionalInformationTab({required this.product});
 
+  static const Color _accentMaroon = Color(0xFF8B1E3F);
+  static const Color _boxBorder = Color(0xFFDDE2E6);
+
+  Widget _buildMetaBox(String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF4A1525),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _boxBorder),
+          ),
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = product.nutritionalInformation;
-    if (rows.isEmpty) {
+    final facts = product.nutritionalFacts;
+    if (facts == null || facts.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16),
         child: Text(
@@ -1373,129 +1409,191 @@ class _NutritionalInformationTab extends StatelessWidget {
       );
     }
 
-    final hasDailyValue = rows.any((r) => r.dailyValue != null && r.dailyValue!.trim().isNotEmpty);
+    final colCount = facts.headers.isNotEmpty
+        ? facts.headers.length
+        : (facts.rows.isNotEmpty ? facts.rows.first.values.length + 1 : 2);
+    final isNumericFactsTable = colCount >= 3;
+
+    final columnWidths = <int, TableColumnWidth>{
+      0: FlexColumnWidth(isNumericFactsTable ? 2.4 : 1.4),
+      for (var c = 1; c < colCount; c++)
+        c: FlexColumnWidth(isNumericFactsTable ? 1.15 : 2.6),
+    };
 
     return Padding(
       key: ValueKey('nutritional_info_content_${product.id}'),
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Nutritional Information',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Table(
-              key: ValueKey('nutritional_info_table_${product.id}'),
-              columnWidths: hasDailyValue
-                  ? const {
-                      0: FlexColumnWidth(2.2),
-                      1: FlexColumnWidth(1.4),
-                      2: FlexColumnWidth(1.2),
-                    }
-                  : const {
-                      0: FlexColumnWidth(2),
-                      1: FlexColumnWidth(1.5),
-                    },
-              border: const TableBorder(
-                horizontalInside: BorderSide(color: AppColors.border, width: 0.8),
-                verticalInside: BorderSide(color: AppColors.border, width: 0.8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _accentMaroon.withValues(alpha: 0.75), width: 1.2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Centered "Nutritional Facts" Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: _accentMaroon.withValues(alpha: 0.55), width: 1),
+                ),
               ),
-              children: [
-                TableRow(
-                  decoration: const BoxDecoration(color: Color(0xFFF3F8F1)),
+              child: Text(
+                facts.title ?? 'Nutritional Facts',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: _accentMaroon,
+                ),
+              ),
+            ),
+
+            // Serving Size & Serving per pack bar
+            if (facts.servingSize != null || facts.servingPerPack != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: _accentMaroon.withValues(alpha: 0.55), width: 1),
+                  ),
+                ),
+                child: Wrap(
+                  spacing: 24,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      child: Text(
-                        'Nutrient',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryGreen,
-                        ),
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      child: Text(
-                        'Value',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryGreen,
-                        ),
-                      ),
-                    ),
-                    if (hasDailyValue)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        child: Text(
-                          '% Daily Value',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryGreen,
-                          ),
-                        ),
-                      ),
+                    if (facts.servingSize != null)
+                      _buildMetaBox('Serving Size:', facts.servingSize!),
+                    if (facts.servingPerPack != null)
+                      _buildMetaBox('Serving per pack:', facts.servingPerPack!),
                   ],
                 ),
-                for (var i = 0; i < rows.length; i++)
-                  TableRow(
-                    decoration: BoxDecoration(
-                      color: i.isEven ? AppColors.card : AppColors.secondaryBackground,
+              ),
+
+            // Optional intro notes (for descriptive 2-column nutrition tables)
+            if (facts.introNotes.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Text(
+                  facts.introNotes.join('\n'),
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                ),
+              ),
+
+            // Structured Table
+            if (facts.rows.isNotEmpty)
+              Table(
+                key: ValueKey('nutritional_info_table_${product.id}'),
+                columnWidths: columnWidths,
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                border: TableBorder(
+                  horizontalInside: BorderSide(color: Colors.grey.shade300, width: 0.8),
+                  verticalInside: BorderSide(color: Colors.grey.shade300, width: 0.8),
+                ),
+                children: [
+                  if (facts.headers.isNotEmpty)
+                    TableRow(
+                      decoration: const BoxDecoration(color: Colors.white),
+                      children: [
+                        for (var c = 0; c < colCount; c++)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            child: Text(
+                              c < facts.headers.length ? facts.headers[c] : '',
+                              textAlign: c == 0 ? TextAlign.left : (isNumericFactsTable ? TextAlign.center : TextAlign.left),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        child: Text(
-                          rows[i].nutrient,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        child: Text(
-                          rows[i].value,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                      if (hasDailyValue)
+                  for (final row in facts.rows)
+                    TableRow(
+                      decoration: const BoxDecoration(color: Colors.white),
+                      children: [
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: EdgeInsets.fromLTRB(
+                            14.0 + (row.indentLevel * 16.0),
+                            10,
+                            12,
+                            10,
+                          ),
                           child: Text(
-                            rows[i].dailyValue ?? '-',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary,
+                            row.nutrient,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: row.indentLevel == 0 ? FontWeight.bold : FontWeight.w500,
+                              color: row.indentLevel == 2
+                                  ? AppColors.textSecondary
+                                  : AppColors.textPrimary,
                             ),
                           ),
                         ),
-                    ],
+                        for (var c = 1; c < colCount; c++)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            child: isNumericFactsTable
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: _boxBorder),
+                                    ),
+                                    child: Text(
+                                      (c - 1) < row.values.length ? row.values[c - 1] : '-',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.textPrimary,
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    (c - 1) < row.values.length ? row.values[c - 1] : '-',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+
+            // Footnotes (e.g. *The % of RDA...)
+            if (facts.footNotes.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: _accentMaroon.withValues(alpha: 0.55), width: 1),
                   ),
-              ],
-            ),
-          ),
-        ],
+                ),
+                child: Text(
+                  facts.footNotes.join('\n'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -382,6 +382,32 @@ void main() {
       expect(find.text('Should Not Show'), findsNothing);
     });
 
+    test('parseHealthBenefits extracts only claim values from map entries and supports plain strings', () {
+      final fromMaps = ProductPerformance.parseHealthBenefits([
+        {
+          'claim': 'Rich in antioxidants: Ginger Golden Sticks naturally contains polyphenols.',
+          'review_status': 'approved',
+        },
+        {
+          'review_status': 'approved',
+          'claim': 'Supports immunity: Provides natural phytonutrients.',
+        },
+        {
+          'review_status': 'approved',
+          'claim': '   ',
+        },
+      ]);
+      expect(fromMaps, [
+        'Rich in antioxidants: Ginger Golden Sticks naturally contains polyphenols.',
+        'Supports immunity: Provides natural phytonutrients.',
+      ]);
+
+      expect(
+        ProductPerformance.parseHealthBenefits(['Plain benefit A', 'Plain benefit B']),
+        ['Plain benefit A', 'Plain benefit B'],
+      );
+    });
+
     test('parseNutritionalInformation handles Map, List<Map>, and formatted String inputs', () {
       final fromMap = ProductPerformance.parseNutritionalInformation({
         'servingSize': '100 g',
@@ -407,6 +433,33 @@ void main() {
       expect(fromString.length, 2);
       expect(fromString[0].nutrient, 'Energy');
       expect(fromString[0].value, '320 kcal');
+    });
+
+    test('parseNutritionalFacts parses tab-delimited Nutritional Facts with serving meta, indentation, and footnotes', () {
+      const rawFacts =
+          'Nutritional Facts\n'
+          'Serving Size: 20g | Serving per pack: Approx 10\n'
+          'Nutrient\tper 100 g\tper serving\t%RDA (per serve)\n'
+          'Energy (kcal)\t324.00\t64.80\t-\n'
+          'Total Fat (g)\t0.50\t0.10\t0.13\n'
+          '  Saturated fat (g)\t0.10\t0.02\t0.10\n'
+          '    Added Sugar (g)\t44.00\t8.80\t17.60\n'
+          '\n'
+          '*The % of RDA (Recommended Dietary Allowance) calculated on the basis of 2000 Kcal energy';
+
+      final facts = ProductPerformance.parseNutritionalFacts(rawFacts);
+      expect(facts, isNotNull);
+      expect(facts!.title, 'Nutritional Facts');
+      expect(facts.servingSize, '20g');
+      expect(facts.servingPerPack, 'Approx 10');
+      expect(facts.headers, ['Nutrient', 'per 100 g', 'per serving', '%RDA (per serve)']);
+      expect(facts.rows.length, 4);
+      expect(facts.rows[0].nutrient, 'Energy (kcal)');
+      expect(facts.rows[0].values, ['324.00', '64.80', '-']);
+      expect(facts.rows[0].indentLevel, 0);
+      expect(facts.rows[2].indentLevel, 1);
+      expect(facts.rows[3].indentLevel, 2);
+      expect(facts.footNotes.first, startsWith('*The % of RDA'));
     });
 
     testWidgets('shows Health Benefits, Nutritional Information table, and Precautions tabs for all products (including non-Ayurvedic)',
