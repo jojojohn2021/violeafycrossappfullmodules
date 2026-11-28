@@ -163,149 +163,159 @@ class _LeafyTopAppBarState extends ConsumerState<LeafyTopAppBar> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Left: Logo & Brand + User Greeting
-                GestureDetector(
-                  onTap: () => context.go('/'),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.asset(
-                          _getPlatformAppLogoAsset(),
-                          height: 34,
-                          width: 34,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => Image.asset(
-                            AppIconAssets.web,
-                            height: 34,
-                            width: 34,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => Container(
-                              height: 34,
-                              width: 34,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryGreen,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.eco, color: Colors.white, size: 20),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 170),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: 'LeafyMart ',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primaryGreen,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: 'Hello,',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w300,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              userMobileNumber,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
-                                height: 1.1,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Right Action Buttons: Wishlist, My Orders, My Bookings, Cart
                 Flexible(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
+                  child: GestureDetector(
+                    onTap: () => context.go('/'),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.favorite_border_outlined, color: AppColors.textPrimary, size: 22),
-                          onPressed: () => context.push('/wishlist'),
-                          tooltip: 'Wishlist',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.receipt_long_outlined, color: AppColors.textPrimary, size: 22),
-                          onPressed: () => context.push('/orders'),
-                          tooltip: 'My Orders',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                        ),
-                        IconButton(
-                          key: const ValueKey('top_bar_my_bookings_btn'),
-                          icon: const Icon(Icons.event_note_outlined, color: AppColors.textPrimary, size: 22),
-                          onPressed: () => context.push('/preorders/history'),
-                          tooltip: 'My Bookings',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                        ),
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.textPrimary, size: 22),
-                              onPressed: () => context.push('/cart'),
-                              tooltip: 'Cart',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                            ),
-                            if (totalItems > 0)
-                              Positioned(
-                                right: 4,
-                                top: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: AppColors.primaryGreen,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                                  child: Text(
-                                    '$totalItems',
-                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                    textAlign: TextAlign.center,
-                                  ),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.asset(
+                            _getPlatformAppLogoAsset(),
+                            height: 34,
+                            width: 34,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Image.asset(
+                              AppIconAssets.web,
+                              height: 34,
+                              width: 34,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Container(
+                                height: 34,
+                                width: 34,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryGreen,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
+                                child: const Icon(Icons.eco, color: Colors.white, size: 20),
                               ),
-                          ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 155),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: 'LeafyMart ',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primaryGreen,
+                                          letterSpacing: 0.4,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: 'Hello,',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w300,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  userMobileNumber,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                    height: 1.1,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
+                ),
+
+                // Right Action Buttons: Wishlist, My Orders, My Bookings, Cart
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.favorite_border_outlined, color: AppColors.textPrimary, size: 21),
+                      onPressed: () => context.push('/wishlist'),
+                      tooltip: 'Wishlist',
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                    const SizedBox(width: 2),
+                    IconButton(
+                      icon: const Icon(Icons.receipt_long_outlined, color: AppColors.textPrimary, size: 21),
+                      onPressed: () => context.push('/orders'),
+                      tooltip: 'My Orders',
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                    const SizedBox(width: 2),
+                    IconButton(
+                      key: const ValueKey('top_bar_my_bookings_btn'),
+                      icon: const Icon(Icons.event_note_outlined, color: AppColors.textPrimary, size: 21),
+                      onPressed: () => context.push('/preorders/history'),
+                      tooltip: 'My Bookings',
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                    const SizedBox(width: 2),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.textPrimary, size: 21),
+                          onPressed: () => context.push('/cart'),
+                          tooltip: 'Cart',
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        ),
+                        if (totalItems > 0)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: AppColors.primaryGreen,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(minWidth: 15, minHeight: 15),
+                              child: Text(
+                                '$totalItems',
+                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
               ],
             ),

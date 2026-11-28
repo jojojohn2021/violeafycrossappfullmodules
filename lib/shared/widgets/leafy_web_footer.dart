@@ -109,14 +109,23 @@ class LeafyWebFooter extends ConsumerWidget {
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1400),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    const copyrightText = Text(
                       '© 2026 LeafyMart. All Rights Reserved.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                    Row(
+                    );
+                    const farmersCountersText = Text(
+                      'Farmers’ counters in Munnar, Idukki, Alleppey and Wayanad - KERALA.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textSecondary,
+                      ),
+                    );
+                    final legalLinks = Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         MouseRegion(
                           cursor: SystemMouseCursors.click,
@@ -140,8 +149,35 @@ class LeafyWebFooter extends ConsumerWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ],
+                    );
+
+                    if (constraints.maxWidth >= 750) {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          copyrightText,
+                          const Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Center(child: farmersCountersText),
+                            ),
+                          ),
+                          legalLinks,
+                        ],
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        copyrightText,
+                        const SizedBox(height: 6),
+                        farmersCountersText,
+                        const SizedBox(height: 8),
+                        legalLinks,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -221,12 +257,6 @@ class LeafyWebFooter extends ConsumerWidget {
       (label: 'Cancellation', route: '/cancellation', isExternal: false, externalUrl: null),
       (label: 'Privacy policy', route: '/privacy-policy', isExternal: false, externalUrl: null),
       (label: 'Grievance Redressal', route: '/grievance-redressal', isExternal: false, externalUrl: null),
-      (
-        label: 'FSSAI Food Safety Connect app',
-        route: '',
-        isExternal: true,
-        externalUrl: 'https://foodsafetyconnect.fssai.gov.in'
-      ),
     ];
 
     return Column(
@@ -291,31 +321,34 @@ class LeafyWebFooter extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 10),
-        // Apple App Store Button
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () => _launchExternalUrl('https://www.leafymart.com'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.apple, color: Colors.white, size: 24),
-                  SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Download on the', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
-                      Text('App Store', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ],
+        // Apple App Store Button (Disabled - Under Development)
+        Tooltip(
+          message: 'Coming soon — under development',
+          child: MouseRegion(
+            cursor: SystemMouseCursors.forbidden,
+            child: Opacity(
+              opacity: 0.45,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.apple, color: Colors.white70, size: 24),
+                    SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Coming Soon', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold)),
+                        Text('App Store', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

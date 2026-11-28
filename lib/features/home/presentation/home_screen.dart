@@ -90,6 +90,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      bottomNavigationBar: !kIsWeb
+          ? Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: const BoxDecoration(
+                color: AppColors.secondaryBackground,
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: const Text(
+                'Farmers’ counters in Munnar, Idukki, Alleppey and Wayanad - KERALA.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            )
+          : null,
       body: RefreshIndicator(
         color: AppColors.primaryGreen,
         onRefresh: () async {
